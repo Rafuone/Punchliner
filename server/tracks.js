@@ -1,0 +1,47 @@
+// Graine de morceaux RAP FR uniquement. On ancre chaque recherche sur l'artiste,
+// et le serveur vérifie que l'artiste renvoyé correspond (anti mauvais match).
+// Mix volontaire de gros hits et de titres moins streamés : la difficulté se base
+// sur la popularité (rank Deezer), pas sur la durée de l'extrait.
+export const SEED_TRACKS = [
+  // — grand public / hits —
+  { artist: 'Jul', title: 'Tchikita' },
+  { artist: 'PNL', title: 'Au DD' },
+  { artist: 'Maître Gims', title: 'Sapés comme jamais' },
+  { artist: 'Niska', title: 'Réseaux' },
+  { artist: 'Gazo', title: 'Drill FR 4' },
+  { artist: 'Ninho', title: 'Jefe' },
+  { artist: 'Damso', title: 'Macarena' },
+  { artist: 'SCH', title: 'Otto' },
+  { artist: 'Orelsan', title: 'Basique' },
+  { artist: 'Nekfeu', title: 'On verra' },
+  { artist: 'Booba', title: 'DKR' },
+  { artist: 'Maes', title: 'Blanche' },
+  { artist: 'Naps', title: 'La kiffance' },
+  { artist: 'Tiakola', title: 'Meuda' },
+  { artist: 'Bigflo & Oli', title: 'Dommage' },
+  { artist: 'Sexion d\'Assaut', title: 'Désolé' },
+  { artist: 'PLK', title: 'Au sommet' },
+  { artist: 'Koba LaD', title: 'RR 9.1' },
+  { artist: 'Vald', title: 'Bonjour' },
+  { artist: 'Kaaris', title: 'Zoo' },
+  // — connaisseurs / classiques —
+  { artist: 'Sofiane', title: 'Mon p\'tit loup' },
+  { artist: 'Lacrim', title: 'Corleone' },
+  { artist: 'Soso Maness', title: 'Petrouchka' },
+  { artist: 'Alonzo', title: 'La Seleção' },
+  { artist: 'Josman', title: 'Différent' },
+  { artist: 'Dinos', title: 'Hélicoptère' },
+  { artist: 'Rohff', title: 'Qui est l\'exemple' },
+  { artist: 'La Fouine', title: 'Karma' },
+  { artist: 'Sinik', title: 'Une époque formidable' },
+  { artist: 'Sniper', title: 'Gravé dans la roche' },
+  // — diggers / plus pointu —
+  { artist: 'IAM', title: 'Petit frère' },
+  { artist: 'Suprême NTM', title: 'Laisse pas traîner ton fils' },
+  { artist: 'MC Solaar', title: 'Bouge de là' },
+  { artist: 'Médine', title: 'Grand Paris' },
+  { artist: 'Alpha Wann', title: 'Stupide' },
+  { artist: 'Laylow', title: 'Megatron' },
+  { artist: 'Hamza', title: 'HS' },
+  { artist: 'Rim\'K', title: 'Air Max' },
+];

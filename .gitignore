@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+
+# fonts.css est généré (getfonts.ps1) MAIS requis au build → on le versionne.
