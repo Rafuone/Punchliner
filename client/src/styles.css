@@ -270,6 +270,21 @@ button, input { font-family: inherit; }
 .cs-pimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%; z-index: 1; }
 /* dégradé bas accentué (~+12%) : le nom + les stats ressortent mieux sur l'image */
 .cs-pvig { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 36%, rgba(11,12,14,.62) 78%, #0b0c0e); }
+/* effet VHS sur le showcase : scanlines qui roulent + bande de balayage + grésillement (static) à
+   fréquence INSTABLE (deux anims à durées décalées → le grain ne "boucle" jamais pareil). z<3 = passe
+   sous le nom/les stats. */
+.cs-vhs { position: absolute; inset: 0; z-index: 2; pointer-events: none; mix-blend-mode: screen; opacity: .5; overflow: hidden; }
+.cs-vhs > i { position: absolute; display: block; }
+.cs-vhs .lines { inset: 0; background: repeating-linear-gradient(180deg, rgba(255,255,255,.10) 0 2px, transparent 2px 5px); animation: vhsroll 5.5s linear infinite; }
+.cs-vhs .band { left: 0; right: 0; height: 16%; background: linear-gradient(180deg, transparent, rgba(255,255,255,.15), transparent); animation: vhsband 3.4s linear infinite; }
+.cs-vhs .grain { inset: -60%; mix-blend-mode: overlay; opacity: .5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  animation: vhsgrain .28s steps(2) infinite, vhsjit .77s steps(5) infinite; }
+@keyframes vhsroll { from { background-position-y: 0; } to { background-position-y: 120px; } }
+@keyframes vhsband { 0% { top: -18%; } 100% { top: 112%; } }
+@keyframes vhsgrain { 0%, 100% { opacity: .5; } 40% { opacity: .16; } 70% { opacity: .72; } }
+@keyframes vhsjit { 0% { transform: translate(0, 0); } 25% { transform: translate(-7%, 4%); } 50% { transform: translate(6%, -5%); } 75% { transform: translate(-4%, 7%); } 100% { transform: translate(5%, -3%); } }
+@media (prefers-reduced-motion: reduce) { .cs-vhs .lines, .cs-vhs .band, .cs-vhs .grain { animation: none; } .cs-vhs { opacity: .28; } }
 .cs-slot { position: absolute; left: 11px; bottom: 9px; z-index: 3; font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: rgba(255,255,255,.3); border: 1px dashed rgba(255,255,255,.22); border-radius: 2px; padding: 2px 6px; }
 .cs-ribbon { position: absolute; z-index: 3; top: 14px; left: 12px; max-width: 74%; background: var(--fluo); border-radius: 2px; padding: 6px 13px 7px; box-shadow: 2px 2px 0 rgba(0,0,0,.5); }
 .cs-ribbon .p1 { font-family: var(--disp); font-weight: 800; font-size: 11px; color: var(--ink); letter-spacing: .1em; }
@@ -281,23 +296,23 @@ button, input { font-family: inherit; }
 /* margin-right négatif : compense l'espace de letter-spacing après la dernière lettre → texte centré */
 .cs-catchip > span { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--cc, var(--fluo)); margin-right: -.12em; text-shadow: 0 0 10px color-mix(in srgb, var(--cc, transparent) 32%, transparent); }
 /* ===== Légende : une seule MATIÈRE iridescente (--irid-grad) partagée par le chip, le nom du
-   pouvoir, le libellé roster ET les barres de stats. background-size:200% + travel 200% = boucle
-   sans couture (background-repeat par défaut = repeat, et le dégradé reboucle sur la même couleur). */
-.cs-top.irid .cs-catchip > span, .cs-catlabel.irid, .cs-top.irid .cs-pow .nm {
+   pouvoir et le libellé roster (texte clippé). --cc/irid vivent sur .cs → la CTA + le cadre en héritent. */
+.cs.irid .cs-catchip > span, .cs-catlabel.irid, .cs.irid .cs-pow .nm {
   background-image: var(--irid-grad); background-size: 200% 100%;
   background-clip: text; -webkit-background-clip: text;
   color: transparent; -webkit-text-fill-color: transparent; text-shadow: none;
   animation: irid 7s linear infinite; }
-/* stats : on GARDE les pips discrets (les points restent lisibles) mais l'anim se joue sur TOUS EN
-   MÊME TEMPS — chaque pip "on" cycle à travers la même nappe de teintes, en phase. Pas de dégradé par
-   pip, pas de barre pleine. Les pips "off" gardent leur gris de base. */
-.cs-top.irid .cs-sbar i.on { animation: iridpip 5.5s linear infinite; }
-@keyframes iridpip {
-  0%, 100% { background: #ff5db4; } 17% { background: #ff9a4d; } 34% { background: #ffe98a; }
-  50% { background: #b6ff5e; } 67% { background: #7df0ff; } 84% { background: #c0b6ff; } }
+/* stats : l'anim de COULEUR vit sur le conteneur (.cs-stats-ov), UNE seule source ; chaque pip "on"
+   lit background:currentColor → tous parfaitement synchro. Quand on change de perso, le pip qui passe
+   on/off n'a PAS d'anim propre à redémarrer → plus de décalage de phase / couleurs désynchronisées. */
+.cs.irid .cs-stats-ov { color: #ffd76b; animation: iridhue 5.5s linear infinite; }
+.cs.irid .cs-sbar i.on { background: currentColor; }
+@keyframes iridhue {
+  0%, 100% { color: #ff5db4; } 17% { color: #ff9a4d; } 34% { color: #ffe98a; }
+  50% { color: #b6ff5e; } 67% { color: #7df0ff; } 84% { color: #c0b6ff; } }
 @keyframes irid { to { background-position: 200% 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .cs-top.irid .cs-catchip > span, .cs-catlabel.irid, .cs-top.irid .cs-pow .nm, .cs-top.irid .cs-sbar i.on { animation: none; } }
+  .cs.irid .cs-catchip > span, .cs-catlabel.irid, .cs.irid .cs-pow .nm, .cs.irid .cs-stats-ov { animation: none; } }
 /* nom en bas (blanc) + surnom, sur la photo */
 .cs-nameplate { position: absolute; left: 0; bottom: 0; z-index: 3; max-width: calc(100% - 132px); padding: 10px 14px 12px; text-align: left; }
 .cs-name { font-family: var(--disp); font-weight: 700; font-size: clamp(23px, 7.5vw, 34px); line-height: .9; color: #fff; text-transform: uppercase; text-shadow: 0 2px 12px rgba(0, 0, 0, .85); }
@@ -332,7 +347,9 @@ button, input { font-family: inherit; }
 .cs-catrow { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
 .cs-catrow::-webkit-scrollbar { height: 5px; }
 .cs-catrow::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .15); border-radius: 3px; }
-.cs-catrow .cs-cell { flex: 0 0 auto; width: 104px; scroll-snap-align: start; }
+/* largeur responsive : ~3,3 vignettes visibles → une 4e "dépasse" toujours un peu (indice de scroll),
+   quelle que soit la largeur/densité du tel. Reste dans une range contrôlée (min/max). */
+.cs-catrow .cs-cell { flex: 0 0 auto; width: calc((100% - 24px) / 3.3); min-width: 84px; max-width: 116px; scroll-snap-align: start; }
 .cs-1p { position: absolute; top: 3px; right: 5px; z-index: 4; font-family: var(--disp); font-weight: 700; font-size: 9px; color: var(--fluo); }
 /* perso déjà pris par un autre joueur (lock live) */
 .cs-cell.lock { cursor: not-allowed; }
@@ -346,14 +363,24 @@ button, input { font-family: inherit; }
 .cs-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%; transform: scale(var(--z, 1.6)); transform-origin: 50% 28%; z-index: 1; }
 .cs-thumb .tg { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 42%, rgba(0,0,0,.5)); }
 .cs-cn { font-size: 10px; font-weight: 700; color: var(--muted); text-align: center; line-height: 1; text-transform: uppercase; }
-.cs-cell.sel .cs-thumb { border-color: var(--fluo); box-shadow: 0 0 0 2px var(--fluo); }
-.cs-cell.sel .cs-cn { color: var(--fluo); }
-.cs-cell.sel .cs-thumb::before, .cs-cell.sel .cs-thumb::after { content: ''; position: absolute; width: 10px; height: 10px; border: 2px solid var(--fluo); z-index: 3; }
-.cs-cell.sel .cs-thumb::before { top: 3px; left: 3px; border-right: 0; border-bottom: 0; }
-.cs-cell.sel .cs-thumb::after { bottom: 3px; right: 3px; border-left: 0; border-top: 0; }
+/* cadre de sélection : couleur RACCORD avec le genre (--cc). Plus de crochets dans les angles. */
+.cs-cell.sel .cs-thumb { border-color: var(--cc, var(--fluo)); box-shadow: 0 0 0 2px var(--cc, var(--fluo)); }
+.cs-cell.sel .cs-cn { color: var(--cc, var(--fluo)); }
+/* Légende : contour iridescent sur la vignette choisie (anneau via masque → garde le border-radius) */
+@supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
+  .cs.irid .cs-cell.sel .cs-thumb::after {
+    content: ''; position: absolute; inset: 0; border-radius: 3px; padding: 2px; z-index: 3; pointer-events: none;
+    background: var(--irid-grad); background-size: 200% 100%;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude;
+    animation: irid 7s linear infinite; }
+}
 .cs-cell.lock .cs-thumb { opacity: .4; }
 .cs-cell.lock .lk { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; }
 .cs-bottombar { flex: 0 0 auto; padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, #0b0c0e); border-top: 1px solid var(--line); }
+/* CTA raccord avec le genre du perso sélectionné (iridescent pour Légende) */
+.cs-bottombar .btn.warm:not(:disabled) { background: var(--cc, var(--fluo)); border-color: var(--cc, var(--fluo)); color: var(--ink); }
+.cs.irid .cs-bottombar .btn.warm:not(:disabled) { background: var(--irid-grad); background-size: 200% 100%; border-color: transparent; color: var(--ink); animation: irid 7s linear infinite; }
 
 /* jauge de pouvoir */
 .gauge { height: 8px; border-radius: 2px; background: #0a0b0c; overflow: hidden; margin-top: 5px; border: 1px solid var(--line); }

@@ -5,7 +5,7 @@ import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegen
 const SKEY = 'pl_session';
 const loadSession = () => { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch { return null; } };
 const saveSession = (s: any) => localStorage.setItem(SKEY, JSON.stringify(s));
-const EPITHETS: Record<string, string> = { jul: 'La Machine', pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak' };
+const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak' };
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
 // met en gras les chiffres-clés d'un effet (montants, ×N, N %) → on repère vite le point fort du pouvoir
 const FX_FIG = /([×x]\s?\d+(?:[.,]\d+)?|[+\-−]?\d[\d   ]*\d\s?%?|\d+\s?%)/g;
@@ -201,7 +201,7 @@ export default function Player() {
     // taille du nom adaptée à sa longueur → ne déborde jamais sur les stats
     const nameFs = nmU.length > 11 ? 'clamp(17px,5vw,24px)' : nmU.length > 8 ? 'clamp(20px,6vw,29px)' : 'clamp(24px,7.5vw,35px)';
     return (
-      <div className="cs">
+      <div className={`cs${isLegend(sel.cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[sel.cat] }}>
         <svg width="0" height="0" style={{ position: 'absolute' }}><defs>
           <g id="bust"><path d="M22,240 C22,168 58,146 100,146 C142,146 178,168 178,240 Z" fill="#0d0917" /><ellipse cx="100" cy="96" rx="40" ry="44" fill="#0d0917" /><path d="M60,70 Q100,22 140,70 Q140,44 100,42 Q60,44 60,70 Z" fill="#0d0917" /><path d="M138,80 C150,120 150,180 150,240 L178,240 C178,168 160,146 138,80 Z" fill="rgba(255,255,255,.10)" /></g>
         </defs></svg>
@@ -211,13 +211,14 @@ export default function Player() {
         </button>
         {error && <p className="err cs-err">{error}</p>}
 
-        <div className={`cs-top${isLegend(sel.cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[sel.cat] }}>
+        <div className="cs-top">
           <div className="cs-stage" style={{ ['--c' as any]: sel.color }}>
             <div className="cs-pbg" />
             <div className="cs-wm">{initials(sel.name)[0]}</div>
             <svg className="cs-bust" viewBox="0 0 200 240"><use href="#bust" /></svg>
             {sel.img && <img className="cs-pimg" src={`/avatars/${sel.id}.png`} alt="" onError={hideOnErr} />}
             <div className="cs-pvig" />
+            <div className="cs-vhs" aria-hidden="true"><i className="lines" /><i className="band" /><i className="grain" /></div>
             {!sel.img && <span className="cs-slot">Portrait — image à venir</span>}
             <div className="cs-catchip"><span>{sel.cat}</span></div>
             <div className="cs-stats-ov">
