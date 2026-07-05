@@ -268,39 +268,51 @@ button, input { font-family: inherit; }
 .cs-bust { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); height: 96%; filter: drop-shadow(0 0 34px rgba(0,0,0,.5)); }
 /* photo du showcase : remplit tout le cadre (largeur uniforme quel que soit le ratio) */
 .cs-pimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%; z-index: 1;
-  filter: url(#vhs);            /* aberration chromatique R/B + micro-wobble analogique (filtre statique) */
-  transform: scale(1.03);       /* couvre la dérive permanente sans exposer les bords */
-  animation: vhsdrift 7.5s ease-in-out infinite alternate; }
+  filter: url(#vhs);            /* aberration chromatique R/B bien visible + micro-wobble analogique */
+  transform: scale(1.04);       /* couvre le tremblement permanent sans exposer les bords */
+  animation: vhstremble 1.5s steps(1) infinite; }  /* l'image de fond TREMBLE (judder, pas un strobe) */
 /* dégradé bas accentué (~+12%) : le nom + les stats ressortent mieux sur l'image */
 .cs-pvig { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 36%, rgba(11,12,14,.62) 78%, #0b0c0e); }
-/* ===== dégradation analogique VHS (subtile) : aberration chromatique (filtre #vhs sur la photo) +
-   scanlines fines + dominante froide cyan-vert + bruit chroma LENT. Les déchirures de tracking sont
-   pilotées en JS (.glx / .glx-strong) → irrégulières, brèves. Tout reste SOUS le nom/les stats (z<3). */
+/* ===== dégradation analogique VHS : aberration chromatique BIEN visible (filtre #vhs, boosté en
+   #vhs-strong pendant les glitchs), image de fond qui TREMBLE, voile ALLÉGÉ (image plus nette) +
+   bande de balayage douce. Déchirures de tracking pilotées en JS (.glx/.glx-strong). z<3. */
 .cs-tear { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%; z-index: 2; opacity: 0; pointer-events: none; filter: url(#vhs); }
 .cs-vhs { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
 .cs-vhs > i { position: absolute; display: block; }
-/* scanlines fines et SOMBRES (soft-light → n'éclaircit pas l'image), roulement très lent */
-.cs-vhs .lines { inset: 0; mix-blend-mode: soft-light; opacity: .55; transition: opacity .12s ease;
-  background: repeating-linear-gradient(0deg, rgba(0,0,0,.55) 0 1px, transparent 1px 3px);
+/* scanlines fines (allégées) */
+.cs-vhs .lines { inset: 0; mix-blend-mode: soft-light; opacity: .42; transition: opacity .1s ease;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.5) 0 1px, transparent 1px 3px);
   animation: vhsroll 9s linear infinite; }
-/* dominante froide cyan-vert */
-.cs-vhs .tint { inset: 0; mix-blend-mode: soft-light; opacity: .6;
-  background: linear-gradient(185deg, rgba(45,130,120,.55), rgba(15,45,55,.65)); }
-/* bruit chroma (coloré), dérive LENTE et opacité constante → pas de clignotement */
-.cs-vhs .noise { inset: -35%; mix-blend-mode: overlay; opacity: .16;
+/* dominante froide cyan-vert LÉGÈRE (ne voile plus l'image) */
+.cs-vhs .tint { inset: 0; mix-blend-mode: soft-light; opacity: .3;
+  background: linear-gradient(185deg, rgba(60,150,140,.4), rgba(20,55,60,.5)); }
+/* bruit chroma discret */
+.cs-vhs .noise { inset: -35%; mix-blend-mode: overlay; opacity: .09;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 150px 150px; animation: vhsnoise 3.6s linear infinite; }
+/* bande de balayage qui descend (douce, comme avant) */
+.cs-vhs .band { left: 0; right: 0; height: 15%; mix-blend-mode: screen; opacity: .5;
+  background: linear-gradient(180deg, transparent, rgba(190,240,255,.14), transparent);
+  animation: vhsband 6s linear infinite; }
 /* déchirure de tracking : la copie .cs-tear clippée sur une bande [--gy,+--gh] et décalée de --gx */
 .cs-stage.glx .cs-tear, .cs-stage.glx-strong .cs-tear {
-  opacity: .92; clip-path: inset(var(--gy, 40%) 0 calc(100% - var(--gy, 40%) - var(--gh, 6%)) 0);
-  transform: scale(1.03) translateX(var(--gx, 0)); }
-.cs-stage.glx-strong .cs-tear { opacity: 1; filter: url(#vhs) saturate(1.5) contrast(1.08); }
-.cs-stage.glx-strong .cs-vhs .lines { opacity: .85; }
+  opacity: .95; clip-path: inset(var(--gy, 40%) 0 calc(100% - var(--gy, 40%) - var(--gh, 6%)) 0);
+  transform: scale(1.04) translateX(var(--gx, 0)); }
+/* glitch fort : aberration BOOSTÉE (#vhs-strong) sur la photo ET la déchirure, scanlines renforcées */
+.cs-stage.glx-strong .cs-pimg { filter: url(#vhs-strong); }
+.cs-stage.glx-strong .cs-tear { opacity: 1; filter: url(#vhs-strong) saturate(1.4) contrast(1.1); }
+.cs-stage.glx-strong .cs-vhs .lines { opacity: .8; }
 @keyframes vhsroll { from { background-position-y: 0; } to { background-position-y: 3px; } }
 @keyframes vhsnoise { 0% { transform: translate(0, 0); } 50% { transform: translate(-6%, 4%); } 100% { transform: translate(4%, -5%); } }
-@keyframes vhsdrift { 0% { transform: scale(1.03) translate(0, 0); } 100% { transform: scale(1.03) translate(-0.5%, 0.2%); } }
+@keyframes vhsband { 0% { top: -16%; } 100% { top: 110%; } }
+/* tremblement permanent de la frame (judder analogique) */
+@keyframes vhstremble {
+  0%   { transform: scale(1.04) translate(0, 0); }      14%  { transform: scale(1.04) translate(-0.5%, 0.3%); }
+  28%  { transform: scale(1.04) translate(0.4%, -0.2%); } 42%  { transform: scale(1.04) translate(-0.3%, 0.45%); }
+  56%  { transform: scale(1.04) translate(0.5%, -0.15%); } 70%  { transform: scale(1.04) translate(-0.45%, 0.25%); }
+  84%  { transform: scale(1.04) translate(0.25%, -0.35%); } 100% { transform: scale(1.04) translate(-0.15%, 0.1%); } }
 @media (prefers-reduced-motion: reduce) {
-  .cs-pimg, .cs-vhs .lines, .cs-vhs .noise { animation: none; }
+  .cs-pimg, .cs-vhs .lines, .cs-vhs .noise, .cs-vhs .band { animation: none; }
   .cs-stage.glx .cs-tear, .cs-stage.glx-strong .cs-tear { opacity: 0; } }
 .cs-slot { position: absolute; left: 11px; bottom: 9px; z-index: 3; font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: rgba(255,255,255,.3); border: 1px dashed rgba(255,255,255,.22); border-radius: 2px; padding: 2px 6px; }
 .cs-ribbon { position: absolute; z-index: 3; top: 14px; left: 12px; max-width: 74%; background: var(--fluo); border-radius: 2px; padding: 6px 13px 7px; box-shadow: 2px 2px 0 rgba(0,0,0,.5); }
