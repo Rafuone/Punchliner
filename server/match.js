@@ -32,7 +32,8 @@ export function levenshtein(a, b) {
 }
 
 // Qualité du match : 0 = raté, 1 = exact/fort, 0.8 = faute d'orthographe (compte un peu moins).
-export function matchQuality(answer, target) {
+// lenient (pouvoir "nofault") : tolérance doublée et pas de pénalité de faute (0.8 → 1).
+export function matchQuality(answer, target, lenient = false) {
   const a = normalize(answer);
   const t = normalize(target);
   if (!a || !t) return 0;
@@ -43,9 +44,9 @@ export function matchQuality(answer, target) {
   // chaque mot signifiant de la cible est présent
   const words = t.split(' ').filter((w) => w.length >= 3);
   if (words.length && words.every((w) => a.includes(w))) return 1;
-  // tolérance aux fautes ~20 % → compte mais pénalité (0.8)
-  const tol = Math.max(1, Math.floor(t.length * 0.2));
-  if (levenshtein(a, t) <= tol) return 0.8;
+  // tolérance aux fautes (~20 %, ou ~40 % en mode nofault)
+  const tol = Math.max(1, Math.floor(t.length * (lenient ? 0.4 : 0.2)));
+  if (levenshtein(a, t) <= tol) return lenient ? 1 : 0.8;
   return 0;
 }
 
@@ -67,19 +68,21 @@ export function extractFeats(track) {
 }
 
 // Note brute d'une réponse : 100 pts titre + 100 pts artiste. Le feat compte comme artiste.
-export function gradeAnswer(answer, track) {
-  const titleQ = matchQuality(answer, track.title);
-  let artistQ = matchQuality(answer, track.artist);
+export function gradeAnswer(answer, track, lenient = false) {
+  const titleQ = matchQuality(answer, track.title, lenient);
+  let artistQ = matchQuality(answer, track.artist, lenient);
   if (artistQ < 1) {
-    for (const f of extractFeats(track)) { const q = matchQuality(answer, f); if (q > artistQ) artistQ = q; }
+    for (const f of extractFeats(track)) { const q = matchQuality(answer, f, lenient); if (q > artistQ) artistQ = q; }
   }
   const titleHit = titleQ > 0;
   const artistHit = artistQ > 0;
-  const base = Math.round(titleQ * 100 + artistQ * 100);
+  // Auditeurs : 10 000 par volet (titre / artiste). Moins de fautes (qualité 1 vs 0,8) = plus d'auditeurs.
+  let base = Math.round(titleQ * 10000 + artistQ * 10000);
+  if (titleHit && artistHit) base += 5000; // prime de précision : titre ET artiste
   return { titleHit, artistHit, base };
 }
 
-// Multiplicateur de vitesse : de x1.0 (dernière seconde) à x1.5 (instantané).
+// Multiplicateur de vitesse : de ×1.0 (dernière seconde) à ×2.0 (instantané) — creuse l'écart.
 export function speedMult(timeLeftMs, windowMs) {
-  return 1 + Math.max(0, Math.min(1, timeLeftMs / windowMs)) * 0.5;
+  return 1 + Math.max(0, Math.min(1, timeLeftMs / windowMs)) * 1.0;
 }

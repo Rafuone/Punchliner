@@ -350,13 +350,9 @@
   .wz .stagecol .act-inner, .wz .stagecol .act-inner.back {animation:none; transition:none;}
 }
 
-/* EQ now-playing animé + garde-fous ajoutés au port */
-.wz .np-eq i { animation: wzeq .9s ease-in-out infinite; }
-.wz .np-eq i:nth-child(2n) { animation-delay: .15s; }
-.wz .np-eq i:nth-child(3n) { animation-delay: .32s; }
-.wz .nowplaying.paused .np-eq i { animation: none; height: 20%; background: var(--muted2); }
-@keyframes wzeq { 0%, 100% { height: 25%; } 50% { height: 90%; } }
-@media (prefers-reduced-motion: reduce) { .wz .np-eq i { animation: none; height: 45%; } }
+/* EQ now-playing : hauteurs peintes en JS depuis le spectre réel (voir ConfigWizard) */
+.wz .np-eq i { transition: height .08s linear; }
+.wz .nowplaying.paused .np-eq i { height: 20%; background: var(--muted2); }
 
 /* fond grunge en canvas (comme l'exploration) */
 .wz .wz-tex { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -368,8 +364,9 @@
 /* VHS : interférences non-linéaires (moins plat) */
 .wz .vhs .flick { animation: wzflick .55s steps(2) infinite; }
 @keyframes wzflick { 0% { opacity: .5; } 20% { opacity: .12; } 38% { opacity: .72; } 55% { opacity: .28; } 74% { opacity: .6; } 90% { opacity: .08; } 100% { opacity: .45; } }
-/* égaliseur audio-réactif : la sélection pulse selon les basses (--pulse 0..1) */
+/* audio-réactif : le glow vert de la sélection suit le beat (--pulse 0..1, basses) */
 .wz .keycard.sel, .wz .pad.sel, .wz .diff-tile.sel, .wz .fmt-tile.sel, .wz .opt.sel, .wz .knob.sel {
-  box-shadow: 0 0 0 1px var(--fluo), 0 0 calc(5px + var(--pulse, 0) * 32px) rgba(228, 255, 26, calc(.1 + var(--pulse, 0) * .62));
+  box-shadow: 0 0 0 1px var(--fluo),
+    0 0 calc(6px + var(--pulse, 0) * 40px) rgba(166, 255, 0, calc(.12 + var(--pulse, 0) * .7));
 }
-.wz .keycard.sel { transform: scale(calc(1 + var(--pulse, 0) * 0.014)); }
+.wz .keycard.sel { transform: scale(calc(1 + var(--pulse, 0) * 0.02)); }

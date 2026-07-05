@@ -2,15 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import '../wizard.css';
 
 /* ====== réglages envoyés au serveur (mappés depuis le wizard) ====== */
-export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string };
-type Music = { nowPlaying: number; musicOn: boolean; onToggle: () => void; onNext: () => void; onPrev: () => void; bassRef: { current: number }; tracks: { title: string; artist: string }[] };
-type Props = { poolSize: number; roomCode: string; players: number; onStart: (s: WizSettings) => void; onBack: () => void; music: Music };
+export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; mjId?: string; rebalance: string };
+type Music = { nowPlaying: number; musicOn: boolean; onToggle: () => void; onNext: () => void; onPrev: () => void; bassRef: { current: number }; barsRef: { current: number[] }; tracks: { title: string; artist: string }[] };
+type Player = { id: string; name: string; avatar?: string };
+type Props = { poolSize: number; roomCode: string; players: number; playerList?: Player[]; onStart: (s: WizSettings) => void; onBack: () => void; music: Music };
 
 /* ====== données (architecture 5 étapes) ====== */
 const GAMES = [
   { id: 'blind', name: 'Blind Test', cat: 'Station · Live', soon: false, desc: 'Tout le monde répond en même temps. Le plus rapide et juste rafle la mise.' },
   { id: 'buzz', name: 'Buzzer', cat: 'Station · Duel', soon: false, desc: 'Le premier qui buzze prend la main. Silence radio pour les autres.' },
-  { id: 'quiz', name: 'Quiz', cat: 'Station · Culture', soon: true, desc: 'Qui a dit ça, quelle année, quel feat, quelle pochette. Le rap FR à la loupe.' },
+  { id: 'quiz', name: 'Quiz', cat: 'Station · Culture', soon: false, desc: 'Blazes, années, groupes, villes, albums… la culture rap FR en QCM.' },
 ];
 const ERAS = [
   { id: 'all', big: '∞', lab: 'Toutes', sub: 'époques' },
@@ -89,7 +90,7 @@ const DIFF_ILLU = [
 ];
 const H = (s: string) => ({ dangerouslySetInnerHTML: { __html: s } });
 
-export default function ConfigWizard({ poolSize, roomCode, players, onStart, onBack, music }: Props) {
+export default function ConfigWizard({ poolSize, roomCode, players, playerList = [], onStart, onBack, music }: Props) {
   const [step, setStep] = useState(0);
   const [game, setGame] = useState('blind');
   const [era, setEra] = useState('all');
@@ -98,6 +99,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, onStart, onB
   const [rounds, setRounds] = useState<number | 'inf'>(30);
   const [rebalance, setRebalance] = useState('comeback');
   const [orch, setOrch] = useState('auto');
+  const [mjId, setMjId] = useState('');
   const [themeExp, setThemeExp] = useState(false);
 
   const themeName = [...THEMES_MAIN, ...THEMES_EXTRA].find((t) => t.id === theme)?.name || '';
@@ -112,7 +114,9 @@ export default function ConfigWizard({ poolSize, roomCode, players, onStart, onB
   const last = step === 4;
   function launch() {
     const r = rounds === 'inf' ? Math.min(poolSize, 50) : Math.min(rounds, poolSize);
-    onStart({ rounds: r, difficulty: diff, mode: game === 'buzz' ? 'buzzer' : 'multi', mj: orch === 'mj', rebalance });
+    const isMj = orch === 'mj';
+    const mode = game === 'buzz' ? 'buzzer' : game === 'quiz' ? 'quiz' : 'multi';
+    onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance });
   }
 
   // fond grunge (béton/xerox/coulures) peint en canvas — comme l'exploration
@@ -137,11 +141,18 @@ export default function ConfigWizard({ poolSize, roomCode, players, onStart, onB
     const onR = () => paint(); window.addEventListener('resize', onR);
     return () => { if (ro) ro.disconnect(); window.removeEventListener('resize', onR); };
   }, []);
-  // égaliseur audio-réactif : la bordure du sélectionné pulse selon les basses (onde, non-linéaire).
+  // audio-réactif : le glow du sélectionné suit le beat (basses) + l'égaliseur suit le spectre réel.
   const wzRef = useRef<HTMLDivElement | null>(null);
+  const npEqRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     let raf = 0, cur = 0;
-    const loop = () => { const t = music.bassRef?.current || 0; cur += (t - cur) * 0.4; wzRef.current?.style.setProperty('--pulse', cur.toFixed(3)); raf = requestAnimationFrame(loop); };
+    const loop = () => {
+      const t = music.bassRef?.current || 0; cur += (t - cur) * 0.4;
+      wzRef.current?.style.setProperty('--pulse', cur.toFixed(3));
+      const eq = npEqRef.current, bands = music.barsRef?.current;
+      if (eq && bands) { const k = eq.children, n = k.length; for (let i = 0; i < n; i++) (k[i] as HTMLElement).style.height = (12 + (bands[Math.floor((i / n) * bands.length)] || 0) * 88) + '%'; }
+      raf = requestAnimationFrame(loop);
+    };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, []);
@@ -276,6 +287,16 @@ export default function ConfigWizard({ poolSize, roomCode, players, onStart, onB
                   <div className="opt-stack">{ORCHESTRATION.map((o) => (
                     <button key={o.key} className={`opt ${orch === o.key ? 'sel' : ''}`} onClick={() => setOrch(o.key)}><span className="ol"><b>{o.name}</b><small>{o.desc}</small></span></button>
                   ))}</div>
+                  {orch === 'mj' && (
+                    <div style={{ marginTop: 14 }}>
+                      <div className="eyebrow" style={{ marginBottom: 8 }}>Qui anime ? <span className="muted" style={{ fontWeight: 600 }}>(ne joue pas)</span></div>
+                      {playerList.length === 0
+                        ? <p className="muted" style={{ fontSize: 12.5, margin: 0, lineHeight: 1.4 }}>Personne n'a encore rejoint. Le mode Maître du jeu demande au moins 2 joueurs — 1 anime, les autres jouent.</p>
+                        : <div className="opt-stack">{playerList.map((p) => (
+                            <button key={p.id} className={`opt ${(mjId || playerList[0]?.id) === p.id ? 'sel' : ''}`} onClick={() => setMjId(p.id)}><span className="ol"><b>{p.name}</b><small>Animateur — voit la réponse, distribue les points à la voix</small></span></button>
+                          ))}</div>}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -294,7 +315,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, onStart, onB
           </div>
           <div className="mc-foot">
             <div className={`nowplaying ${music.musicOn && music.nowPlaying >= 0 ? '' : 'paused'}`}>
-              <div className="np-eq">{[0, 1, 2, 3, 4, 5, 6].map((i) => <i key={i} />)}</div>
+              <div className="np-eq" ref={npEqRef}>{[0, 1, 2, 3, 4, 5, 6].map((i) => <i key={i} />)}</div>
               <div className="np-txt">
                 <div className="npv">{music.nowPlaying >= 0 ? music.tracks[music.nowPlaying].title : 'Musique du menu'}</div>
                 <div className="nps">{music.nowPlaying >= 0 ? music.tracks[music.nowPlaying].artist : 'aléatoire · morceaux entiers'}</div>

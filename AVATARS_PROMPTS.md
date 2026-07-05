@@ -3,17 +3,21 @@
 ## LE PROMPT (colle-le, change juste les 2 crochets)
 
 ```
-16-bit SNES-era pixel art, fighting-game character select art, dark charcoal background,
-warm orange rim light, crisp visible pixels, limited palette, no text, no logo.
+16-bit SNES-era pixel art, fighting-game character-select art, crisp visible pixels,
+limited palette, no text, no logo.
+Background: dark anthracite stage washed in a warm orange-to-pink neon glow (sunset haze),
+subtle film grain.
+Lighting: bold acid-green rim light hugging the silhouette — the PUNCHLINE signature glow —
+a cool neon-green edge popping against the warm orange-pink background.
 Subject: [RAPPEUR], instantly recognizable — [LOOK].
 Framing: chest-up bust portrait, confident stare, filling the frame, vertical 3:4.
 ```
 
 - **[RAPPEUR]** = le nom · **[LOOK]** = la ligne du tableau ci-dessous.
 - **2e image (l'avatar de la vignette)** : même prompt, remplace la ligne `Framing:` par →
-  `Framing: head-and-shoulders icon, front-facing, plain dark background, square 1:1, a DIFFERENT pose than the portrait.`
+  `Framing: head-and-shoulders icon, front-facing, same orange-to-pink glow background, square 1:1, a DIFFERENT pose than the portrait.`
 - Le **bloc de style est identique pour tous** → tous les persos ont le même rendu.
-- **Éclairage** : j'ai mis `warm orange rim light` (au lieu de bleu). Si tu veux coller pile à l'app, essaie `warm orange + magenta rim light`.
+- **Couleurs = nouvelle DA** : contour **vert bombe** (néon `#a6ff00`, ou jaune acide `#e4ff1a`) sur **fond anthracite baigné d'un halo orange-rosé**. La combo vert froid / fond chaud fait ressortir le perso. _(Historique : c'était bleu au tout début, puis orange — maintenant **vert + halo orange-rose** pour coller à l'app.)_
 - **Astuce ressemblance** : si un rappeur "ressemble pas assez", donne une **vraie photo** en entrée + « garde la ressemblance exacte du visage ». C'est le plus fiable.
 
 ## Les [LOOK] — roster complet (vérifiés)
