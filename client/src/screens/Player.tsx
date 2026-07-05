@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { socket } from '../socket';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, fmtAud, certif } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif } from '../data';
 
 const SKEY = 'pl_session';
 const loadSession = () => { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch { return null; } };
 const saveSession = (s: any) => localStorage.setItem(SKEY, JSON.stringify(s));
-const EPITHETS: Record<string, string> = { jul: 'La Machine', pnl: 'Les Frères', booba: 'Le Duc', damso: 'Le Vice', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'Le Normal', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Rapide', plk: 'Le Polak' };
+const EPITHETS: Record<string, string> = { jul: 'La Machine', pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak' };
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
+// met en gras les chiffres-clés d'un effet (montants, ×N, N %) → on repère vite le point fort du pouvoir
+const FX_FIG = /([×x]\s?\d+(?:[.,]\d+)?|[+\-−]?\d[\d   ]*\d\s?%?|\d+\s?%)/g;
+const boldFx = (text: string) => text.split(FX_FIG).map((seg, i) => (i % 2 === 1 ? <b key={i}>{seg}</b> : seg));
 
 export default function Player() {
   const [step, setStep] = useState<'form' | 'char'>('form'); // avant d'avoir rejoint
@@ -203,10 +206,12 @@ export default function Player() {
           <g id="bust"><path d="M22,240 C22,168 58,146 100,146 C142,146 178,168 178,240 Z" fill="#0d0917" /><ellipse cx="100" cy="96" rx="40" ry="44" fill="#0d0917" /><path d="M60,70 Q100,22 140,70 Q140,44 100,42 Q60,44 60,70 Z" fill="#0d0917" /><path d="M138,80 C150,120 150,180 150,240 L178,240 C178,168 160,146 138,80 Z" fill="rgba(255,255,255,.10)" /></g>
         </defs></svg>
 
-        <div className="cs-hud"><span className="back" onClick={() => setStep('form')}>← retour</span><span className="lbl">Choisis ton combattant</span><span /></div>
-        {error && <p className="err" style={{ textAlign: 'center', margin: '0 14px' }}>{error}</p>}
+        <button className="cs-back" onClick={() => setStep('form')} aria-label="Retour">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </button>
+        {error && <p className="err cs-err">{error}</p>}
 
-        <div className="cs-top">
+        <div className={`cs-top${isLegend(sel.cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[sel.cat] }}>
           <div className="cs-stage" style={{ ['--c' as any]: sel.color }}>
             <div className="cs-pbg" />
             <div className="cs-wm">{initials(sel.name)[0]}</div>
@@ -226,7 +231,7 @@ export default function Player() {
             </div>
           </div>
           <div className="cs-infobar">
-            <div className="cs-pow"><div className="k">Pouvoir signature</div><div className="nm">{sel.power.name}</div><div className="fx">{sel.power.effect}</div></div>
+            <div className="cs-pow"><div className="k">Pouvoir signature</div><div className="nm">{sel.power.name}</div><div className="fx">{boldFx(sel.power.effect)}</div></div>
           </div>
         </div>
 
@@ -236,7 +241,7 @@ export default function Player() {
             if (!members.length) return null;
             return (
               <div className="cs-catgroup" key={cat}>
-                <div className="cs-catlabel">{cat}</div>
+                <div className={`cs-catlabel${isLegend(cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[cat] }}>{cat}</div>
                 <div className="cs-catrow">
                   {members.map((a) => {
                     const lk = takenIds.has(a.id);

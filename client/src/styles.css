@@ -20,6 +20,10 @@
   --green: #a6ff00;  /* vert bombe = LIVE / actif secondaire */
   --ink: #0a0b0c;    /* encre : texte sombre posé SUR le fluo */
 
+  /* matière IRIDESCENTE (genre Légende) — nacre soap-bubble, glints pastel entre les teintes.
+     Boucle sans couture : mêmes couleurs aux deux bouts (#ff5db4). Partagée par le texte + les stats. */
+  --irid-grad: linear-gradient(110deg, #ff5db4 0%, #ffd7ec 11%, #ff9a4d 24%, #ffe98a 36%, #b6ff5e 50%, #7df0ff 64%, #cfe9ff 74%, #c0b6ff 84%, #ff8fd0 93%, #ff5db4 100%);
+
   --txt: #eef0f1; --muted: #9a9ea3; --muted2: #71767b;
 
   /* compat : anciennes variables repointées street */
@@ -236,55 +240,95 @@ button, input { font-family: inherit; }
 .head.sel { opacity: 1; border-color: var(--fluo); box-shadow: 0 0 0 2px var(--fluo); transform: translateY(-2px); }
 
 /* ===== character select façon jeu de combat (en jeu) ===== */
-.cs { position: relative; height: 100dvh; max-width: 460px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden; }
-.cs-hud { display: flex; justify-content: space-between; align-items: center; padding: 11px 15px 7px; flex: 0 0 auto; }
-.cs-hud .back { cursor: pointer; color: var(--muted); font-weight: 700; font-size: 14px; }
-.cs-hud .lbl { font-family: var(--disp); font-weight: 700; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+/* width:100% → sinon le flex-item gonfle à sa max-width (460) et déborde en largeur sur mobile.
+   height:100vh AVANT 100dvh → fallback si le navigateur ne gère pas dvh (sinon hauteur=auto, le flex
+   s'effondre, le roster s'affiche en entier et toute la page scrolle). overflow-x:hidden = ceinture. */
+.cs { position: relative; width: 100%; height: 100vh; height: 100dvh; max-width: 460px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden; overscroll-behavior: contain; }
+/* bouton retour FLOTTANT (liquid glass) — top-left façon app mobile, par-dessus le showcase.
+   Plus de barre .cs-hud : la place gagnée profite au showcase + au roster. */
+.cs-back { position: absolute; z-index: 6; top: calc(10px + env(safe-area-inset-top)); left: 11px;
+  width: 38px; height: 38px; display: grid; place-items: center; border-radius: 3px; cursor: pointer;
+  color: #fff; background: rgba(18, 20, 24, .5); border: 1px solid rgba(255, 255, 255, .2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3); backdrop-filter: blur(12px) saturate(1.3);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .18);
+  transition: transform .12s ease, background .2s ease; }
+.cs-back:hover { background: rgba(30, 33, 40, .62); }
+.cs-back:active { transform: scale(.9); }
+.cs-back svg { display: block; margin-left: -1px; }
+/* erreur en toast flottant (ne pousse pas le layout) */
+.cs-err { position: absolute; z-index: 6; top: calc(12px + env(safe-area-inset-top)); left: 50%;
+  transform: translateX(-50%); max-width: calc(100% - 108px); margin: 0; text-align: center; }
 .cs-top { flex: 0 0 auto; }
-.cs-stage { position: relative; height: 40vh; min-height: 230px; overflow: hidden; }
+/* height en dvh (fallback vh) pour rester cohérent avec le conteneur ; max-height → sur grand écran
+   le showcase ne mange pas tout, le roster garde de la place. */
+.cs-stage { position: relative; height: 44vh; height: 44dvh; min-height: 232px; max-height: 360px; overflow: hidden; }
 .cs-pbg { position: absolute; inset: 0; background: radial-gradient(120% 92% at 50% 16%, var(--c, #26282c), #121316 62%, #0b0c0e); }
 .cs-pbg::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.04) 0 1px, transparent 1px 3px); opacity: .5; }
 .cs-wm { position: absolute; right: -4%; bottom: -16%; font-family: var(--disp); font-weight: 700; font-size: 240px; line-height: .7; color: rgba(255,255,255,.05); pointer-events: none; }
 .cs-bust { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); height: 96%; filter: drop-shadow(0 0 34px rgba(0,0,0,.5)); }
 /* photo du showcase : remplit tout le cadre (largeur uniforme quel que soit le ratio) */
 .cs-pimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%; z-index: 1; }
-.cs-pvig { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 42%, rgba(11,12,14,.5) 80%, #0b0c0e); }
+/* dégradé bas accentué (~+12%) : le nom + les stats ressortent mieux sur l'image */
+.cs-pvig { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 36%, rgba(11,12,14,.62) 78%, #0b0c0e); }
 .cs-slot { position: absolute; left: 11px; bottom: 9px; z-index: 3; font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: rgba(255,255,255,.3); border: 1px dashed rgba(255,255,255,.22); border-radius: 2px; padding: 2px 6px; }
 .cs-ribbon { position: absolute; z-index: 3; top: 14px; left: 12px; max-width: 74%; background: var(--fluo); border-radius: 2px; padding: 6px 13px 7px; box-shadow: 2px 2px 0 rgba(0,0,0,.5); }
 .cs-ribbon .p1 { font-family: var(--disp); font-weight: 800; font-size: 11px; color: var(--ink); letter-spacing: .1em; }
 .cs-ribbon .nm { font-family: var(--disp); font-weight: 700; font-size: clamp(20px,6vw,28px); line-height: .92; letter-spacing: -.01em; color: var(--ink); white-space: nowrap; text-transform: uppercase; }
 .cs-ribbon .ep { font-size: 11px; color: var(--ink); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .8; }
-.cs-catchip { position: absolute; z-index: 3; top: 15px; right: 12px; background: rgba(0,0,0,.6); border: 1px solid var(--line2); border-radius: 2px; padding: 5px 11px; display: inline-flex; align-items: center; justify-content: center; }
+/* chip du genre : bordure + texte teintés par la couleur de catégorie (--cc). color-mix = progressive
+   enhancement (ignoré → repli sur --line2 / --fluo si non supporté). */
+.cs-catchip { position: absolute; z-index: 3; top: 15px; right: 12px; background: rgba(0,0,0,.6); border: 1px solid var(--line2); border-color: color-mix(in srgb, var(--cc, #ffffff) 45%, rgba(255,255,255,.14)); border-radius: 2px; padding: 5px 11px; display: inline-flex; align-items: center; justify-content: center; }
 /* margin-right négatif : compense l'espace de letter-spacing après la dernière lettre → texte centré */
-.cs-catchip > span { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--fluo); margin-right: -.12em; }
+.cs-catchip > span { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--cc, var(--fluo)); margin-right: -.12em; text-shadow: 0 0 10px color-mix(in srgb, var(--cc, transparent) 32%, transparent); }
+/* ===== Légende : une seule MATIÈRE iridescente (--irid-grad) partagée par le chip, le nom du
+   pouvoir, le libellé roster ET les barres de stats. background-size:200% + travel 200% = boucle
+   sans couture (background-repeat par défaut = repeat, et le dégradé reboucle sur la même couleur). */
+.cs-top.irid .cs-catchip > span, .cs-catlabel.irid, .cs-top.irid .cs-pow .nm {
+  background-image: var(--irid-grad); background-size: 200% 100%;
+  background-clip: text; -webkit-background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent; text-shadow: none;
+  animation: irid 7s linear infinite; }
+/* stats : on GARDE les pips discrets (les points restent lisibles) mais l'anim se joue sur TOUS EN
+   MÊME TEMPS — chaque pip "on" cycle à travers la même nappe de teintes, en phase. Pas de dégradé par
+   pip, pas de barre pleine. Les pips "off" gardent leur gris de base. */
+.cs-top.irid .cs-sbar i.on { animation: iridpip 5.5s linear infinite; }
+@keyframes iridpip {
+  0%, 100% { background: #ff5db4; } 17% { background: #ff9a4d; } 34% { background: #ffe98a; }
+  50% { background: #b6ff5e; } 67% { background: #7df0ff; } 84% { background: #c0b6ff; } }
+@keyframes irid { to { background-position: 200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .cs-top.irid .cs-catchip > span, .cs-catlabel.irid, .cs-top.irid .cs-pow .nm, .cs-top.irid .cs-sbar i.on { animation: none; } }
 /* nom en bas (blanc) + surnom, sur la photo */
 .cs-nameplate { position: absolute; left: 0; bottom: 0; z-index: 3; max-width: calc(100% - 132px); padding: 10px 14px 12px; text-align: left; }
 .cs-name { font-family: var(--disp); font-weight: 700; font-size: clamp(23px, 7.5vw, 34px); line-height: .9; color: #fff; text-transform: uppercase; text-shadow: 0 2px 12px rgba(0, 0, 0, .85); }
 .cs-epi { font-family: var(--disp); font-weight: 700; font-size: 12.5px; letter-spacing: .02em; color: rgba(255, 255, 255, .85); margin-top: 4px; text-shadow: 0 1px 6px rgba(0, 0, 0, .9); }
 /* stats en surimpression à droite */
 .cs-stats-ov { position: absolute; right: 10px; bottom: 10px; z-index: 3; display: flex; flex-direction: column; gap: 5px; align-items: flex-end;
-  background: rgba(0, 0, 0, .42); border: 1px solid rgba(255, 255, 255, .1); border-radius: 3px; padding: 8px 10px; }
+  background: rgba(0, 0, 0, .5); border: 1px solid rgba(255, 255, 255, .14); border-radius: 3px; padding: 8px 10px; }
 .cs-stats-ov .cs-slab { color: rgba(255, 255, 255, .82); text-shadow: 0 1px 3px rgba(0, 0, 0, .85); }
-.cs-infobar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--surf); border-top: 1px solid var(--fluo); border-bottom: 1px solid var(--line); }
+.cs-infobar { display: flex; align-items: center; gap: 12px; padding: 13px 16px; background: var(--surf); border-top: 1px solid var(--fluo); border-bottom: 1px solid var(--line); }
 .cs-pow { flex: 1; min-width: 0; }
-.cs-pow .k { font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted2); }
-.cs-pow .nm { font-family: var(--disp); font-weight: 700; font-size: 18px; color: var(--fluo); text-transform: uppercase; }
-.cs-pow .fx { font-size: 11px; color: var(--muted); line-height: 1.3; }
+.cs-pow .k { font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted2); margin-bottom: 3px; }
+/* un peu d'air autour du nom + une élévation fluo discrète */
+.cs-pow .nm { font-family: var(--disp); font-weight: 700; font-size: 18px; line-height: 1.02; letter-spacing: .01em; color: var(--cc, var(--fluo)); text-transform: uppercase; margin: 0 0 4px; text-shadow: 0 1px 12px rgba(228, 255, 26, .18); text-shadow: 0 1px 12px color-mix(in srgb, var(--cc, #e4ff1a) 28%, transparent); }
+.cs-pow .fx { font-size: 12.5px; color: var(--muted); line-height: 1.38; }
+/* chiffres-clés en gras + éclaircis → l'œil accroche direct le point fort */
+.cs-pow .fx b { font-weight: 800; color: var(--txt); }
 .cs-stats { display: flex; flex-direction: column; gap: 4px; }
 .cs-srow { display: flex; align-items: center; gap: 7px; justify-content: flex-end; }
 .cs-slab { font-size: 8.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted2); width: 34px; text-align: right; }
 .cs-sbar { display: flex; gap: 3px; }
-.cs-sbar i { width: 10px; height: 7px; border-radius: 1px; background: rgba(255,255,255,.13); transform: skewX(-16deg); }
-.cs-sbar i.on { background: var(--fluo); }
+.cs-sbar i { width: 10px; height: 7px; border-radius: 1px; background: rgba(255,255,255,.22); transform: skewX(-16deg); }
+.cs-sbar i.on { background: var(--cc, var(--fluo)); }
 .cs-mug { width: 44px; height: 44px; border-radius: 3px; flex: 0 0 auto; overflow: hidden; position: relative; border: 1px solid rgba(255,255,255,.25); background: radial-gradient(80% 70% at 50% 18%, var(--c), #121316); }
 .cs-mug svg, .cs-mug img { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); height: 100%; }
 .cs-mug img { left: 0; transform: none; width: 100%; height: 100%; object-fit: cover; object-position: 50% 14%; }
-.cs-rosterwrap { flex: 1; overflow-y: auto; padding: 11px 12px 6px; -webkit-overflow-scrolling: touch; }
+.cs-rosterwrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 11px 12px 6px; -webkit-overflow-scrolling: touch; }
 .cs-rosterwrap::-webkit-scrollbar { width: 5px; } .cs-rosterwrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 3px; }
 .cs-roster { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
 /* roster groupé par catégorie, scroll horizontal par ligne (persos plus grands) */
 .cs-catgroup { margin-bottom: 14px; }
-.cs-catlabel { font-family: var(--disp); font-weight: 700; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 2px 2px 8px; }
+.cs-catlabel { font-family: var(--disp); font-weight: 700; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--cc, var(--muted)); margin: 2px 2px 8px; }
 .cs-catrow { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
 .cs-catrow::-webkit-scrollbar { height: 5px; }
 .cs-catrow::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .15); border-radius: 3px; }
