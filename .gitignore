@@ -4,8 +4,8 @@ dist/
 .DS_Store
 .env
 
-# Médias lourds / sous copyright — pas versionnés (restent en local).
+# Originaux bruts (réserve perso) — pas versionnés, restent en local.
+# La musique servie par l'app (client/public/music/*.mp3) est versionnée via Git LFS.
 assets/
-*.mp3
 
 # fonts.css est généré (getfonts.ps1) MAIS requis au build → on le versionne.
