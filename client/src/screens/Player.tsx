@@ -39,6 +39,7 @@ export default function Player() {
   const [prepEndsAt, setPrepEndsAt] = useState(0);   // fin de la fenêtre d'activation des pouvoirs
   const [prepDone, setPrepDone] = useState(false);   // ce joueur a activé ou passé
   const meId = useRef<string>('');
+  const stageRef = useRef<HTMLDivElement>(null);
 
   function applyState(state: any) {
     setPlayers(state.players || []);
@@ -115,6 +116,24 @@ export default function Player() {
     const taken = new Set(players.filter((p) => p.connected && p.id !== meId.current).map((p) => p.avatar));
     if (!avatarId || taken.has(avatarId)) { const free = AVATARS.find((a) => !taken.has(a.id)); if (free) setAvatarId(free.id); }
   }, [step, avatarId, players]);
+  // VHS : glitches de tracking ORGANIQUES (intervalles + tailles aléatoires) — pilotés en JS pour un
+  // rendu non répétitif, sans re-render React (on écrit direct sur le DOM du stage).
+  useEffect(() => {
+    if (joined || step !== 'char') return;
+    const stage = stageRef.current; if (!stage) return;
+    let timer: any;
+    const fire = () => {
+      const strong = Math.random() < 0.2; // la plupart du temps discret, rares glitches plus forts
+      stage.style.setProperty('--gy', (Math.random() * 86).toFixed(1) + '%');
+      stage.style.setProperty('--gh', (2 + Math.random() * (strong ? 15 : 7)).toFixed(1) + '%');
+      stage.style.setProperty('--gx', ((Math.random() * 2 - 1) * (strong ? 13 : 5)).toFixed(1) + 'px');
+      stage.classList.add(strong ? 'glx-strong' : 'glx');
+      window.setTimeout(() => stage.classList.remove('glx', 'glx-strong'), 60 + Math.random() * (strong ? 200 : 110));
+      timer = window.setTimeout(fire, 1700 + Math.random() * 6200); // prochain glitch : 1,7–7,9 s
+    };
+    timer = window.setTimeout(fire, 1000 + Math.random() * 2500);
+    return () => { window.clearTimeout(timer); stage.classList.remove('glx', 'glx-strong'); };
+  }, [step, joined]);
 
   function join() {
     setJoining(true); setError('');
@@ -204,6 +223,18 @@ export default function Player() {
       <div className={`cs${isLegend(sel.cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[sel.cat] }}>
         <svg width="0" height="0" style={{ position: 'absolute' }}><defs>
           <g id="bust"><path d="M22,240 C22,168 58,146 100,146 C142,146 178,168 178,240 Z" fill="#0d0917" /><ellipse cx="100" cy="96" rx="40" ry="44" fill="#0d0917" /><path d="M60,70 Q100,22 140,70 Q140,44 100,42 Q60,44 60,70 Z" fill="#0d0917" /><path d="M138,80 C150,120 150,180 150,240 L178,240 C178,168 160,146 138,80 Z" fill="rgba(255,255,255,.10)" /></g>
+          {/* filtre VHS : léger wobble analogique (displacement) + séparation des canaux R/B (aberration chromatique) */}
+          <filter id="vhs" x="-4%" y="-2%" width="108%" height="104%" colorInterpolationFilters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.001 0.021" numOctaves={1} seed={5} result="w" />
+            <feDisplacementMap in="SourceGraphic" in2="w" scale={1.8} xChannelSelector="R" yChannelSelector="G" result="d" />
+            <feColorMatrix in="d" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cr" />
+            <feOffset in="cr" dx={-1.3} dy={0.3} result="cro" />
+            <feColorMatrix in="d" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cg" />
+            <feColorMatrix in="d" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cb" />
+            <feOffset in="cb" dx={1.3} dy={-0.3} result="cbo" />
+            <feBlend in="cro" in2="cg" mode="screen" result="crg" />
+            <feBlend in="crg" in2="cbo" mode="screen" />
+          </filter>
         </defs></svg>
 
         <button className="cs-back" onClick={() => setStep('form')} aria-label="Retour">
@@ -212,13 +243,14 @@ export default function Player() {
         {error && <p className="err cs-err">{error}</p>}
 
         <div className="cs-top">
-          <div className="cs-stage" style={{ ['--c' as any]: sel.color }}>
+          <div className="cs-stage" ref={stageRef} style={{ ['--c' as any]: sel.color }}>
             <div className="cs-pbg" />
             <div className="cs-wm">{initials(sel.name)[0]}</div>
             <svg className="cs-bust" viewBox="0 0 200 240"><use href="#bust" /></svg>
             {sel.img && <img className="cs-pimg" src={`/avatars/${sel.id}.png`} alt="" onError={hideOnErr} />}
+            {sel.img && <img className="cs-tear" src={`/avatars/${sel.id}.png`} alt="" aria-hidden="true" onError={hideOnErr} />}
             <div className="cs-pvig" />
-            <div className="cs-vhs" aria-hidden="true"><i className="lines" /><i className="band" /><i className="grain" /></div>
+            <div className="cs-vhs" aria-hidden="true"><i className="lines" /><i className="tint" /><i className="noise" /></div>
             {!sel.img && <span className="cs-slot">Portrait — image à venir</span>}
             <div className="cs-catchip"><span>{sel.cat}</span></div>
             <div className="cs-stats-ov">
