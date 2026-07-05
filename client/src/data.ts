@@ -27,18 +27,18 @@ export function certif(score: number, rounds: number) {
 export const AVATARS: Avatar[] = [
   // ---- Légende (pionniers) — tier S ----
   { id: 'booba', name: 'Booba', color: '#3A2F52', cat: 'Légende', img: true, power: { name: 'DUC', effect: 'Le Duc rafle 22 000 auditeurs au n°1.' }, stats: { flow: 4, punch: 5, tech: 4, aura: 5 } },
-  { id: 'iam', name: 'IAM', color: '#C98A4A', cat: 'Légende', power: { name: "L'École du Micro", effect: 'Les sages ne tombent pas : 12 000 auditeurs minimum cette manche, immunisé au sabotage.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 5 } },
+  { id: 'iam', name: 'IAM', color: '#C98A4A', cat: 'Légende', img: true, power: { name: "L'École du Micro", effect: 'Les sages ne tombent pas : 12 000 auditeurs minimum cette manche, immunisé au sabotage.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 5 } },
   { id: 'solaar', name: 'MC Solaar', color: '#D0A24E', cat: 'Légende', img: true, power: { name: 'Le Prince des Mots', effect: 'Le prince des mots n\'écrit jamais de faute : ta réponse passe même mal orthographiée cette manche.' }, stats: { flow: 5, punch: 2, tech: 5, aura: 5 } },
   { id: 'oxmo', name: 'Oxmo Puccino', color: '#B5892E', cat: 'Légende', img: true, power: { name: 'Mines de Cristal', effect: 'Révèle les premières lettres (titre + artiste).' }, stats: { flow: 4, punch: 3, tech: 5, aura: 4 } },
-  { id: 'ntm', name: 'NTM', color: '#B12A2A', cat: 'Légende', power: { name: 'Police', effect: 'Muselle les 2 joueurs en tête : 0 auditeur pour eux cette manche.' }, stats: { flow: 4, punch: 5, tech: 4, aura: 5 } },
+  { id: 'ntm', name: 'NTM', color: '#B12A2A', cat: 'Légende', img: true, power: { name: 'Police', effect: 'Muselle les 2 joueurs en tête : 0 auditeur pour eux cette manche.' }, stats: { flow: 4, punch: 5, tech: 4, aura: 5 } },
   { id: 'fabe', name: 'Fabe', color: '#4A5568', cat: 'Plume', img: true, power: { name: 'Le Fond et la Forme', effect: 'Increvable : pendant 3 manches, tu ne peux rien perdre et tu grattes 4 000 auditeurs minimum à chaque fois.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 3 } },
   // ---- Mainstream (grand public) ----
-  { id: 'jul', name: 'Jul', color: '#2E9E8F', cat: 'Mainstream', power: { name: 'La Machine', effect: 'La machine s\'emballe : +6 000 auditeurs, +6 000 de plus par manche gagnée d\'affilée.' }, stats: { flow: 4, punch: 3, tech: 2, aura: 5 } },
+  { id: 'jul', name: 'Jul', color: '#2E9E8F', cat: 'Mainstream', img: true, power: { name: 'La Machine', effect: 'La machine s\'emballe : +6 000 auditeurs, +6 000 de plus par manche gagnée d\'affilée.' }, stats: { flow: 4, punch: 3, tech: 2, aura: 5 } },
   { id: 'gims', name: 'Gims', color: '#C6A24B', cat: 'Mainstream', img: true, power: { name: 'Sapés comme jamais', effect: 'Le tube qu\'on a trop porté : +22 000, puis -25 % à chaque réutilisation.' }, stats: { flow: 4, punch: 3, tech: 3, aura: 4 } },
   { id: 'rohff', name: 'Rohff', color: '#932F2F', cat: 'Mainstream', img: true, power: { name: "Le Code de l'Honneur", effect: 'Muselle le n°1 : 0 auditeur pour lui cette manche.' }, stats: { flow: 4, punch: 5, tech: 3, aura: 4 } },
   { id: 'lafouine', name: 'La Fouine', color: '#3E6B8C', cat: 'Mainstream', img: true, power: { name: 'Capitale du Crime', effect: 'Muselle le n°1 : 0 auditeur pour lui cette manche.' }, stats: { flow: 4, punch: 4, tech: 3, aura: 3 } },
   // ---- Rap game (contemporain établi) ----
-  { id: 'pnl', name: 'PNL', color: '#4C6BE0', cat: 'Rap game', power: { name: 'Onizuka', effect: 'Ta prochaine bonne réponse compte TRIPLE (×3).' }, stats: { flow: 5, punch: 2, tech: 4, aura: 5 } },
+  { id: 'pnl', name: 'PNL', color: '#4C6BE0', cat: 'Rap game', img: true, power: { name: 'Onizuka', effect: 'Ta prochaine bonne réponse compte TRIPLE (×3).' }, stats: { flow: 5, punch: 2, tech: 4, aura: 5 } },
   { id: 'damso', name: 'Damso', color: '#8A1F1C', cat: 'Rap game', img: true, power: { name: 'Le Vice', effect: 'Le 1er à trouver cette manche rafle +30 000 auditeurs. Sinon, rien.' }, stats: { flow: 5, punch: 4, tech: 5, aura: 4 } },
   { id: 'ninho', name: 'Ninho', color: '#B07E33', cat: 'Rap game', img: true, power: { name: 'Certifié Diamant', effect: 'Gros bonus qui fond à chaque réutilisation : +26 000, puis -25 % à chaque fois.' }, stats: { flow: 4, punch: 3, tech: 3, aura: 5 } },
   { id: 'sch', name: 'SCH', color: '#44405A', cat: 'Rap game', img: true, power: { name: 'JVLIVS', effect: 'Quitte ou double : ×3 si tu marques cette manche, sinon -13 000 auditeurs.' }, stats: { flow: 4, punch: 4, tech: 4, aura: 4 } },
@@ -92,4 +92,6 @@ export const MENU_TRACKS: MenuTrack[] = [
   { title: 'Stuntmen', artist: 'Laylow · Alpha Wann & Witt', src: '/music/laylow-stuntmen.mp3' },
   { title: 'Bruce Lee', artist: 'Jewel Usain', src: '/music/jewel-usain-bruce-lee.mp3' },
   { title: 'ZUSHILEAKS', artist: 'Caballero & JeanJass · Chilly Gonzales', src: '/music/zushileaks-cjj.mp3' },
+  { title: 'Boulbi', artist: 'Booba', src: '/music/booba-boulbi.mp3' },
+  { title: "Porte d'Orléans", artist: 'PLK', src: '/music/plk-porte-dorleans.mp3' },
 ];
