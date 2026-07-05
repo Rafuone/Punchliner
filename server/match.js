@@ -31,29 +31,51 @@ export function levenshtein(a, b) {
   return prev[n];
 }
 
-// Est-ce que "answer" matche la cible "target" (titre ou artiste) ?
-export function isMatch(answer, target) {
+// Qualité du match : 0 = raté, 1 = exact/fort, 0.8 = faute d'orthographe (compte un peu moins).
+export function matchQuality(answer, target) {
   const a = normalize(answer);
   const t = normalize(target);
-  if (!a || !t) return false;
-  if (a === t) return true;
+  if (!a || !t) return 0;
+  if (a === t) return 1;
   // l'un contient l'autre (ex. "au dd pnl" contient "au dd")
-  if (t.length >= 4 && a.includes(t)) return true;
-  if (a.length >= 4 && t.includes(a)) return true;
-  // tolérance aux fautes ~20 % de la longueur de la cible
-  const tol = Math.max(1, Math.floor(t.length * 0.2));
-  if (levenshtein(a, t) <= tol) return true;
-  // match au niveau des mots (ex. réponse contient chaque mot signifiant du titre)
+  if (t.length >= 4 && a.includes(t)) return 1;
+  if (a.length >= 4 && t.includes(a)) return 1;
+  // chaque mot signifiant de la cible est présent
   const words = t.split(' ').filter((w) => w.length >= 3);
-  if (words.length && words.every((w) => a.includes(w))) return true;
-  return false;
+  if (words.length && words.every((w) => a.includes(w))) return 1;
+  // tolérance aux fautes ~20 % → compte mais pénalité (0.8)
+  const tol = Math.max(1, Math.floor(t.length * 0.2));
+  if (levenshtein(a, t) <= tol) return 0.8;
+  return 0;
 }
 
-// Note brute d'une réponse : 100 pts titre + 100 pts artiste (avant vitesse/difficulté).
+// Est-ce que "answer" matche la cible ? (rétro-compat)
+export function isMatch(answer, target) {
+  return matchQuality(answer, target) > 0;
+}
+
+// Extrait les artistes en featuring (dans le titre ou l'artiste) — ex. "Stuntmen (feat. Alpha Wann & Witt)".
+export function extractFeats(track) {
+  const raw = `${track?.title || ''} ${track?.artist || ''}`;
+  const feats = [];
+  const re = /(?:feat\.?|ft\.?|featuring|avec)\s+([^()\[\]]+)/gi;
+  let m;
+  while ((m = re.exec(raw))) {
+    m[1].split(/,|&|\bet\b|\bx\b/i).forEach((n) => { const s = n.trim(); if (s.length >= 2) feats.push(s); });
+  }
+  return feats;
+}
+
+// Note brute d'une réponse : 100 pts titre + 100 pts artiste. Le feat compte comme artiste.
 export function gradeAnswer(answer, track) {
-  const titleHit = isMatch(answer, track.title);
-  const artistHit = isMatch(answer, track.artist);
-  const base = (titleHit ? 100 : 0) + (artistHit ? 100 : 0);
+  const titleQ = matchQuality(answer, track.title);
+  let artistQ = matchQuality(answer, track.artist);
+  if (artistQ < 1) {
+    for (const f of extractFeats(track)) { const q = matchQuality(answer, f); if (q > artistQ) artistQ = q; }
+  }
+  const titleHit = titleQ > 0;
+  const artistHit = artistQ > 0;
+  const base = Math.round(titleQ * 100 + artistQ * 100);
   return { titleHit, artistHit, base };
 }
 

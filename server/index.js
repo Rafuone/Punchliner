@@ -88,7 +88,7 @@ const genId = () => crypto.randomBytes(8).toString('hex');
 
 function publicPlayers(room) {
   return [...room.players.values()]
-    .map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, score: p.score, connected: p.connected, charge: p.charge, isMJ: !!p.isMJ }))
+    .map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, score: p.score, connected: p.connected, charge: p.charge, charges: p.charges || 0, isMJ: !!p.isMJ }))
     .sort((a, b) => b.score - a.score);
 }
 const connectedCount = (room) => [...room.players.values()].filter((p) => p.connected).length;
@@ -118,7 +118,17 @@ function snapshot(room, isHost) {
 /* ------------------------------------------------------------------ */
 /* Boucle de jeu                                                       */
 /* ------------------------------------------------------------------ */
+function beginRound(room) {
+  room.phase = 'countdown';
+  const seconds = 5;
+  clearTimeout(room.cdTimer);
+  io.to(room.hostId).emit('round:countdown', { seconds, index: room.roundIndex, total: room.totalRounds });
+  io.to(room.code).emit('round:countdown', { seconds });
+  room.cdTimer = setTimeout(() => startRound(room), seconds * 1000);
+}
+
 function startRound(room) {
+  if (room.phase !== 'countdown') return; // annulé pendant le décompte
   room.phase = 'playing';
   room.current = room.playlist[room.roundIndex];
   room.answers = new Map();
@@ -134,7 +144,7 @@ function startRound(room) {
   clearTimeout(room.buzzTimer);
   room.mjDouble = false; room.mjPlus = false;
 
-  const base = { roundIndex: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: diff.windowMs, mode: room.settings.mode, difficulty: diff.label };
+  const base = { index: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: diff.windowMs, mode: room.settings.mode, difficulty: diff.label };
   io.to(room.hostId).emit('round:host', { ...base, preview: room.current.preview, startAt: room.startAt });
   io.to(room.code).emit('round:go', base);
   clearTimeout(room.timer);
@@ -153,7 +163,9 @@ function fillCharges(room) {
       const t = rule === 'comeback' ? fromBottom : 1 - fromBottom;
       add = 18 + t * 44; // ~18 (favorisé) → ~62 (à la traîne, en comeback)
     }
-    p.charge = Math.min(100, (p.charge || 0) + Math.round(add));
+    p.charge = (p.charge || 0) + Math.round(add);
+    while (p.charge >= 100 && (p.charges || 0) < 5) { p.charges = (p.charges || 0) + 1; p.charge -= 100; }
+    if (p.charge > 100) p.charge = 100;
   });
 }
 
@@ -171,16 +183,25 @@ function endRound(room) {
   }
   results.sort((a, b) => b.points - a.points);
   fillCharges(room);
+  // delta de rang (monte/descend) vs la manche précédente
+  const ranked = [...room.players.values()].filter((p) => !p.isMJ).sort((a, b) => b.score - a.score);
+  const newRank = new Map(); ranked.forEach((p, i) => newRank.set(p.id, i));
+  const scores = publicPlayers(room).map((sp) => {
+    const prev = room.prevRanks ? room.prevRanks.get(sp.id) : null;
+    const cur = newRank.get(sp.id);
+    return { ...sp, rankDelta: (prev == null || cur == null) ? 0 : prev - cur };
+  });
+  room.prevRanks = newRank;
   room.lastReveal = {
     roundIndex: room.roundIndex, total: room.totalRounds,
     track: { title: room.current.title, artist: room.current.artist, cover: room.current.cover },
-    results, scores: publicPlayers(room),
+    results, scores,
   };
   io.to(room.code).emit('round:reveal', room.lastReveal);
 }
 
 function nextRound(room) {
-  if (room.roundIndex + 1 < room.totalRounds) { room.roundIndex += 1; startRound(room); }
+  if (room.roundIndex + 1 < room.totalRounds) { room.roundIndex += 1; beginRound(room); }
   else { room.phase = 'final'; io.to(room.code).emit('game:final', { scores: publicPlayers(room) }); }
 }
 
@@ -237,7 +258,7 @@ io.on('connection', (socket) => {
     if (room.phase !== 'lobby') return cb?.({ error: 'La partie a déjà commencé — impossible de rejoindre en cours.' });
     const pid = playerId || genId();
     const clean = String(name || '').trim().slice(0, 16) || 'Anonyme';
-    room.players.set(pid, { id: pid, name: clean, avatar: avatar || null, score: 0, connected: true, socketId: socket.id, charge: 100, armed: null, shield: false });
+    room.players.set(pid, { id: pid, name: clean, avatar: avatar || null, score: 0, connected: true, socketId: socket.id, charge: 0, charges: 1, armed: null, shield: false });
     socket.join(code);
     socket.data = { roomCode: code, role: 'player', playerId: pid };
     cb?.({ ok: true, playerId: pid, state: snapshot(room, false) });
@@ -255,7 +276,7 @@ io.on('connection', (socket) => {
       mj: !!mj,
       rebalance: ['comeback', 'snowball', 'off'].includes(rebalance) ? rebalance : 'comeback',
     };
-    for (const p of room.players.values()) { p.charge = 100; p.armed = null; p.shield = false; p.isMJ = false; }
+    for (const p of room.players.values()) { p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; p.isMJ = false; }
     room.mjDouble = false; room.mjPlus = false; room.mjId = null;
     if (room.settings.mj) {
       const mj = [...room.players.values()].find((p) => p.connected) || [...room.players.values()][0];
@@ -265,8 +286,9 @@ io.on('connection', (socket) => {
     room.playlist = pickPlaylist(rounds || 8, diff.tier);
     room.totalRounds = room.playlist.length;
     room.roundIndex = 0;
+    room.prevRanks = null;
     cb?.({ ok: true });
-    startRound(room);
+    beginRound(room);
   });
 
   // Mode multi : chacun soumet sa réponse quand il veut
@@ -339,28 +361,27 @@ io.on('connection', (socket) => {
     if (!room) return cb?.({ error: 'Pas de partie.' });
     const p = room.players.get(socket.data.playerId);
     if (!p) return cb?.({ error: 'Joueur inconnu.' });
-    if ((p.charge || 0) < 100) return cb?.({ error: 'Jauge pas encore pleine.' });
+    if ((p.charges || 0) < 1) return cb?.({ error: 'Aucune charge de pouvoir.' });
     const pw = POWERS[p.avatar];
     if (!pw) return cb?.({ error: 'Ce perso n\'a pas de pouvoir.' });
     let detail = null;
-    if (pw.type === 'double') p.armed = 'double';
+    // cohérence : les pouvoirs qui ne peuvent RIEN faire ne consomment PAS la charge
+    if (pw.type === 'steal') {
+      const leader = [...room.players.values()].filter((x) => x.id !== p.id && x.connected && x.score > 0).sort((a, b) => b.score - a.score)[0];
+      if (!leader) return cb?.({ error: 'Personne à voler pour l\'instant.' });
+      const amt = Math.min(100, leader.score);
+      leader.score -= amt; p.score += amt;
+      detail = { stoleFrom: leader.name, amount: amt };
+    } else if (pw.type === 'hint') {
+      if (room.phase !== 'playing' || !room.current) return cb?.({ error: 'Attends une manche en cours.' });
+      detail = { hint: { title: firstLetters(room.current.title), artist: firstLetters(room.current.artist) } };
+    } else if (pw.type === 'double') p.armed = 'double';
     else if (pw.type === 'bonus') p.armed = 'bonus';
     else if (pw.type === 'shield') p.shield = true;
-    else if (pw.type === 'steal') {
-      const leader = [...room.players.values()].filter((x) => x.id !== p.id && x.connected).sort((a, b) => b.score - a.score)[0];
-      if (leader && leader.score > 0) {
-        const amt = Math.min(100, leader.score);
-        leader.score -= amt; p.score += amt;
-        detail = { stoleFrom: leader.name, amount: amt };
-        io.to(room.code).emit('scores:update', { scores: publicPlayers(room) });
-      }
-    } else if (pw.type === 'hint') {
-      if (room.phase === 'playing' && room.current) detail = { hint: { title: firstLetters(room.current.title), artist: firstLetters(room.current.artist) } };
-    }
-    p.charge = 0;
+    p.charges -= 1;
     io.to(room.hostId).emit('power:used', { name: p.name, avatar: p.avatar, power: pw.name });
     io.to(room.code).emit('scores:update', { scores: publicPlayers(room) });
-    cb?.({ ok: true, type: pw.type, power: pw.name, detail, charge: 0 });
+    cb?.({ ok: true, type: pw.type, power: pw.name, detail, charges: p.charges, charge: p.charge });
   });
 
   // ---- Maître du jeu (pupitre) ----
@@ -402,7 +423,7 @@ io.on('connection', (socket) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
     room.phase = 'lobby'; room.roundIndex = 0;
-    for (const p of room.players.values()) { p.score = 0; p.charge = 100; p.armed = null; p.shield = false; }
+    for (const p of room.players.values()) { p.score = 0; p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; }
     cb?.({ ok: true });
     emitLobby(room);
   });

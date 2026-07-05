@@ -44,3 +44,12 @@ export const REBALANCE = [
 
 export const initials = (s: string) =>
   s.replace(/\(.*?\)/g, '').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+
+// Musique du menu (fichiers dans client/public/music/, servis par Vite à /music/…)
+// Lecture en entier + ordre aléatoire côté Host.
+export type MenuTrack = { title: string; artist: string; src: string };
+export const MENU_TRACKS: MenuTrack[] = [
+  { title: 'Stuntmen', artist: 'Laylow · Alpha Wann & Witt', src: '/music/laylow-stuntmen.mp3' },
+  { title: 'Bruce Lee', artist: 'Jewel Usain', src: '/music/jewel-usain-bruce-lee.mp3' },
+  { title: 'ZUSHILEAKS', artist: 'Caballero & JeanJass · Chilly Gonzales', src: '/music/zushileaks-cjj.mp3' },
+];

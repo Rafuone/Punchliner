@@ -4,4 +4,8 @@ dist/
 .DS_Store
 .env
 
+# Médias lourds / sous copyright — pas versionnés (restent en local).
+assets/
+*.mp3
+
 # fonts.css est généré (getfonts.ps1) MAIS requis au build → on le versionne.

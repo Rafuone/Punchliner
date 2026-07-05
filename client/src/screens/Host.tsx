@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
-import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE } from '../data';
+import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS } from '../data';
+import ConfigWizard from './ConfigWizard';
 
 const C = 2 * Math.PI * 54;
 const HKEY = 'pl_host';
@@ -13,7 +14,8 @@ function Med({ avatarId, size = 38 }: { avatarId?: string; size?: number }) {
 }
 
 export default function Host() {
-  const [phase, setPhase] = useState<'connecting' | 'lobby' | 'playing' | 'reveal' | 'final'>('connecting');
+  const [phase, setPhase] = useState<'connecting' | 'lobby' | 'countdown' | 'playing' | 'reveal' | 'final'>('connecting');
+  const [countdown, setCountdown] = useState(0);
   const [code, setCode] = useState('');
   const [poolSize, setPoolSize] = useState(0);
   const [players, setPlayers] = useState<any[]>([]);
@@ -32,6 +34,12 @@ export default function Host() {
   const previewRef = useRef<any>({ url: '', clipMs: 30000, startAt: 0 });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const clipTimer = useRef<any>(null);
+  const menuAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [nowPlaying, setNowPlaying] = useState(-1);
+  const [musicOn, setMusicOn] = useState(true);
+  const musicOnRef = useRef(true);
+  const startedRef = useRef(false);
+  const curRef = useRef(-1);
 
   function applyState(state: any) {
     setPlayers(state.players || []);
@@ -62,26 +70,85 @@ export default function Host() {
     });
     if (socket.connected) boot();
     socket.on('connect', boot);
-    socket.on('lobby', (d: any) => { setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); if (d.phase === 'lobby') setPhase('lobby'); });
+    socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); if (d.phase === 'lobby') setPhase('lobby'); });
+    socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
     socket.on('round:host', (d: any) => { setReveal(null); setAnswered([]); setBuzzWinner(null); setRound(d); setPhase('playing'); playPreview(d.preview, d.startAt); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
     socket.on('buzz:winner', (d: any) => setBuzzWinner(d.name));
     socket.on('buzz:open', () => setBuzzWinner(null));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // le son continue de tourner sur la révélation
     socket.on('game:final', (d: any) => { audioRef.current?.pause(); setFinalScores(d.scores); setPhase('final'); });
-    socket.on('power:used', (d: any) => { setPowerLog(`🎭 ${d.name} a lancé ${d.power}`); setTimeout(() => setPowerLog(''), 4500); });
+    socket.on('power:used', (d: any) => { setPowerLog(`${d.name} a lancé ${d.power}`); setTimeout(() => setPowerLog(''), 4500); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); localStorage.removeItem(HKEY); });
-    return () => ['connect', 'lobby', 'round:host', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'room:closed'].forEach((e) => socket.off(e as any));
+    return () => ['connect', 'lobby', 'round:countdown', 'round:host', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'room:closed'].forEach((e) => socket.off(e as any));
   }, []);
 
   useEffect(() => { if (phase !== 'playing') return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
+  useEffect(() => { if (phase !== 'countdown') return; const id = setInterval(() => setCountdown((c) => Math.max(1, c - 1)), 1000); return () => clearInterval(id); }, [phase]);
   useEffect(() => {
     fetch('/api/net').then((r) => r.json()).then(({ ip }) => {
       const loc = window.location; const local = loc.hostname === 'localhost' || loc.hostname === '127.0.0.1';
       setJoinBase(local && ip ? `${loc.protocol}//${ip}:${loc.port || '5173'}` : loc.origin.replace(/\/$/, ''));
     }).catch(() => {});
   }, []);
+
+  /* ---- musique du menu : aléatoire, morceaux entiers, historique préc/suiv ---- */
+  const histRef = useRef<number[]>([]);
+  const posRef = useRef(-1);
+  const bassRef = useRef(0);        // niveau de basses (0..1) pour l'égaliseur
+  const acRef = useRef<any>(null);  // AudioContext + analyser
+  function pickTrack(exclude: number) {
+    if (MENU_TRACKS.length <= 1) return 0;
+    let n = exclude;
+    while (n === exclude) n = Math.floor(Math.random() * MENU_TRACKS.length);
+    return n;
+  }
+  function ensureAnalyser() {
+    const a = menuAudioRef.current; if (!a || acRef.current) return;
+    try {
+      const AC = (window as any).AudioContext || (window as any).webkitAudioContext; if (!AC) return;
+      const ctx = new AC(); const src = ctx.createMediaElementSource(a); const an = ctx.createAnalyser();
+      an.fftSize = 256; src.connect(an); an.connect(ctx.destination);
+      acRef.current = { ctx, an, data: new Uint8Array(an.frequencyBinCount) };
+      const loop = () => { const o = acRef.current; if (!o) return; o.an.getByteFrequencyData(o.data); let s = 0; for (let i = 1; i < 8; i++) s += o.data[i]; bassRef.current = Math.min(1, s / (7 * 205)); requestAnimationFrame(loop); };
+      requestAnimationFrame(loop);
+    } catch (e) {}
+  }
+  function playMenuTrack(i: number, pushHist = true) {
+    const a = menuAudioRef.current; if (!a) return;
+    a.src = MENU_TRACKS[i].src; a.volume = 0.5;
+    a.play().then(() => { ensureAnalyser(); acRef.current?.ctx?.resume?.(); curRef.current = i; setNowPlaying(i); if (pushHist) { histRef.current = histRef.current.slice(0, posRef.current + 1); histRef.current.push(i); posRef.current = histRef.current.length - 1; } }).catch(() => {});
+  }
+  function nextTrack() {
+    if (posRef.current < histRef.current.length - 1) { posRef.current += 1; playMenuTrack(histRef.current[posRef.current], false); }
+    else playMenuTrack(pickTrack(curRef.current), true);
+  }
+  function prevTrack() {
+    if (posRef.current > 0) { posRef.current -= 1; playMenuTrack(histRef.current[posRef.current], false); }
+  }
+  function startMenu() {
+    if (startedRef.current || !musicOnRef.current) return;
+    startedRef.current = true;
+    playMenuTrack(pickTrack(-1));
+  }
+  function toggleMusic() {
+    const on = !musicOn; setMusicOn(on); musicOnRef.current = on;
+    const a = menuAudioRef.current; if (!a) return;
+    if (on) { if (!startedRef.current) startMenu(); else a.play().catch(() => {}); }
+    else a.pause();
+  }
+  useEffect(() => {
+    const h = () => startMenu();
+    window.addEventListener('pointerdown', h, { once: true });
+    window.addEventListener('keydown', h, { once: true });
+    return () => { window.removeEventListener('pointerdown', h); window.removeEventListener('keydown', h); };
+  }, []);
+  useEffect(() => {
+    const a = menuAudioRef.current; if (!a) return;
+    if (phase !== 'lobby') a.pause();
+    else if (startedRef.current && musicOnRef.current && a.paused) a.play().catch(() => {});
+  }, [phase]);
 
   function playPreview(url: string, startAt = 0) {
     const a = audioRef.current; if (!a || !url) return;
@@ -97,6 +164,11 @@ export default function Host() {
     if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); }
     socket.emit('host:start', { rounds: settings.rounds, difficulty: settings.difficulty, mode: settings.mode, mj: settings.mj, rebalance: settings.rebalance }, (res: any) => res?.error && setError(res.error));
   }
+  function startWizard(s: { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string }) {
+    const a = audioRef.current;
+    if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); }
+    socket.emit('host:start', s, (res: any) => res?.error && setError(res.error));
+  }
 
   const remaining = Math.max(0, round.endsAt - now);
   const seconds = Math.ceil(remaining / 1000);
@@ -106,13 +178,16 @@ export default function Host() {
     <div className="wrap">
       <div className="topbar">
         <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">E</span></h1>
-        {phase !== 'connecting' && <span className="gpill"><span className="dot" />{phase === 'lobby' ? `Salon ${code}` : `Manche ${round.index + 1}/${round.total} · ${round.difficulty}`} · {players.length} j.</span>}
+        <span className="row" style={{ gap: 10 }}>
+          {phase !== 'connecting' && <span className="gpill"><span className="dot" />{phase === 'lobby' ? `Salon ${code}` : `Manche ${round.index + 1}/${round.total} · ${round.difficulty}`} · {players.length} j.</span>}
+          {['countdown', 'playing', 'reveal'].includes(phase) && <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={() => socket.emit('host:restart')}>← Salon</button>}
+        </span>
       </div>
       {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
       {phase === 'connecting' && <div className="center"><p className="muted">Connexion…</p></div>}
 
-      {phase === 'lobby' && (
-        <div className="center">
+      {phase === 'lobby' && !configuring && (
+        <div className="center" style={{ gap: 30 }}>
           <span className="eyebrow">Rejoins le salon</span>
           <div className="code">{code}</div>
           <div className="join-row">
@@ -135,55 +210,32 @@ export default function Host() {
             </div>
           )}
 
-          {!configuring ? (
-            <>
-              <button className="btn warm big" style={{ maxWidth: 360 }} onClick={() => setConfiguring(true)} disabled={players.length < 1 || poolSize < 1}>Configurer la partie →</button>
-              <p className="muted" style={{ fontSize: 13 }}>{players.length} joueur{players.length > 1 ? 's' : ''} · {poolSize} morceaux prêts</p>
-            </>
-          ) : (
-            <>
-              <span className="eyebrow">Configuration de la partie</span>
-              <div className="glass pad" style={{ width: '100%', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <div className="eyebrow" style={{ marginBottom: 8 }}>Orchestration</div>
-                  <div className="seg">
-                    <button className={`segbtn ${!settings.mj ? 'on' : ''}`} onClick={() => setSettings((s) => ({ ...s, mj: false }))}><b>Automatique</b><small>L'app arbitre toute seule</small></button>
-                    <button className={`segbtn ${settings.mj ? 'on' : ''}`} onClick={() => setSettings((s) => ({ ...s, mj: true }))}><b>Maître du jeu</b><small>Un animateur (pupitre bientôt)</small></button>
-                  </div>
-                </div>
-                <div>
-                  <div className="eyebrow" style={{ marginBottom: 8 }}>Jauge de pouvoir <span className="muted" style={{ textTransform: 'none', letterSpacing: 0 }}>· comment elle se remplit</span></div>
-                  <div className="seg">{REBALANCE.map((r) => (
-                    <button key={r.key} className={`segbtn ${settings.rebalance === r.key ? 'on' : ''}`} onClick={() => setSettings((s) => ({ ...s, rebalance: r.key }))}><b>{r.label}</b><small>{r.desc}</small></button>
-                  ))}</div>
-                </div>
-                <div>
-                  <div className="eyebrow" style={{ marginBottom: 8 }}>Difficulté <span className="muted" style={{ textTransform: 'none', letterSpacing: 0 }}>· selon la popularité des sons</span></div>
-                  <div className="seg">{DIFFICULTIES.map((d) => (
-                    <button key={d.key} className={`segbtn ${settings.difficulty === d.key ? 'on' : ''}`} onClick={() => setSettings((s) => ({ ...s, difficulty: d.key }))}><b>{d.label}</b><small>{d.desc}</small></button>
-                  ))}</div>
-                </div>
-                <div className="seg-row">
-                  <div style={{ flex: 1 }}><div className="eyebrow" style={{ marginBottom: 8 }}>Mode</div><div className="seg">{MODES.map((m) => (
-                    <button key={m.key} className={`segbtn ${settings.mode === m.key ? 'on' : ''}`} onClick={() => setSettings((s) => ({ ...s, mode: m.key }))}><b>{m.label}</b><small>{m.desc}</small></button>
-                  ))}</div></div>
-                  <div><div className="eyebrow" style={{ marginBottom: 8 }}>Manches</div><div className="seg">{[5, 8, 12].map((n) => (
-                    <button key={n} className={`segbtn ${settings.rounds === n ? 'on' : ''}`} onClick={() => setSettings((s) => ({ ...s, rounds: n }))} disabled={n > poolSize}><b>{n}</b></button>
-                  ))}</div></div>
-                </div>
-              </div>
-              <div className="row" style={{ gap: 12 }}>
-                <button className="btn" onClick={() => setConfiguring(false)}>← Retour</button>
-                <button className="btn warm big" style={{ maxWidth: 300 }} onClick={start} disabled={players.length < 1 || poolSize < 1}>Démarrer la partie</button>
-              </div>
-            </>
-          )}
+          <button className="btn warm big" style={{ maxWidth: 360 }} onClick={() => setConfiguring(true)} disabled={poolSize < 1}>Configurer la partie →</button>
+        </div>
+      )}
+
+      {phase === 'lobby' && configuring && (
+        <ConfigWizard
+          poolSize={poolSize}
+          roomCode={code}
+          players={players.length}
+          onStart={startWizard}
+          onBack={() => setConfiguring(false)}
+          music={{ nowPlaying, musicOn, onToggle: toggleMusic, onNext: nextTrack, onPrev: prevTrack, bassRef, tracks: MENU_TRACKS }}
+        />
+      )}
+
+      {phase === 'countdown' && (
+        <div className="center">
+          <span className="eyebrow">Prépare-toi…</span>
+          <div className="big-num" style={{ color: 'var(--fluo)' }}>{countdown}</div>
+          <span className="url">la musique arrive</span>
         </div>
       )}
 
       {phase === 'playing' && (
         <div className="center">
-          {audioBlocked && <button className="btn warm big" style={{ maxWidth: 320 }} onClick={() => playPreview(previewRef.current.url, previewRef.current.startAt)}>🔊 Activer le son</button>}
+          {audioBlocked && <button className="btn warm big" style={{ maxWidth: 320 }} onClick={() => playPreview(previewRef.current.url, previewRef.current.startAt)}>Activer le son</button>}
           <div className="wrap-cols" style={{ width: '100%', maxWidth: 780 }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
               <div className="disc"><span className="q">?</span></div>
@@ -192,7 +244,7 @@ export default function Host() {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
               <div className="ring">
                 <svg viewBox="0 0 120 120">
-                  <defs><linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#7C5CFF" /><stop offset="1" stopColor="#E9703C" /></linearGradient></defs>
+                  <defs><linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a6ff00" /><stop offset="1" stopColor="#e4ff1a" /></linearGradient></defs>
                   <circle cx="60" cy="60" r="54" stroke="rgba(255,255,255,.12)" strokeWidth="10" fill="none" />
                   <circle cx="60" cy="60" r="54" stroke="url(#tg)" strokeWidth="10" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - frac)} />
                 </svg>
@@ -202,31 +254,45 @@ export default function Host() {
             </div>
           </div>
           {round.mode === 'buzzer' ? (
-            <p className="feedback" style={{ color: buzzWinner ? 'var(--ember)' : 'var(--muted)' }}>{buzzWinner ? `🔔 ${buzzWinner} a buzzé — à lui de répondre !` : 'Le premier qui buzze prend la main…'}</p>
+            <p className="feedback" style={{ color: buzzWinner ? 'var(--ember)' : 'var(--muted)' }}>{buzzWinner ? `${buzzWinner} a buzzé — à lui de répondre !` : 'Le premier qui buzze prend la main…'}</p>
           ) : (
-            answered.length > 0 && <div className="answered">{answered.map((n) => <span className="abadge" key={n}>{n} ✓</span>)}</div>
+            answered.length > 0 && <div className="answered">{answered.map((n) => <span className="abadge" key={n}>{n}</span>)}</div>
           )}
           {powerLog && <p className="feedback" style={{ color: 'var(--v1)' }}>{powerLog}</p>}
         </div>
       )}
 
       {phase === 'reveal' && reveal && (
-        <div className="center">
+        <div className="center" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(16px,4vh,52px)', gap: 22 }}>
           <span className="eyebrow">C'était…</span>
-          <div className="row" style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
-            {reveal.track.cover && <img className="cover" src={reveal.track.cover} alt="" />}
-            <div style={{ textAlign: 'left' }}>
-              <h2 className="title-xl">{reveal.track.title}</h2>
-              <p className="reveal-artist title-xl" style={{ fontSize: 'clamp(20px,3vw,30px)', margin: 0 }}>{reveal.track.artist}</p>
+          <div className="row" style={{ gap: 26, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {reveal.track.cover && <img className="cover" src={reveal.track.cover} alt="" style={{ width: 'clamp(160px,26vw,240px)', height: 'clamp(160px,26vw,240px)' }} />}
+            <div style={{ textAlign: 'left', maxWidth: 460 }}>
+              <div className="eyebrow" style={{ color: 'var(--muted2)', marginBottom: 2 }}>Titre</div>
+              <h2 className="title-xl" style={{ marginBottom: 12 }}>{reveal.track.title}</h2>
+              <div className="eyebrow" style={{ color: 'var(--muted2)', marginBottom: 2 }}>Artiste</div>
+              <p className="reveal-artist" style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 'clamp(20px,3vw,32px)', margin: 0, lineHeight: 1.05 }}>{reveal.track.artist}</p>
             </div>
           </div>
-          <div className="board" style={{ maxWidth: 560 }}>
+          <div className="board" style={{ maxWidth: 620 }}>
             {reveal.scores.filter((p: any) => !p.isMJ).map((p: any, i: number) => {
               const r = reveal.results.find((x: any) => x.id === p.id);
+              const d = p.rankDelta || 0;
               return (
-                <div className={`prow ${i === 0 ? 'lead' : ''}`} key={p.id}>
-                  <span className="who"><Med avatarId={p.avatar} size={26} />{p.name}</span>
-                  <span className="row" style={{ gap: 14 }}><span className={`gain ${r && r.points ? '' : 'zero'}`}>{r && r.points ? `+${r.points}` : '—'}</span><span className="pts">{p.score}</span></span>
+                <div className={`prow ${i === 0 ? 'lead' : ''}`} key={p.id} style={{ animation: `rowin .32s ease ${i * 0.05}s both` }}>
+                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={26} />{p.name}</span>
+                  <span className="row" style={{ gap: 12 }}>
+                    {d !== 0 && (
+                      <span style={{ color: d > 0 ? 'var(--green)' : 'var(--bad)', display: 'inline-flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 12 }}>
+                        {d > 0
+                          ? <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor"><path d="M5 1l4 7H1z" /></svg>
+                          : <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor"><path d="M5 9L1 3h8z" /></svg>}
+                        {Math.abs(d)}
+                      </span>
+                    )}
+                    <span className={`gain ${r && r.points ? '' : 'zero'}`}>{r && r.points ? `+${r.points}` : '·'}</span>
+                    <span className="pts">{p.score}</span>
+                  </span>
                 </div>
               );
             })}
@@ -238,7 +304,7 @@ export default function Host() {
       {phase === 'final' && (
         <div className="center">
           <span className="eyebrow">Podium</span>
-          <div className="big-num">🏆</div>
+          <div style={{ color: 'var(--fluo)' }}><svg width="104" height="104" viewBox="0 0 24 24" fill="none"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" stroke="currentColor" strokeWidth="1.3" /><path d="M7 5H4v1.6A3.4 3.4 0 0 0 7.3 10M17 5h3v1.6A3.4 3.4 0 0 1 16.7 10" stroke="currentColor" strokeWidth="1.3" /><path d="M9.5 13v3.3h5V13M8 20.5h8M10.4 16.8h3.2v3.7h-3.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></div>
           <h2 className="title-xl">{finalScores.filter((p: any) => !p.isMJ)[0]?.name} gagne</h2>
           <div className="board" style={{ maxWidth: 560 }}>
             {finalScores.filter((p: any) => !p.isMJ).map((p, i) => (
@@ -252,7 +318,24 @@ export default function Host() {
         </div>
       )}
 
+      {phase === 'lobby' && !configuring && (
+        <div className={`nowdock ${musicOn && nowPlaying >= 0 ? '' : 'paused'}`}>
+          <span className="eq"><i /><i /><i /><i /></span>
+          <span className="nt">
+            <span className="v">{nowPlaying >= 0 ? MENU_TRACKS[nowPlaying].title : 'Musique du menu'}</span>
+            <span className="s">{nowPlaying >= 0 ? MENU_TRACKS[nowPlaying].artist : (startedRef.current ? '' : 'clique pour lancer')}</span>
+          </span>
+          <button onClick={prevTrack} title="Précédent" aria-label="Précédent"><svg width="13" height="13" viewBox="0 0 15 15" fill="currentColor"><path d="M4 3h1.5v9H4zM12 3v9l-6-4.5z" /></svg></button>
+          <button onClick={nextTrack} title="Suivant" aria-label="Suivant"><svg width="13" height="13" viewBox="0 0 15 15" fill="currentColor"><path d="M9.5 3H11v9H9.5zM3 3v9l6-4.5z" /></svg></button>
+          <button onClick={toggleMusic} title={musicOn ? 'Couper' : 'Remettre'} aria-label="Musique">
+            {musicOn
+              ? <svg width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M3 5.5h2.5L9 3v9L5.5 9.5H3z" fill="currentColor" /><path d="M11 5.5c1 1 1 3 0 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+              : <svg width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M3 5.5h2.5L9 3v9L5.5 9.5H3z" fill="currentColor" /><path d="M10.5 5l3.5 3.5M14 5l-3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>}
+          </button>
+        </div>
+      )}
       <audio ref={audioRef} preload="auto" />
+      <audio ref={menuAudioRef} preload="auto" onEnded={() => nextTrack()} />
     </div>
   );
 }
