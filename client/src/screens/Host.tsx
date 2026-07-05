@@ -216,7 +216,7 @@ export default function Host() {
       {phase === 'lobby' && !configuring && (
         <div className="center" style={{ gap: 30 }}>
           <span className="eyebrow">Rejoins le salon</span>
-          <div className="code">{code}</div>
+          <div className="code glitch" data-code={code}>{code}</div>
           <div className="join-row">
             <div className="qr"><QRCodeSVG value={`${joinBase}/?c=${code}`} size={118} bgColor="#ffffff" fgColor="#0c0722" /></div>
             <div style={{ textAlign: 'left' }}>

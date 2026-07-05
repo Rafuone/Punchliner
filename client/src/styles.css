@@ -111,6 +111,29 @@ button, input { font-family: inherit; }
 .code { font-family: var(--disp); font-weight: 700; letter-spacing: .12em; line-height: 1;
   font-size: clamp(64px, 16vw, 130px); color: var(--fluo); text-transform: uppercase;
   text-shadow: 4px 4px 0 rgba(0, 0, 0, .5); }
+/* code du salon : traitement GRUNGE / glitch — aberration chromatique RGB constante (ombres rouge/cyan)
+   + tranches horizontales qui décrochent ponctuellement (pseudos rejouant le code via data-code)
+   + léger tremblement. Non répétitif : les deux couches ont des durées différentes. */
+.code.glitch { position: relative;
+  text-shadow: 3px 4px 0 rgba(0, 0, 0, .5), -1px 0 rgba(255, 43, 94, .5), 1px 0 rgba(41, 234, 255, .45);
+  animation: codeTremble 3.9s steps(1) infinite; }
+.code.glitch::before, .code.glitch::after {
+  content: attr(data-code); position: absolute; left: 0; top: 0; width: 100%;
+  color: var(--fluo); pointer-events: none; will-change: transform, clip-path; }
+.code.glitch::before { text-shadow: -2px 0 #ff2b5e; animation: codeGlitchA 2.6s linear infinite; }
+.code.glitch::after  { text-shadow: 2px 0 #2beaff; animation: codeGlitchB 3.3s linear infinite; }
+@keyframes codeTremble { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-1px, 1px); } 50% { transform: translate(1px, -1px); } 75% { transform: translate(-1px, 0); } }
+@keyframes codeGlitchA {
+  0%, 90%, 100% { clip-path: inset(0 0 0 0); transform: translate(0, 0); }
+  91% { clip-path: inset(18% 0 58% 0); transform: translate(-6px, 0); }
+  94% { clip-path: inset(62% 0 14% 0); transform: translate(6px, 0); }
+  97% { clip-path: inset(40% 0 38% 0); transform: translate(-3px, 0); } }
+@keyframes codeGlitchB {
+  0%, 86%, 100% { clip-path: inset(0 0 0 0); transform: translate(0, 0); }
+  88% { clip-path: inset(46% 0 32% 0); transform: translate(6px, 0); }
+  93% { clip-path: inset(6% 0 74% 0); transform: translate(-7px, 0); }
+  98% { clip-path: inset(70% 0 8% 0); transform: translate(4px, 0); } }
+@media (prefers-reduced-motion: reduce) { .code.glitch, .code.glitch::before, .code.glitch::after { animation: none; } }
 .url { font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-size: 14px; }
 .join-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; justify-content: center; }
 .qr { background: #fff; padding: 9px; border-radius: 3px; line-height: 0; box-shadow: 4px 4px 0 rgba(0, 0, 0, .5); }
