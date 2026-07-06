@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
 import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif } from '../data';
 import ConfigWizard from './ConfigWizard';
+import GrungeBg from '../GrungeBg';
 
 // Fond du lobby (écran du code) : instru d'Alpha Wann. Crossfade vers la playlist (Bishok) à l'entrée du ConfigWizard.
 const LOBBY_TRACK = '/music/alphawann-philly-flingo.mp3';
@@ -239,7 +240,9 @@ export default function Host() {
   const frac = round.durationMs ? remaining / round.durationMs : 0;
 
   return (
-    <div className="wrap">
+    <>
+    {phase === 'lobby' && !configuring && <GrungeBg />}
+    <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
       <div className="topbar">
         <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">R</span></h1>
         <span className="row" style={{ gap: 10 }}>
@@ -429,5 +432,6 @@ export default function Host() {
       <audio ref={menuAudioRef} preload="auto" onEnded={() => nextTrack()} />
       <audio ref={lobbyAudioRef} preload="auto" loop />
     </div>
+    </>
   );
 }

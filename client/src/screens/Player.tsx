@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { socket } from '../socket';
 import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif } from '../data';
+import GrungeBg from '../GrungeBg';
 
 const SKEY = 'pl_session';
 const loadSession = () => { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch { return null; } };
@@ -203,7 +204,8 @@ export default function Player() {
   /* ---- 1) formulaire : code + pseudo ---- */
   if (!joined && step === 'form') {
     return (
-      <div className="wrap"><div className="center">
+      <><GrungeBg />
+      <div className="wrap" style={{ position: 'relative', zIndex: 1 }}><div className="center">
         <h1 className="wm" style={{ fontSize: 44 }}>PUNCHLIN<span className="d">R</span></h1>
         <p className="muted" style={{ marginTop: -8 }}>Le blind test rap FR</p>
         {error && <p className="err">{error}</p>}
@@ -214,7 +216,7 @@ export default function Player() {
             <input className="field" style={{ marginTop: 6 }} value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Sacha" /></div>
           <button className="btn warm big" type="submit" disabled={!code.trim() || !name.trim()}>Entre dans le cercle →</button>
         </form>
-      </div></div>
+      </div></div></>
     );
   }
 

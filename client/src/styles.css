@@ -43,18 +43,14 @@ body {
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
-/* grunge du fond : grain film (::before) + trame de points halftone (::after). En blend NORMAL (pas
-   overlay/soft-light, qui disparaissent sur fond quasi-noir) → la granularité reste VISIBLE tout en
-   gardant la teinte bleutée du dégradé (opacité basse, on ne fait qu'ajouter un léger bruit clair). */
+/* léger grain film de base sur tout le fond (subtil) */
 body::before {
-  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .09;
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .07;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
   background-size: 150px 150px;
 }
-body::after {
-  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .5;
-  background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1.5px); background-size: 6px 6px;
-}
+/* fond GRUNGE canvas (béton/coulures/rayures) — même DA que la page des jeux. Derrière le contenu. */
+.grungebg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 button, input { font-family: inherit; }
 
 .app { position: relative; z-index: 1; min-height: 100%; display: flex; flex-direction: column; }
