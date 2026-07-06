@@ -14,18 +14,20 @@ import { pickQuiz, buildQuizRound } from './quiz.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // SERVER_PORT (pas PORT) pour ne pas être capté par un outil qui injecte PORT (ex. preview)
 const PORT = process.env.SERVER_PORT || 3001;
+const FAST = !!process.env.PL_FAST; // TEST uniquement (test-games.mjs) : manches ultra-courtes. JAMAIS en prod.
+const W = (ms) => (FAST ? 1500 : ms); // durée d'écoute par manche (raccourcie en mode test)
 
 const PREVIEW_MS = 30000; // durée d'un extrait Deezer
-const QUIZ_MS = 22000; // durée d'une question de quiz (QCM)
+const QUIZ_MS = FAST ? 1500 : 22000; // durée d'une question de quiz (QCM)
 const HOST_GRACE_MS = 120000; // délai avant de fermer un salon dont l'hôte a disparu
 
 // Difficulté = QUELS morceaux tombent (popularité via le rank Deezer), PAS la durée.
 // Le son joue toujours généreusement ; offset = on démarre en plein milieu sur les niveaux durs.
 const DIFFICULTY = {
-  facile:    { label: 'Grand public', tier: 'top',  windowMs: 30000, mult: 1.0, offset: false },
-  normal:    { label: 'Connaisseur',  tier: 'high', windowMs: 26000, mult: 1.3, offset: false },
-  difficile: { label: 'Digger',       tier: 'mid',  windowMs: 22000, mult: 1.6, offset: true },
-  puriste:   { label: 'Puriste',      tier: 'deep', windowMs: 20000, mult: 2.0, offset: true },
+  facile:    { label: 'Grand public', tier: 'top',  windowMs: W(30000), mult: 1.0, offset: false },
+  normal:    { label: 'Connaisseur',  tier: 'high', windowMs: W(26000), mult: 1.3, offset: false },
+  difficile: { label: 'Digger',       tier: 'mid',  windowMs: W(22000), mult: 1.6, offset: true },
+  puriste:   { label: 'Puriste',      tier: 'deep', windowMs: W(20000), mult: 2.0, offset: true },
 };
 const MODES = ['multi', 'buzzer', 'quiz'];
 
@@ -140,7 +142,7 @@ function beginRound(room) {
   const powerPhase = (room.settings.mode === 'multi' || room.settings.mode === 'buzzer') && !room.settings.mj;
   if (powerPhase) {
     room.phase = 'prep';
-    const seconds = 10;
+    const seconds = FAST ? 2 : 10;
     room.prepEndsAt = Date.now() + seconds * 1000;
     const info = { index: room.roundIndex, total: room.totalRounds, endsAt: room.prepEndsAt, seconds, mode: room.settings.mode, difficulty: diffLabel };
     io.to(room.code).emit('round:prep', info);
@@ -149,7 +151,7 @@ function beginRound(room) {
   } else {
     // quiz / Maître du jeu : pas de pouvoirs → décompte direct
     room.phase = 'countdown';
-    const seconds = 5;
+    const seconds = FAST ? 1 : 5;
     io.to(room.hostId).emit('round:countdown', { seconds, index: room.roundIndex, total: room.totalRounds });
     io.to(room.code).emit('round:countdown', { seconds });
     room.cdTimer = setTimeout(() => startRound(room), seconds * 1000);
@@ -451,7 +453,7 @@ io.on('connection', (socket) => {
     io.to(room.code).emit('buzz:winner', { id: p.id, name: p.name });
     // le gagnant a 8 s pour répondre, sinon il est verrouillé et le buzzer rouvre
     clearTimeout(room.buzzTimer);
-    room.buzzTimer = setTimeout(() => buzzerFail(room, p.id), 8000);
+    room.buzzTimer = setTimeout(() => buzzerFail(room, p.id), FAST ? 2500 : 8000);
   });
 
   socket.on('buzzer:answer', ({ text }, cb) => {
@@ -705,6 +707,12 @@ app.get('/api/dev/room', (_req, res) => {
   res.json({ code: room?.code || null });
 });
 app.get('/api/pool', (_req, res) => res.json(POOL.map((t) => ({ artist: t.artist, title: t.title, rank: t.rank })).sort((a, b) => b.rank - a.rank)));
+// Test uniquement : révèle la réponse de la manche en cours (pour scripter des réponses correctes dans test-games.mjs).
+app.get('/api/dev/answer', (req, res) => {
+  const room = rooms.get(String(req.query.code || '').toUpperCase().trim());
+  if (!room || !room.current) return res.json({ title: null, artist: null });
+  res.json({ title: room.current.title, artist: room.current.artist, quizAnswer: room.quiz ? room.quiz.answer : null });
+});
 
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
 if (fs.existsSync(clientDist)) {
