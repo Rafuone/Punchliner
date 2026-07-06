@@ -246,9 +246,11 @@ function endRound(room) {
       if (room.muted?.has(p.id)) points = 0;                       // sabotage : muselé cette manche
       if (p.safety && points < p.safety) points = p.safety;        // filet : plancher garanti (auditeurs)
       if (vet && points < (p.veteranFloor || 4000)) points = p.veteranFloor || 4000; // gratte garanti du vétéran
+      if (p.sustainUntil != null && room.roundIndex <= p.sustainUntil) points += (p.sustainAmount || 0); // revenu régulier (sustain)
+      if (p.draftFrac) { let om = 0; for (const [pid, a] of room.answers) { if (pid !== p.id && a.points > om) om = a.points; } points += Math.round(p.draftFrac * om); } // draft : part du meilleur score adverse
       if (p.armed?.type === 'wager') points -= (p.armed.penalty || 15000); // quitte ou double raté
       p.score = Math.max(0, p.score + points);
-      p.armed = null; p.safety = false; p.nofault = false; p.selfBonus = 0; // les pouvoirs de manche expirent
+      p.armed = null; p.safety = false; p.nofault = false; p.selfBonus = 0; p.draftFrac = 0; // les pouvoirs de manche expirent
       p.streak = points > 0 ? (p.streak || 0) + 1 : 0;             // série de bonnes manches (momentum)
     }
     results.push({ id: p.id, name: p.name, avatar: p.avatar, points, titleHit, artistHit });
@@ -367,7 +369,7 @@ io.on('connection', (socket) => {
       mj: useMj,
       rebalance: ['comeback', 'snowball', 'off'].includes(rebalance) ? rebalance : 'comeback',
     };
-    for (const p of room.players.values()) { p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; p.isMJ = false; p.streak = 0; p.decayUses = 0; p.veteranUntil = null; p.veteranFloor = 0; p.nofault = false; p.selfBonus = 0; }
+    for (const p of room.players.values()) { p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; p.isMJ = false; p.streak = 0; p.decayUses = 0; p.veteranUntil = null; p.veteranFloor = 0; p.nofault = false; p.selfBonus = 0; p.sustainUntil = null; p.sustainAmount = 0; p.draftFrac = 0; }
     room.mjDouble = false; room.mjPlus = false; room.mjId = null;
     if (room.settings.mj) {
       // le MJ est choisi explicitement (sinon 1er joueur connecté par défaut)
@@ -520,14 +522,32 @@ io.on('connection', (socket) => {
       if (!targets.length) return cb?.({ error: 'Aucun leader à museler (les meneurs sont blindés).' });
       targets.forEach((t) => { room.muted.add(t.id); if (pw.grab) { const amt = Math.min(pw.grab, t.score); t.score -= amt; p.score += amt; } }); // muselle + rafle une part
       detail = { mutedName: targets.map((t) => t.name).join(' & ') };
-    } else if (pw.type === 'backfire') {
-      // clash frontal : muselle le n°1… mais ça se retourne contre toi (coût perso). Pouvoir "raté" assumé.
-      const leader = topAttackable();
-      if (!leader) return cb?.({ error: 'Personne à clasher (les meneurs sont blindés).' });
-      room.muted.add(leader.id);
-      const cost = Math.min(pw.cost || 8000, p.score);
-      p.score -= cost;
-      detail = { mutedName: leader.name, cost };
+    } else if (pw.type === 'tax') {
+      // prélève une petite dîme sur CHAQUE adversaire attaquable
+      const others = [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !protectedNow(x));
+      let grabbed = 0;
+      others.forEach((t) => { const amt = Math.min(pw.amount || 2500, t.score); t.score -= amt; p.score += amt; grabbed += amt; });
+      detail = { amount: grabbed, count: others.length };
+    } else if (pw.type === 'allin') {
+      // vide TOUTES les charges d'un coup pour un burst immédiat
+      const spent = p.charges; // ≥ 1 (garanti plus haut)
+      const gain = (pw.per || 12000) * spent;
+      p.score += gain; p.charges = 1; // le "p.charges -= 1" plus bas ramène à 0
+      detail = { gain, spent };
+    } else if (pw.type === 'combo') {
+      // multiplicateur qui GROSSIT avec la série de bonnes manches (enchaînement)
+      const mult = Math.min(pw.cap || 2.2, (pw.base || 1.3) + (p.streak || 0) * (pw.per || 0.3));
+      p.armed = { type: 'double', mult };
+      detail = { mult: +mult.toFixed(2), streak: p.streak || 0 };
+    } else if (pw.type === 'sustain') {
+      // revenu garanti pendant plusieurs manches (echo / slowburn)
+      p.sustainUntil = room.roundIndex + ((pw.rounds || 2) - 1);
+      p.sustainAmount = pw.amount || 8000;
+      detail = { amount: pw.amount || 8000, rounds: pw.rounds || 2 };
+    } else if (pw.type === 'draft') {
+      // aspiration : tu gagnes une part du MEILLEUR score adverse de la manche (calculé au endRound)
+      p.draftFrac = pw.frac || 0.5;
+      detail = { frac: pw.frac || 0.5 };
     } else if (pw.type === 'comeback') {
       const leader = topOther();
       const deficit = leader ? leader.score - p.score : 0;
@@ -643,7 +663,7 @@ io.on('connection', (socket) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
     room.phase = 'lobby'; room.roundIndex = 0;
-    for (const p of room.players.values()) { p.score = 0; p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; }
+    for (const p of room.players.values()) { p.score = 0; p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; p.sustainUntil = null; p.sustainAmount = 0; p.draftFrac = 0; p.streak = 0; p.decayUses = 0; p.veteranUntil = null; }
     cb?.({ ok: true });
     emitLobby(room);
   });

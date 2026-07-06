@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { avatarById, initials } from '../data';
 import '../wizard.css';
 
 /* ====== réglages envoyés au serveur (mappés depuis le wizard) ====== */
@@ -101,6 +102,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const [orch, setOrch] = useState('auto');
   const [mjId, setMjId] = useState('');
   const [themeExp, setThemeExp] = useState(false);
+  const [showPlayers, setShowPlayers] = useState(false); // popover "qui est dans le salon"
 
   const themeName = [...THEMES_MAIN, ...THEMES_EXTRA].find((t) => t.id === theme)?.name || '';
   const eraName = era === 'all' ? 'Toutes époques' : (ERAS.find((e) => e.id === era)!.big + 's · ' + ERAS.find((e) => e.id === era)!.lab);
@@ -182,7 +184,25 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
           <div className="sess-right">
             <span className="gpill onair"><span className="dot live" />ON&nbsp;AIR</span>
             <span className="gpill"><span className="dot" />Salon&nbsp;<span className="roomcode">{roomCode}</span></span>
-            <span className="gpill">{players}&nbsp;joueur{players > 1 ? 's' : ''}</span>
+            <div className="players-wrap">
+              <button className="gpill players-btn" onClick={() => setShowPlayers((v) => !v)} aria-expanded={showPlayers}>
+                {players}&nbsp;joueur{players > 1 ? 's' : ''} <span {...H(chevron)} />
+              </button>
+              {showPlayers && (
+                <div className="players-pop">
+                  <div className="pp-head">Dans le salon</div>
+                  {playerList.length === 0
+                    ? <div className="pp-empty">Personne n'a encore rejoint.</div>
+                    : playerList.map((p) => { const a = avatarById(p.avatar); return (
+                        <div className="pp-row" key={p.id}>
+                          <span className="pp-av" style={{ background: a?.color || '#5639bf' }}>{initials(a?.name || p.name)}</span>
+                          <span className="pp-name">{p.name}</span>
+                          {a && <span className="pp-rap">{a.name}</span>}
+                        </div>
+                      ); })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

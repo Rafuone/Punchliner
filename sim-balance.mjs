@@ -35,7 +35,7 @@ function fillCharges(players) {
 }
 
 function playGame(avatars, rounds, prof) {
-  const players = avatars.map((id) => ({ id, pw: POWERS[id], score: 0, charge: 0, charges: 1, streak: 0, decayUses: 0, vetUntil: -1 }));
+  const players = avatars.map((id) => ({ id, pw: POWERS[id], score: 0, charge: 0, charges: 1, streak: 0, decayUses: 0, vetUntil: -1, sustainUntil: -1, sustainAmount: 0 }));
   for (let r = 0; r < rounds; r++) {
     const leaderScore = Math.max(...players.map((p) => p.score));
     const leader = players.slice().sort((a, b) => b.score - a.score)[0];
@@ -50,11 +50,13 @@ function playGame(avatars, rounds, prof) {
       const behind = leaderScore - p.score;
       let use = false;
       if (t === 'steal') use = p.id !== leader.id && leader.score > 3000;
-      else if (t === 'sabotage' || t === 'backfire') use = p.id !== leader.id && leader.score > 3000;
+      else if (t === 'sabotage') use = p.id !== leader.id && leader.score > 3000;
+      else if (t === 'tax') use = players.some((x) => x.id !== p.id && x.score > 2000);
+      else if (t === 'draft') use = p.id !== leader.id; // surfe sur un meilleur que toi
       else if (t === 'comeback') use = behind > 6000;
       else if (t === 'veteran') use = !vetActive; // (ré)active si pas déjà actif
       else if (t === 'safety') use = behind > 3000 || r < rounds - 1; // filet quand utile
-      else use = true; // self-boost : on l'utilise dès qu'on a une charge
+      else use = true; // self-boost / allin / combo / sustain : dès qu'on a une charge
       if (!use) continue;
       p.charges -= 1; p.act = t;
       if (t === 'steal') { const amt = Math.min(p.pw.amount, leader.score); leader.score -= amt; p.score += amt; }
@@ -63,14 +65,13 @@ function playGame(avatars, rounds, prof) {
           .sort((a, b) => b.score - a.score).slice(0, p.pw.targets || 1);
         targets.forEach((x) => { muted.add(x.id); if (p.pw.grab) { const amt = Math.min(p.pw.grab, x.score); x.score -= amt; p.score += amt; } });
       }
-      else if (t === 'backfire') { // clash : muselle le n°1 attaquable MAIS coûte `cost` au lanceur
-        const target = players.filter((x) => x.id !== p.id && !(r <= x.vetUntil) && x.act !== 'safety').sort((a, b) => b.score - a.score)[0];
-        if (target) muted.add(target.id);
-        p.score = Math.max(0, p.score - (p.pw.cost || 8000));
-      }
+      else if (t === 'tax') { players.filter((x) => x.id !== p.id && !(r <= x.vetUntil) && x.act !== 'safety').forEach((x) => { const amt = Math.min(p.pw.amount || 2500, x.score); x.score -= amt; p.score += amt; }); }
+      else if (t === 'allin') { const spent = p.charges + 1; p.score += (p.pw.per || 12000) * spent; p.charges = 0; } // +1 : la charge déjà décrémentée
+      else if (t === 'sustain') { p.sustainUntil = r + ((p.pw.rounds || 2) - 1); p.sustainAmount = p.pw.amount || 8000; }
       else if (t === 'comeback') { const gain = Math.min(p.pw.cap, Math.round(behind * p.pw.factor)); p.score += gain; }
       else if (t === 'veteran') { p.vetUntil = r + (p.pw.rounds - 1); }
       else if (t === 'jam') jammer = p.id;
+      // combo & draft : pas d'effet instantané (résolus au scoring / en fin de manche)
     }
     // 2) skill de la manche (dépend de la difficulté)
     for (const p of players) {
@@ -89,6 +90,7 @@ function playGame(avatars, rounds, prof) {
       let pts = Math.round(base * (1 + p.speed) * prof.diff);
       const t = p.act;
       if (pts > 0 && (t === 'double' || t === 'ace')) pts = Math.round(pts * (p.pw.mult || 2));
+      else if (pts > 0 && t === 'combo') { const mult = Math.min(p.pw.cap || 2.2, (p.pw.base || 1.3) + p.streak * (p.pw.per || 0.3)); pts = Math.round(pts * mult); }
       else if (t === 'wager') pts = p.found ? Math.round(pts * p.pw.mult) : -p.pw.penalty;
       else if (pts > 0 && t === 'bonus') { pts += p.pw.amount; if (p.pw.refuel) p.charges = Math.min(5, p.charges + 1); }
       else if (pts > 0 && t === 'momentum') pts += p.pw.base + p.streak * p.pw.per;
@@ -99,8 +101,11 @@ function playGame(avatars, rounds, prof) {
       const vetActive = r <= p.vetUntil;
       if (p.act === 'safety') pts = Math.max(pts, p.pw.floor);
       if (vetActive) pts = Math.max(pts, p.pw.floor || 4000);
+      if (p.sustainUntil >= r && p.sustainAmount) pts += p.sustainAmount; // revenu garanti (sustain, survit au mute)
       p.roundPts = pts;
     }
+    // draft : chaque "aspirateur" prend une part du MEILLEUR score adverse de la manche
+    for (const p of players) { if (p.act === 'draft') { let om = 0; for (const x of players) if (x.id !== p.id && x.roundPts > om) om = x.roundPts; p.roundPts += Math.round((p.pw.frac || 0.5) * om); } }
     // 4) application + séries + charges
     for (const p of players) { p.score = Math.max(0, p.score + p.roundPts); p.streak = p.roundPts > 0 ? p.streak + 1 : 0; }
     fillCharges(players);

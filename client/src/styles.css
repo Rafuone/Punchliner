@@ -399,7 +399,8 @@ button, input { font-family: inherit; }
 /* roster groupé par catégorie, scroll horizontal par ligne (persos plus grands) */
 .cs-catgroup { margin-bottom: 14px; }
 .cs-catlabel { font-family: var(--disp); font-weight: 700; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--cc, var(--muted)); margin: 2px 2px 8px; }
-.cs-catrow { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+/* padding-top ET -bottom : sinon l'anneau de sélection (box-shadow 2px) est rogné en haut par le scroll */
+.cs-catrow { display: flex; gap: 10px; overflow-x: auto; padding: 6px 2px 8px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
 .cs-catrow::-webkit-scrollbar { height: 5px; }
 .cs-catrow::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .15); border-radius: 3px; }
 /* largeur responsive : ~3,3 vignettes visibles → une 4e "dépasse" toujours un peu (indice de scroll),
