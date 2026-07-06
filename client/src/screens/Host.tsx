@@ -3,7 +3,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
 import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif } from '../data';
 import ConfigWizard from './ConfigWizard';
-import { createMenuBeat } from '../menuBeat';
+
+// Fond du lobby (écran du code) : instru d'Alpha Wann. Crossfade vers la playlist (Bishok) à l'entrée du ConfigWizard.
+const LOBBY_TRACK = '/music/alphawann-philly-flingo.mp3';
 
 const C = 2 * Math.PI * 54;
 const HKEY = 'pl_host';
@@ -43,7 +45,7 @@ export default function Host() {
   const musicOnRef = useRef(true);
   const startedRef = useRef(false);
   const curRef = useRef(-1);
-  const beatRef = useRef<ReturnType<typeof createMenuBeat> | null>(null); // beat lo-fi du lobby (code)
+  const lobbyAudioRef = useRef<HTMLAudioElement | null>(null); // instru du lobby (Alpha Wann), en boucle
   const configuringRef = useRef(false);
 
   function applyState(state: any) {
@@ -145,6 +147,24 @@ export default function Host() {
       requestAnimationFrame(loop);
     } catch (e) {}
   }
+  // fondu de volume (crossfade) sur un élément <audio>
+  function fadeTo(el: HTMLAudioElement | null, target: number, ms = 1100, pauseAtEnd = false) {
+    if (!el) return;
+    const any = el as any; clearInterval(any._fade);
+    const from = el.volume, steps = 22, dt = Math.max(16, ms / steps); let i = 0;
+    any._fade = setInterval(() => {
+      i++; el.volume = Math.max(0, Math.min(1, from + (target - from) * (i / steps)));
+      if (i >= steps) { clearInterval(any._fade); if (pauseAtEnd && target === 0) el.pause(); }
+    }, dt);
+  }
+  // lance / réanime l'instru du lobby en fondu
+  function playLobby() {
+    const a = lobbyAudioRef.current; if (!a || !musicOnRef.current) return;
+    if (!a.src || a.src.indexOf(LOBBY_TRACK) < 0) a.src = LOBBY_TRACK;
+    a.loop = true;
+    if (a.paused) { a.volume = 0; a.play().then(() => fadeTo(a, 0.42, 1100)).catch(() => {}); }
+    else fadeTo(a, 0.42, 700);
+  }
   function playMenuTrack(i: number, pushHist = true) {
     const a = menuAudioRef.current; if (!a) return;
     a.src = MENU_TRACKS[i].src; a.volume = 0.5;
@@ -168,27 +188,30 @@ export default function Host() {
     if (on) { if (!startedRef.current) startMenu(); else a.play().catch(() => {}); }
     else a.pause();
   }
-  // Sur le LOBBY (écran du code) : léger beat lo-fi (pas la playlist → pas de spoil du son de Bishok).
-  // La vraie playlist du menu (Bishok en 1er) ne démarre qu'à l'entrée du ConfigWizard.
+  // LOBBY (écran du code) = instru d'Alpha Wann (pas la playlist → pas de spoil du son de Bishok, qui
+  // n'ouvre la playlist qu'au ConfigWizard). On tente l'autoplay ; à défaut, le 1er geste la lance.
   useEffect(() => {
-    const h = () => {
-      if (!beatRef.current) beatRef.current = createMenuBeat();
-      if (musicOnRef.current && !configuringRef.current) beatRef.current.start();
-    };
+    const h = () => { if (!configuringRef.current) playLobby(); };
     window.addEventListener('pointerdown', h);
     window.addEventListener('keydown', h);
     return () => { window.removeEventListener('pointerdown', h); window.removeEventListener('keydown', h); };
   }, []);
-  // bascule beat (lobby) ↔ playlist menu (config). Le clic "Configurer" sert de geste utilisateur.
+  // bascule CROSSFADE lobby(Alpha Wann) ↔ playlist(Bishok). Le clic "Configurer" sert de geste utilisateur.
   useEffect(() => {
     configuringRef.current = configuring;
-    if (configuring) { beatRef.current?.stop(); if (musicOnRef.current) startMenu(); }
-    else { const a = menuAudioRef.current; if (a) a.pause(); startedRef.current = false; curRef.current = -1; setNowPlaying(-1); if (musicOnRef.current) beatRef.current?.start(); }
+    if (configuring) {
+      fadeTo(lobbyAudioRef.current, 0, 1100, true);               // fond sortant : l'instru du lobby
+      if (musicOnRef.current) { startMenu(); const ma = menuAudioRef.current; if (ma) { ma.volume = 0; fadeTo(ma, 0.5, 1100); } } // entrant : Bishok
+    } else {
+      fadeTo(menuAudioRef.current, 0, 800, true);                 // sortant : la playlist
+      startedRef.current = false; curRef.current = -1; setNowPlaying(-1);
+      if (musicOnRef.current) playLobby();                        // entrant : l'instru du lobby
+    }
   }, [configuring]);
+  // hors lobby (en jeu) : on coupe tout le menu ; sur le lobby (hors config) : on (ré)essaie l'instru
   useEffect(() => {
-    const a = menuAudioRef.current; if (!a) return;
-    if (phase !== 'lobby') a.pause();
-    else if (startedRef.current && musicOnRef.current && a.paused) a.play().catch(() => {});
+    if (phase !== 'lobby') { menuAudioRef.current?.pause(); const la = lobbyAudioRef.current; if (la && !la.paused) fadeTo(la, 0, 500, true); }
+    else if (!configuring && musicOnRef.current) playLobby();
   }, [phase]);
 
   function playPreview(url: string, startAt = 0) {
@@ -404,6 +427,7 @@ export default function Host() {
 
       <audio ref={audioRef} preload="auto" />
       <audio ref={menuAudioRef} preload="auto" onEnded={() => nextTrack()} />
+      <audio ref={lobbyAudioRef} preload="auto" loop />
     </div>
   );
 }

@@ -1,19 +1,26 @@
 // Simulateur d'équilibrage — "game tests" automatisés.
 // Tous les joueurs ont EXACTEMENT le même skill ; seule leur POWER diffère.
 // → le taux de victoire révèle si un pouvoir est trop fort / trop faible.
-// Modèle (fidèle aux formules de index.js/match.js, valeurs = source de vérité powers.js) :
-//   auditeurs = base(10k/volet, +5k si titre+artiste) × vitesse(1..2) × diff(1.3)
-//   charges : 1 au départ, se remplissent en fin de manche (règle comeback), cap 5.
+//
+// IMPORTANT — on teste sur les 4 DIFFICULTÉS (facile→puriste). Un pouvoir n'a pas la même valeur selon
+// la difficulté : ex. l'INDICE (hint) n'aide que si on NE trouve PAS tout seul (donc utile en digger/
+// puriste, quasi inutile en facile où tout le monde trouve). À l'inverse, les pouvoirs de POINTS (bonus,
+// double, momentum…) rapportent quelle que soit la difficulté. On regarde donc winrate PAR difficulté +
+// une moyenne. Modèle fidèle à index.js/match.js ; valeurs = powers.js.
 import { POWERS } from './server/powers.js';
 
 const IDS = Object.keys(POWERS);
 const rand = () => Math.random();
-const pick = (arr) => arr[Math.floor(rand() * arr.length)];
 
-const DIFF = 1.3;          // multiplicateur de difficulté (normal)
-const P_FIND = 0.7;        // proba de trouver (identique pour tous)
-const P_FULL = 0.7;        // si trouvé, proba d'avoir titre + artiste (sinon titre seul)
-const WINDOW = 26000;      // fenêtre de réponse (ms) pour modéliser le jam
+// profils de difficulté : proba de trouver (pFind), proba titre+artiste (pFull), multiplicateur (diff).
+// Collés aux 4 crans du jeu (facile 1.0 · connaisseur 1.3 · digger 1.6 · puriste 2.0).
+const DIFFS = [
+  { key: 'facile',  pFind: 0.90, pFull: 0.80, diff: 1.0 },
+  { key: 'normal',  pFind: 0.72, pFull: 0.66, diff: 1.3 },
+  { key: 'digger',  pFind: 0.55, pFull: 0.54, diff: 1.6 },
+  { key: 'puriste', pFind: 0.40, pFull: 0.44, diff: 2.0 },
+];
+const WINDOW = 26000; // fenêtre de réponse (ms) pour modéliser le jam
 
 function fillCharges(players) {
   const sorted = [...players].sort((a, b) => b.score - a.score);
@@ -27,7 +34,7 @@ function fillCharges(players) {
   });
 }
 
-function playGame(avatars, rounds) {
+function playGame(avatars, rounds, prof) {
   const players = avatars.map((id) => ({ id, pw: POWERS[id], score: 0, charge: 0, charges: 1, streak: 0, decayUses: 0, vetUntil: -1 }));
   for (let r = 0; r < rounds; r++) {
     const leaderScore = Math.max(...players.map((p) => p.score));
@@ -43,8 +50,8 @@ function playGame(avatars, rounds) {
       const behind = leaderScore - p.score;
       let use = false;
       if (t === 'steal') use = p.id !== leader.id && leader.score > 3000;
-      else if (t === 'sabotage') use = p.id !== leader.id;
-      else if (t === 'comeback') use = behind > (p.pw.cap ? 6000 : 6000);
+      else if (t === 'sabotage' || t === 'backfire') use = p.id !== leader.id && leader.score > 3000;
+      else if (t === 'comeback') use = behind > 6000;
       else if (t === 'veteran') use = !vetActive; // (ré)active si pas déjà actif
       else if (t === 'safety') use = behind > 3000 || r < rounds - 1; // filet quand utile
       else use = true; // self-boost : on l'utilise dès qu'on a une charge
@@ -56,16 +63,21 @@ function playGame(avatars, rounds) {
           .sort((a, b) => b.score - a.score).slice(0, p.pw.targets || 1);
         targets.forEach((x) => { muted.add(x.id); if (p.pw.grab) { const amt = Math.min(p.pw.grab, x.score); x.score -= amt; p.score += amt; } });
       }
+      else if (t === 'backfire') { // clash : muselle le n°1 attaquable MAIS coûte `cost` au lanceur
+        const target = players.filter((x) => x.id !== p.id && !(r <= x.vetUntil) && x.act !== 'safety').sort((a, b) => b.score - a.score)[0];
+        if (target) muted.add(target.id);
+        p.score = Math.max(0, p.score - (p.pw.cost || 8000));
+      }
       else if (t === 'comeback') { const gain = Math.min(p.pw.cap, Math.round(behind * p.pw.factor)); p.score += gain; }
       else if (t === 'veteran') { p.vetUntil = r + (p.pw.rounds - 1); }
       else if (t === 'jam') jammer = p.id;
     }
-    // 2) skill de la manche
+    // 2) skill de la manche (dépend de la difficulté)
     for (const p of players) {
-      let pf = P_FIND;
-      if (p.act === 'hint') pf = Math.min(0.97, pf * 1.35); // l'indice aide à trouver
+      let pf = prof.pFind;
+      if (p.act === 'hint') pf = Math.min(0.98, pf + (1 - pf) * 0.55); // l'indice comble une PART de ce qu'on rate → fort en difficile, ~inutile en facile
       p.found = rand() < pf;
-      p.full = rand() < P_FULL;
+      p.full = rand() < prof.pFull;
       if (p.act === 'nofault' || p.act === 'ace') p.full = true; // fautes tolérées → volet complet
       p.speed = p.act === 'freeze' ? 1 : rand();               // freeze : vitesse max
     }
@@ -74,11 +86,11 @@ function playGame(avatars, rounds) {
     for (const p of players) {
       let base = p.found ? (p.full ? 25000 : 10000) : 0;
       if (jammer && p.id !== jammer && p.found) base *= (1 - ((POWERS[jammer]?.ms) || 4000) / WINDOW); // brouillé : temps perdu
-      let pts = Math.round(base * (1 + p.speed) * DIFF);
+      let pts = Math.round(base * (1 + p.speed) * prof.diff);
       const t = p.act;
       if (pts > 0 && (t === 'double' || t === 'ace')) pts = Math.round(pts * (p.pw.mult || 2));
       else if (t === 'wager') pts = p.found ? Math.round(pts * p.pw.mult) : -p.pw.penalty;
-      else if (pts > 0 && t === 'bonus') { pts += p.pw.amount; if (p.pw.refuel) p.charges = Math.min(5, p.charges + 1); } // PLK : surrégime
+      else if (pts > 0 && t === 'bonus') { pts += p.pw.amount; if (p.pw.refuel) p.charges = Math.min(5, p.charges + 1); }
       else if (pts > 0 && t === 'momentum') pts += p.pw.base + p.streak * p.pw.per;
       else if (pts > 0 && t === 'decay') { pts += Math.round(p.pw.base * Math.pow(p.pw.factor || 0.75, p.decayUses)); p.decayUses++; }
       else if (pts > 0 && t === 'firstblood') { pts += (p.pw.base || 0); if (fastest && fastest.id === p.id) pts += (p.pw.first || 0); }
@@ -93,29 +105,37 @@ function playGame(avatars, rounds) {
     for (const p of players) { p.score = Math.max(0, p.score + p.roundPts); p.streak = p.roundPts > 0 ? p.streak + 1 : 0; }
     fillCharges(players);
   }
-  return players.slice().sort((a, b) => b.score - a.score); // classement final
+  return players.slice().sort((a, b) => b.score - a.score);
 }
 
-// ---- run ----
-const GAMES = 6000, N = 5, ROUNDS = 16;
-const stat = {}; IDS.forEach((id) => (stat[id] = { games: 0, wins: 0, rankSum: 0, scoreSum: 0 }));
-for (let g = 0; g < GAMES; g++) {
-  const roster = [...IDS].sort(() => rand() - 0.5).slice(0, N);
-  const final = playGame(roster, ROUNDS);
-  final.forEach((p, i) => { const s = stat[p.id]; s.games++; s.rankSum += i + 1; if (i === 0) s.wins++; s.scoreSum += p.score; });
+// ---- run : chaque difficulté séparément, puis moyenne ----
+const GAMES = 4000, N = 5, ROUNDS = 16;
+const perDiff = {}; // perDiff[diffKey][id] = winRate
+for (const prof of DIFFS) {
+  const stat = {}; IDS.forEach((id) => (stat[id] = { games: 0, wins: 0 }));
+  for (let g = 0; g < GAMES; g++) {
+    const roster = [...IDS].sort(() => rand() - 0.5).slice(0, N);
+    const final = playGame(roster, ROUNDS, prof);
+    final.forEach((p, i) => { const s = stat[p.id]; s.games++; if (i === 0) s.wins++; });
+  }
+  perDiff[prof.key] = {}; IDS.forEach((id) => (perDiff[prof.key][id] = stat[id].wins / stat[id].games));
 }
+
 const rows = IDS.map((id) => {
-  const s = stat[id];
-  const winRate = s.wins / s.games;
-  return { id, name: POWERS[id].name, type: POWERS[id].type, winRate, idx: winRate / (1 / N), avgRank: s.rankSum / s.games, avgScore: Math.round(s.scoreSum / s.games) };
-}).sort((a, b) => b.winRate - a.winRate);
+  const byDiff = DIFFS.map((d) => perDiff[d.key][id]);
+  const avg = byDiff.reduce((a, b) => a + b, 0) / byDiff.length;
+  return { id, type: POWERS[id].type, avg, byDiff, spread: Math.max(...byDiff) - Math.min(...byDiff) };
+}).sort((a, b) => b.avg - a.avg);
 
 const tier = (idx) => idx >= 1.35 ? 'S' : idx >= 1.12 ? 'A' : idx >= 0.9 ? 'B' : idx >= 0.7 ? 'C' : 'D';
-console.log(`\n=== ${GAMES} parties · ${N} joueurs · ${ROUNDS} manches · skill égal (attendu = 20% victoire) ===\n`);
-console.log('TIER  IDX   WIN%   RANK  ' + 'RAPPEUR'.padEnd(14) + 'POUVOIR');
+console.log(`\n=== ${GAMES} parties/difficulté · ${N} joueurs · ${ROUNDS} manches · skill égal (attendu = 20%) ===`);
+console.log(`(spread = écart facile↔puriste : gros spread = pouvoir très sensible à la difficulté)\n`);
+console.log('TIER  MOY%  ' + 'FACILE NORMAL DIGGER PURIST  SPRD  ' + 'RAPPEUR'.padEnd(13) + 'POUVOIR');
 for (const r of rows) {
+  const idx = r.avg / (1 / N);
+  const cols = r.byDiff.map((w) => (w * 100).toFixed(1).padStart(6)).join(' ');
   console.log(
-    `${tier(r.idx).padEnd(4)} ${r.idx.toFixed(2)}  ${(r.winRate * 100).toFixed(1).padStart(4)}%  ${r.avgRank.toFixed(2)}  ` +
-    `${r.id.padEnd(14)}${r.type}`
+    `${tier(idx).padEnd(4)} ${(r.avg * 100).toFixed(1).padStart(4)}  ${cols}  ${(r.spread * 100).toFixed(1).padStart(4)}  ` +
+    `${r.id.padEnd(13)}${r.type}`
   );
 }

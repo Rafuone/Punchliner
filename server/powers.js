@@ -7,7 +7,7 @@
 // Mécaniques : double{mult}, bonus{amount,refuel}, wager{mult,penalty}, steal{amount},
 //   sabotage{targets,grab}, hint{self}, safety{floor,self}, momentum{base,per}, decay{base,factor},
 //   comeback{factor,cap}, firstblood{base,first}, veteran{rounds,floor}, freeze{self}, jam{ms,self},
-//   nofault{self}, ace{mult}(nofault+double).
+//   nofault{self}, ace{mult}(nofault+double), backfire{cost}(muselle le n°1 mais te coûte `cost`).
 export const POWERS = {
   // ===== S — légendes / élite =====
   booba:      { name: 'DUC',                    type: 'steal',    amount: 16000 },
@@ -38,11 +38,12 @@ export const POWERS = {
   medine:     { name: "Don't Panik",            type: 'safety',   floor: 20000, self: 10000 },
   lafouine:   { name: 'Capitale du Crime',      type: 'sabotage', grab: 8000 },
   jewelusain: { name: 'Bruce Lee',             type: 'firstblood', base: 16000, first: 32000 },
-  // ===== Génies incompris — rappeurs mèmes du web FR (pouvoirs calibrés, thème pour les vannes) =====
+  // ===== Génies incompris — rappeurs-mèmes ratés : VOLONTAIREMENT les plus faibles (gagnable mais dur).
+  //   Bishok = exception "rigolote" (hint, correct). Les 3 autres = EV basse assumée. =====
   bishok:     { name: 'Complotisme',              type: 'hint',       self: 11000 },   // décrypte le "message caché"
-  bilaldu92:  { name: 'Le Buzz 2006',             type: 'firstblood', base: 16000, first: 32000 }, // la zermi du 92, viral une fois
-  alexdu76:   { name: 'Je Voulais Juste Briller', type: 'decay',      base: 30000, factor: 0.9 },   // le tube qui retombe
-  kortex:     { name: 'Le Clash',                 type: 'sabotage',   grab: 8000 },    // clashe le n°1 (Cyprien, Norman…)
+  bilaldu92:  { name: 'Le Buzz 2006',             type: 'firstblood', base: 5000, first: 18000 }, // 1 seul buzz (2006) : maigre, gros QUE si 1er
+  alexdu76:   { name: 'Je Voulais Juste Briller', type: 'decay',      base: 19000, factor: 0.6 },// voulait briller : correct puis s'effondre
+  kortex:     { name: 'Le Clash',                 type: 'backfire',   cost: 3000 },    // clashe le n°1 (muselé) MAIS ça lui coûte
   // ===== Rookies — nouvelle scène FR (mécaniques calibrées, thème collé à l'artiste) =====
   bouss:      { name: 'Depuis le Temps',          type: 'veteran',  rounds: 3, floor: 16000 }, // "Depuis le temps" (platine), a grindé longtemps
   huntrill:   { name: 'Le Bruit de la Machine',   type: 'safety',   floor: 20000, self: 10000 }, // son album, trap machine

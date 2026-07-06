@@ -5,7 +5,7 @@ import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegen
 const SKEY = 'pl_session';
 const loadSession = () => { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch { return null; } };
 const saveSession = (s: any) => localStorage.setItem(SKEY, JSON.stringify(s));
-const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 7-6', kortex: 'Le Clasheur', bouss: 'Le Mirage', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème' };
+const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 76', kortex: 'Le Clasheur', bouss: 'Le Mirage', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème' };
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
 // met en gras les chiffres-clés d'un effet (montants, ×N, N %) → on repère vite le point fort du pouvoir
 const FX_FIG = /([×x]\s?\d+(?:[.,]\d+)?|[+\-−]?\d[\d   ]*\d\s?%?|\d+\s?%)/g;
@@ -170,6 +170,7 @@ export default function Player() {
       else if (res?.type === 'steal') setPowerMsg(res.detail ? `Volé ${fmtAud(res.detail.amount)} auditeurs à ${res.detail.stoleFrom}` : 'Personne à voler…');
       else if (res?.type === 'comeback') setPowerMsg(res.detail ? `Remontada ! +${fmtAud(res.detail.gain)} auditeurs` : 'Remontée…');
       else if (res?.type === 'sabotage') setPowerMsg(res.detail ? `${res.detail.mutedName} muselé cette manche !` : 'Sabotage lancé');
+      else if (res?.type === 'backfire') setPowerMsg(res.detail ? `Clash sur ${res.detail.mutedName} (muselé) — mais ça t'a coûté ${fmtAud(res.detail.cost)} auditeurs` : 'Clash lancé');
       else if (res?.type === 'safety') setPowerMsg('Filet posé — plancher garanti cette manche');
       else if (res?.type === 'freeze') setPowerMsg('Hors du temps — score au max même à la dernière seconde');
       else if (res?.type === 'nofault') setPowerMsg('Zéro faute — écris peinard, l\'orthographe passe');

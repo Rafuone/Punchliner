@@ -43,16 +43,17 @@ body {
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
-/* grunge du fond : grain xerox (::before) + trame de points halftone (::after). Masque d'opacité +
-   blend overlay/soft-light → on ne garde QUE la granularité, la teinte bleutée du dégradé reste visible.
-   (Même DA que le fond de la page de sélection des jeux / wizard.) */
+/* grunge du fond : grain film (::before) + trame de points halftone (::after). En blend NORMAL (pas
+   overlay/soft-light, qui disparaissent sur fond quasi-noir) → la granularité reste VISIBLE tout en
+   gardant la teinte bleutée du dégradé (opacité basse, on ne fait qu'ajouter un léger bruit clair). */
 body::before {
-  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .13; mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .09;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 150px 150px;
 }
 body::after {
-  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .5; mix-blend-mode: soft-light;
-  background-image: radial-gradient(rgba(255,255,255,.05) 1px, transparent 1.4px); background-size: 7px 7px;
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .5;
+  background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1.5px); background-size: 6px 6px;
 }
 button, input { font-family: inherit; }
 

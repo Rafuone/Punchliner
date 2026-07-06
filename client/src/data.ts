@@ -11,7 +11,7 @@ export type Avatar = {
 };
 
 // Ordre d'affichage des catégories dans le sélecteur (scroll horizontal par catégorie)
-export const CATEGORY_ORDER = ['Légende', 'Mainstream', 'Rap game', 'Plume', 'Conscient', 'Drill', 'Nouvelle scène', 'Génies incompris', 'Rookies'];
+export const CATEGORY_ORDER = ['Légende', 'Mainstream', 'Rap game', 'Plume', 'Conscient', 'Drill', 'Nouvelle scène', 'Rookies', 'Génies incompris'];
 
 // Une couleur flashy par genre (chip du showcase + libellés du roster).
 // Légende = rendu IRIDESCENT via la classe .irid ; la valeur ci-dessous n'est que le repli (bordure /
@@ -81,9 +81,9 @@ export const AVATARS: Avatar[] = [
   { id: 'bishok', name: 'Bishok', color: '#6E1E28', cat: 'Génies incompris', img: true, crop: { y: 44 },
     power: { name: 'Complotisme', effect: 'Complotisme : Bishok a décrypté le message caché derrière le son — premières lettres du titre ET de l\'artiste révélées.' },
     stats: { flow: 5, punch: 5, tech: 4, aura: 5 }, statLabels: ['Complot', 'Maroc', 'Conscience', 'Révolte'] },
-  { id: 'bilaldu92', name: 'Bilal du 9-2', color: '#2E4A6E', cat: 'Génies incompris', img: true, power: { name: 'Le Buzz 2006', effect: 'Le buzz de 2006 : le 1er à trouver cette manche rafle +32 000 auditeurs. Sinon, rien.' }, stats: { flow: 1, punch: 2, tech: 1, aura: 2 } },
-  { id: 'alexdu76', name: 'Alex du 7-6', color: '#5C3A1E', cat: 'Génies incompris', img: true, power: { name: 'Je Voulais Juste Briller', effect: 'Je voulais juste briller : +30 000 auditeurs, puis -10 % à chaque réutilisation (la hype retombe vite).' }, stats: { flow: 2, punch: 1, tech: 1, aura: 2 } },
-  { id: 'kortex', name: 'Kortex', color: '#3A3A3A', cat: 'Génies incompris', img: true, power: { name: 'Le Clash', effect: 'Le clash : part en clash contre le n°1 — muselé cette manche, et tu lui rafles 8 000 auditeurs.' }, stats: { flow: 2, punch: 2, tech: 1, aura: 2 } },
+  { id: 'bilaldu92', name: 'Bilal du 92', color: '#2E4A6E', cat: 'Génies incompris', img: true, power: { name: 'Le Buzz 2006', effect: 'Son seul buzz, c\'était en 2006 : +16 000 auditeurs si tu es le 1er à trouver cette manche. Sinon, rien du tout.' }, stats: { flow: 1, punch: 2, tech: 1, aura: 2 } },
+  { id: 'alexdu76', name: 'Alex du 76', color: '#5C3A1E', cat: 'Génies incompris', img: true, power: { name: 'Je Voulais Juste Briller', effect: 'Il voulait juste briller : +14 000 auditeurs, puis -40 % à chaque réutilisation (ça retombe vite).' }, stats: { flow: 2, punch: 1, tech: 1, aura: 2 } },
+  { id: 'kortex', name: 'Cortex', color: '#3A3A3A', cat: 'Génies incompris', img: true, power: { name: 'Le Clash', effect: 'Il part au clash contre le n°1 (muselé cette manche)… mais ça se retourne contre lui : -5 000 auditeurs.' }, stats: { flow: 2, punch: 2, tech: 1, aura: 2 } },
   // ---- Rookies (la nouvelle scène FR qui monte) ----
   { id: 'bouss', name: 'Bouss', color: '#5C4A2E', cat: 'Rookies', img: true, power: { name: 'Depuis le Temps', effect: 'Depuis le temps qu\'il bosse : increvable pendant 3 manches, jamais sous 16 000 auditeurs.' }, stats: { flow: 4, punch: 3, tech: 3, aura: 5 } },
   { id: 'huntrill', name: 'Huntrill', color: '#2E3A5C', cat: 'Rookies', img: true, power: { name: 'Le Bruit de la Machine', effect: 'Le bruit de la machine ne s\'arrête pas : 20 000 auditeurs minimum cette manche, immunisé au sabotage.' }, stats: { flow: 3, punch: 4, tech: 5, aura: 3 } },

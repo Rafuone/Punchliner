@@ -520,6 +520,14 @@ io.on('connection', (socket) => {
       if (!targets.length) return cb?.({ error: 'Aucun leader à museler (les meneurs sont blindés).' });
       targets.forEach((t) => { room.muted.add(t.id); if (pw.grab) { const amt = Math.min(pw.grab, t.score); t.score -= amt; p.score += amt; } }); // muselle + rafle une part
       detail = { mutedName: targets.map((t) => t.name).join(' & ') };
+    } else if (pw.type === 'backfire') {
+      // clash frontal : muselle le n°1… mais ça se retourne contre toi (coût perso). Pouvoir "raté" assumé.
+      const leader = topAttackable();
+      if (!leader) return cb?.({ error: 'Personne à clasher (les meneurs sont blindés).' });
+      room.muted.add(leader.id);
+      const cost = Math.min(pw.cost || 8000, p.score);
+      p.score -= cost;
+      detail = { mutedName: leader.name, cost };
     } else if (pw.type === 'comeback') {
       const leader = topOther();
       const deficit = leader ? leader.score - p.score : 0;
