@@ -383,7 +383,7 @@ button, input { font-family: inherit; }
 .cs-pow .fx b { font-weight: 800; color: var(--txt); }
 .cs-stats { display: flex; flex-direction: column; gap: 4px; }
 .cs-srow { display: flex; align-items: center; gap: 7px; justify-content: flex-end; }
-.cs-slab { font-size: 8.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted2); width: 34px; text-align: right; }
+.cs-slab { font-size: 8.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted2); min-width: 34px; white-space: nowrap; text-align: right; }
 .cs-sbar { display: flex; gap: 3px; }
 .cs-sbar i { width: 10px; height: 7px; border-radius: 1px; background: rgba(255,255,255,.22); transform: skewX(-16deg); }
 .cs-sbar i.on { background: var(--cc, var(--fluo)); }
@@ -433,6 +433,42 @@ button, input { font-family: inherit; }
 /* CTA raccord avec le genre du perso sélectionné (iridescent pour Légende) */
 .cs-bottombar .btn.warm:not(:disabled) { background: var(--cc, var(--fluo)); border-color: var(--cc, var(--fluo)); color: var(--ink); }
 .cs.irid .cs-bottombar .btn.warm:not(:disabled) { background: var(--irid-grad); background-size: 200% 100%; border-color: transparent; color: var(--ink); animation: irid 7s linear infinite; }
+
+/* ===== Légende : carte HOLOGRAPHIQUE "foil" façon Panini/Pokémon — 3 couches qui se superposent au
+   traitement doré .irid. La NAPPE arc-en-ciel + le GLARE suivent le doigt/l'inclinaison (--hx/--hy),
+   les PAILLETTES scintillent en continu. Rendu "sticker rare qui brille quand on le bouge". ===== */
+.cs-holo { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+.cs-holo > i { position: absolute; inset: 0; display: block; }
+/* 1) nappe arc-en-ciel : glisse avec --hx/--hy + dérive de teinte continue */
+.cs-holo .foil {
+  background: repeating-linear-gradient(112deg,
+    hsl(342 100% 66%) 0%, hsl(38 100% 62%) 8%, hsl(150 90% 58%) 16%,
+    hsl(190 96% 60%) 24%, hsl(266 92% 70%) 32%, hsl(320 100% 66%) 40%);
+  background-size: 320% 320%; background-position: var(--hx, 50%) var(--hy, 50%);
+  mix-blend-mode: color-dodge; opacity: .4; filter: saturate(1.4);
+  transition: background-position .1s ease-out; animation: foilhue 8s linear infinite; }
+@keyframes foilhue { to { filter: saturate(1.4) hue-rotate(360deg); } }
+/* 2) paillettes : micro-points scintillants (noise SVG seuillé) en color-dodge */
+.cs-holo .glit {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 7 -3.6'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 150px 150px; mix-blend-mode: color-dodge; opacity: .3;
+  animation: glitshim 3.2s steps(5) infinite; }
+@keyframes glitshim { 0% { background-position: 0 0; } 100% { background-position: 120px 90px; } }
+/* 3) glare : reflet spéculaire net qui suit le doigt */
+.cs-holo .glare {
+  background: radial-gradient(circle at var(--hx, 50%) var(--hy, 50%),
+    rgba(255,255,255,.6) 0%, rgba(255,255,255,.12) 16%, rgba(255,255,255,0) 42%);
+  mix-blend-mode: soft-light; opacity: .9; transition: background .1s ease-out; }
+/* vignettes du roster Légende : nappe foil animée (glint continu) */
+.cs-cell.holo .cs-thumb::before { content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: repeating-linear-gradient(118deg,
+    hsla(342,100%,66%,.6) 0%, hsla(38,100%,62%,.5) 15%, hsla(150,90%,58%,.6) 30%,
+    hsla(190,96%,60%,.6) 45%, hsla(266,92%,70%,.5) 60%, hsla(342,100%,66%,.6) 75%);
+  background-size: 240% 240%; mix-blend-mode: color-dodge; opacity: .36;
+  animation: foilslide 5s linear infinite; }
+@keyframes foilslide { 0% { background-position: 0% 0%; } 100% { background-position: 240% 0%; } }
+@media (prefers-reduced-motion: reduce) {
+  .cs-holo .foil, .cs-holo .glit, .cs-cell.holo .cs-thumb::before { animation: none; } }
 
 /* jauge de pouvoir */
 .gauge { height: 8px; border-radius: 2px; background: #0a0b0c; overflow: hidden; margin-top: 5px; border: 1px solid var(--line); }

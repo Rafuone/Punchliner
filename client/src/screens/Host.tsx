@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
 import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif } from '../data';
 import ConfigWizard from './ConfigWizard';
+import { createMenuBeat } from '../menuBeat';
 
 const C = 2 * Math.PI * 54;
 const HKEY = 'pl_host';
@@ -42,6 +43,8 @@ export default function Host() {
   const musicOnRef = useRef(true);
   const startedRef = useRef(false);
   const curRef = useRef(-1);
+  const beatRef = useRef<ReturnType<typeof createMenuBeat> | null>(null); // beat lo-fi du lobby (code)
+  const configuringRef = useRef(false);
 
   function applyState(state: any) {
     setPlayers(state.players || []);
@@ -157,7 +160,7 @@ export default function Host() {
   function startMenu() {
     if (startedRef.current || !musicOnRef.current) return;
     startedRef.current = true;
-    playMenuTrack(pickTrack(-1));
+    playMenuTrack(0); // au démarrage : toujours le son de Bishok (MENU_TRACKS[0]) ; l'aléatoire prend le relais ensuite
   }
   function toggleMusic() {
     const on = !musicOn; setMusicOn(on); musicOnRef.current = on;
@@ -165,12 +168,23 @@ export default function Host() {
     if (on) { if (!startedRef.current) startMenu(); else a.play().catch(() => {}); }
     else a.pause();
   }
+  // Sur le LOBBY (écran du code) : léger beat lo-fi (pas la playlist → pas de spoil du son de Bishok).
+  // La vraie playlist du menu (Bishok en 1er) ne démarre qu'à l'entrée du ConfigWizard.
   useEffect(() => {
-    const h = () => startMenu();
-    window.addEventListener('pointerdown', h, { once: true });
-    window.addEventListener('keydown', h, { once: true });
+    const h = () => {
+      if (!beatRef.current) beatRef.current = createMenuBeat();
+      if (musicOnRef.current && !configuringRef.current) beatRef.current.start();
+    };
+    window.addEventListener('pointerdown', h);
+    window.addEventListener('keydown', h);
     return () => { window.removeEventListener('pointerdown', h); window.removeEventListener('keydown', h); };
   }, []);
+  // bascule beat (lobby) ↔ playlist menu (config). Le clic "Configurer" sert de geste utilisateur.
+  useEffect(() => {
+    configuringRef.current = configuring;
+    if (configuring) { beatRef.current?.stop(); if (musicOnRef.current) startMenu(); }
+    else { const a = menuAudioRef.current; if (a) a.pause(); startedRef.current = false; curRef.current = -1; setNowPlaying(-1); if (musicOnRef.current) beatRef.current?.start(); }
+  }, [configuring]);
   useEffect(() => {
     const a = menuAudioRef.current; if (!a) return;
     if (phase !== 'lobby') a.pause();
@@ -204,7 +218,7 @@ export default function Host() {
   return (
     <div className="wrap">
       <div className="topbar">
-        <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">E</span></h1>
+        <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">R</span></h1>
         <span className="row" style={{ gap: 10 }}>
           {phase !== 'connecting' && <span className="gpill"><span className="dot" />{phase === 'lobby' ? `Salon ${code}` : `Manche ${round.index + 1}/${round.total} · ${round.difficulty}`} · {players.length} j.</span>}
           {['countdown', 'playing', 'reveal'].includes(phase) && <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={() => socket.emit('host:restart')}>← Salon</button>}
@@ -214,16 +228,13 @@ export default function Host() {
       {phase === 'connecting' && <div className="center"><p className="muted">Connexion…</p></div>}
 
       {phase === 'lobby' && !configuring && (
-        <div className="center" style={{ gap: 30 }}>
+        <div className="center" style={{ gap: 30, justifyContent: 'flex-start', paddingTop: 'clamp(24px,7vh,80px)' }}>
           <span className="eyebrow">Rejoins le salon</span>
           <div className="code glitch" data-code={code}>{code}</div>
-          <div className="join-row">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
             <div className="qr"><QRCodeSVG value={`${joinBase}/?c=${code}`} size={118} bgColor="#ffffff" fgColor="#0c0722" /></div>
-            <div style={{ textAlign: 'left' }}>
-              <div className="eyebrow" style={{ marginBottom: 4 }}>Scanne le QR avec ton tel</div>
-              <div className="url" style={{ fontSize: 16, textTransform: 'none', letterSpacing: 0 }}>{joinBase.replace(/^https?:\/\//, '')}</div>
-              <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>ou tape l'adresse + le code <b style={{ color: 'var(--txt)' }}>{code}</b></div>
-            </div>
+            <div className="eyebrow">Scanne le QR avec ton tel</div>
+            <div className="muted" style={{ fontSize: 13 }}>ou tape <b style={{ color: 'var(--txt)' }}>{joinBase.replace(/^https?:\/\//, '')}</b> + le code <b style={{ color: 'var(--txt)' }}>{code}</b></div>
           </div>
 
           {players.length > 0 && (
@@ -391,22 +402,6 @@ export default function Host() {
         </div>
       )}
 
-      {phase === 'lobby' && !configuring && (
-        <div className={`nowdock ${musicOn && nowPlaying >= 0 ? '' : 'paused'}`}>
-          <span className="eq" ref={dockEqRef}><i /><i /><i /><i /></span>
-          <span className="nt">
-            <span className="v">{nowPlaying >= 0 ? MENU_TRACKS[nowPlaying].title : 'Musique du menu'}</span>
-            <span className="s">{nowPlaying >= 0 ? MENU_TRACKS[nowPlaying].artist : (startedRef.current ? '' : 'clique pour lancer')}</span>
-          </span>
-          <button onClick={prevTrack} title="Précédent" aria-label="Précédent"><svg width="13" height="13" viewBox="0 0 15 15" fill="currentColor"><path d="M4 3h1.5v9H4zM12 3v9l-6-4.5z" /></svg></button>
-          <button onClick={nextTrack} title="Suivant" aria-label="Suivant"><svg width="13" height="13" viewBox="0 0 15 15" fill="currentColor"><path d="M9.5 3H11v9H9.5zM3 3v9l6-4.5z" /></svg></button>
-          <button onClick={toggleMusic} title={musicOn ? 'Couper' : 'Remettre'} aria-label="Musique">
-            {musicOn
-              ? <svg width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M3 5.5h2.5L9 3v9L5.5 9.5H3z" fill="currentColor" /><path d="M11 5.5c1 1 1 3 0 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
-              : <svg width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M3 5.5h2.5L9 3v9L5.5 9.5H3z" fill="currentColor" /><path d="M10.5 5l3.5 3.5M14 5l-3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>}
-          </button>
-        </div>
-      )}
       <audio ref={audioRef} preload="auto" />
       <audio ref={menuAudioRef} preload="auto" onEnded={() => nextTrack()} />
     </div>

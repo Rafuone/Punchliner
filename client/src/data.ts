@@ -5,12 +5,13 @@ export type Avatar = {
   id: string; name: string; color: string; cat: string;
   power: { name: string; effect: string };
   stats: { flow: number; punch: number; tech: number; aura: number }; // 1..5
+  statLabels?: [string, string, string, string]; // libellés de stats custom (déf. Flow/Punch/Tech/Aura) — cas Bishok
   img?: boolean; // un portrait existe dans client/public/avatars/<id>.png
-  crop?: { z?: number; y?: number }; // recadrage vignette : zoom (déf. 1.6) + focale verticale
+  crop?: { z?: number; y?: number }; // recadrage : z = zoom vignette (déf. 1.6) · y = focale verticale du showcase (%, déf. 15)
 };
 
 // Ordre d'affichage des catégories dans le sélecteur (scroll horizontal par catégorie)
-export const CATEGORY_ORDER = ['Légende', 'Mainstream', 'Rap game', 'Plume', 'Conscient', 'Drill', 'Nouvelle scène'];
+export const CATEGORY_ORDER = ['Légende', 'Mainstream', 'Rap game', 'Plume', 'Conscient', 'Drill', 'Nouvelle scène', 'Génies incompris', 'Rookies'];
 
 // Une couleur flashy par genre (chip du showcase + libellés du roster).
 // Légende = rendu IRIDESCENT via la classe .irid ; la valeur ci-dessous n'est que le repli (bordure /
@@ -24,8 +25,11 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'Drill': '#ff5a5a',          // rouge
   'Nouvelle scène': '#b57cff', // violet néon
   'Troll': '#ff8a3d',          // orange
+  'Génies incompris': '#c4e8ff', // bleu-gris glacé
+  'Rookies': '#ffa33d',        // orange-doré
 };
 export const isLegend = (cat: string) => cat === 'Légende';
+export const isGenie = (cat: string) => cat === 'Génies incompris'; // cartes « sticker iridescent »
 
 // Le score se compte en AUDITEURS. Formatage FR + certification de fin de partie.
 export const fmtAud = (n: number) => Math.round(n || 0).toLocaleString('fr-FR');
@@ -73,6 +77,20 @@ export const AVATARS: Avatar[] = [
   // ---- Nouvelle scène (2020s) ----
   { id: 'laylow', name: 'Laylow', color: '#9E2B3A', cat: 'Nouvelle scène', img: true, power: { name: 'Trinity', effect: 'Hors du temps : tu marques le max de points même en répondant à la dernière seconde.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 4 } },
   { id: 'jewelusain', name: 'Jewel Usain', color: '#2E7D6B', cat: 'Nouvelle scène', img: true, power: { name: 'Eleanor', effect: 'Le 1er à trouver cette manche rafle +20 000 auditeurs. Sinon, rien.' }, stats: { flow: 4, punch: 3, tech: 4, aura: 3 } },
+  // ---- Génies incompris (rap raté, stats au fond du sac ; SAUF Bishok, l'exception : grosses stats… mais pas des stats de rappeur) ----
+  { id: 'bishok', name: 'Bishok', color: '#6E1E28', cat: 'Génies incompris', img: true, crop: { y: 44 },
+    power: { name: 'Complotisme', effect: 'Complotisme : Bishok a décrypté le message caché derrière le son — premières lettres du titre ET de l\'artiste révélées.' },
+    stats: { flow: 5, punch: 5, tech: 4, aura: 5 }, statLabels: ['Complot', 'Maroc', 'Conscience', 'Révolte'] },
+  { id: 'bilaldu92', name: 'Bilal du 9-2', color: '#2E4A6E', cat: 'Génies incompris', img: true, power: { name: 'Le Buzz 2006', effect: 'Le buzz de 2006 : le 1er à trouver cette manche rafle +32 000 auditeurs. Sinon, rien.' }, stats: { flow: 1, punch: 2, tech: 1, aura: 2 } },
+  { id: 'alexdu76', name: 'Alex du 7-6', color: '#5C3A1E', cat: 'Génies incompris', img: true, power: { name: 'Je Voulais Juste Briller', effect: 'Je voulais juste briller : +30 000 auditeurs, puis -10 % à chaque réutilisation (la hype retombe vite).' }, stats: { flow: 2, punch: 1, tech: 1, aura: 3 } },
+  { id: 'kortex', name: 'Kortex', color: '#3A3A3A', cat: 'Génies incompris', img: true, power: { name: 'Le Clash', effect: 'Le clash : part en clash contre le n°1 — muselé cette manche, et tu lui rafles 8 000 auditeurs.' }, stats: { flow: 2, punch: 3, tech: 1, aura: 2 } },
+  // ---- Rookies (nouveaux, encore verts) ----
+  { id: 'bouss', name: 'Bouss', color: '#5C4A2E', cat: 'Rookies', img: true, power: { name: 'Motus', effect: 'Motus et bouche cousue : increvable pendant 3 manches, jamais sous 16 000 auditeurs.' }, stats: { flow: 4, punch: 3, tech: 4, aura: 4 } },
+  { id: 'huntrill', name: 'Huntrill', color: '#2E3A5C', cat: 'Rookies', img: true, power: { name: 'Bosseur', effect: 'Le bosseur discret : 20 000 auditeurs minimum cette manche, immunisé au sabotage.' }, stats: { flow: 3, punch: 3, tech: 5, aura: 3 } },
+  { id: 'jolagreen23', name: 'Jolagreen23', color: '#1F5C3A', cat: 'Rookies', img: true, power: { name: 'Sur Courant', effect: 'Sur courant : +14 000 auditeurs, la charge revient si tu marques cette manche.' }, stats: { flow: 4, punch: 3, tech: 4, aura: 3 } },
+  { id: 'junglejack', name: 'Jungle Jack', color: '#2E3A1E', cat: 'Rookies', img: true, power: { name: 'Premier de la Jungle', effect: 'Premier de la jungle : le 1er à trouver cette manche rafle +32 000 auditeurs. Sinon, rien.' }, stats: { flow: 3, punch: 5, tech: 3, aura: 4 } },
+  { id: 'lafeve', name: 'La Fève', color: '#5C1F1F', cat: 'Rookies', img: true, power: { name: 'Hors d\'Âge', effect: 'Hors d\'âge : tu marques le max de points même en répondant à la dernière seconde.' }, stats: { flow: 4, punch: 3, tech: 4, aura: 4 } },
+  { id: 'okis', name: 'Okis', color: '#3A2E2E', cat: 'Rookies', img: true, power: { name: 'Coup d\'un Soir', effect: 'Un gros coup d\'éclat : +30 000 auditeurs, puis -10 % à chaque réutilisation.' }, stats: { flow: 3, punch: 4, tech: 3, aura: 4 } },
 ];
 
 export const avatarById = (id?: string | null): Avatar | undefined => AVATARS.find((a) => a.id === id);
@@ -103,6 +121,7 @@ export const initials = (s: string) =>
 // Lecture en entier + ordre aléatoire côté Host.
 export type MenuTrack = { title: string; artist: string; src: string };
 export const MENU_TRACKS: MenuTrack[] = [
+  { title: 'Pensées amères', artist: 'Bishok', src: '/music/bishok-pensees-ameres.mp3' },
   { title: 'Stuntmen', artist: 'Laylow · Alpha Wann & Witt', src: '/music/laylow-stuntmen.mp3' },
   { title: 'Bruce Lee', artist: 'Jewel Usain', src: '/music/jewel-usain-bruce-lee.mp3' },
   { title: 'ZUSHILEAKS', artist: 'Caballero & JeanJass · Chilly Gonzales', src: '/music/zushileaks-cjj.mp3' },

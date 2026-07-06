@@ -177,7 +177,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
       <div className="hud-top">
         <div className="sessionbar">
           <div className="brand">
-            <h1 className="wm">PUNCHLIN<span className="d">E</span></h1>
+            <h1 className="wm">PUNCHLIN<span className="d">R</span></h1>
           </div>
           <div className="sess-right">
             <span className="gpill onair"><span className="dot live" />ON&nbsp;AIR</span>
@@ -304,7 +304,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
         </div>
 
         <aside className="hud-side">
-          <div className="mc-head"><div className="mc-title"><span className="lbl">Carte de match</span></div><span className="mc-brand">PUNCHLIN<span className="d">E</span></span></div>
+          <div className="mc-head"><div className="mc-title"><span className="lbl">Carte de match</span></div><span className="mc-brand">PUNCHLIN<span className="d">R</span></span></div>
           <div className="mc-rows">
             {rows.map((r, i) => (
               <button key={r.i} className={`mc-row ${i === step ? 'active' : ''}`} onClick={() => setStep(i)}>

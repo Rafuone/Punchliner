@@ -5,7 +5,7 @@ import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegen
 const SKEY = 'pl_session';
 const loadSession = () => { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch { return null; } };
 const saveSession = (s: any) => localStorage.setItem(SKEY, JSON.stringify(s));
-const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak' };
+const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 7-6', kortex: 'Le Clasheur' };
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
 // met en gras les chiffres-clés d'un effet (montants, ×N, N %) → on repère vite le point fort du pouvoir
 const FX_FIG = /([×x]\s?\d+(?:[.,]\d+)?|[+\-−]?\d[\d   ]*\d\s?%?|\d+\s?%)/g;
@@ -108,7 +108,7 @@ export default function Player() {
   // observe le salon pour voir en direct les persos déjà pris (grisés)
   useEffect(() => {
     if (step !== 'char' || !code.trim()) return;
-    socket.emit('player:watch', { code: code.trim() }, (res: any) => { if (res?.players) setPlayers(res.players); });
+    socket.emit('player:watch', { code: code.trim() }, (res: any) => { if (res?.players) { setPlayers(res.players); setError(''); } }); // salon vivant → efface un éventuel « hôte a quitté » périmé
   }, [step, code]);
   // pré-sélectionne un perso LIBRE (et se décale si le sien vient d'être pris)
   useEffect(() => {
@@ -137,6 +137,19 @@ export default function Player() {
     };
     timer = window.setTimeout(fire, 500 + Math.random() * 1500);
     return () => { window.clearTimeout(timer); stage.classList.remove('glx', 'glx-strong'); };
+  }, [step, joined]);
+
+  // Holo « sticker iridescent » : le reflet suit le doigt/la souris (pointer) et l'inclinaison du tel
+  // (deviceorientation). Sans capteur → l'animation CSS continue assure le scintillement de base.
+  useEffect(() => {
+    if (joined || step !== 'char') return;
+    const stage = stageRef.current; if (!stage) return;
+    const setHL = (x: number, y: number) => { stage.style.setProperty('--hx', x.toFixed(1) + '%'); stage.style.setProperty('--hy', y.toFixed(1) + '%'); };
+    const onPointer = (e: PointerEvent) => { const r = stage.getBoundingClientRect(); if (!r.width) return; setHL(((e.clientX - r.left) / r.width) * 100, ((e.clientY - r.top) / r.height) * 100); };
+    const onTilt = (e: DeviceOrientationEvent) => { const g = Math.max(-45, Math.min(45, e.gamma || 0)), b = Math.max(-45, Math.min(45, (e.beta || 0) - 40)); setHL(50 + (g / 45) * 55, 50 + (b / 45) * 55); };
+    stage.addEventListener('pointermove', onPointer);
+    window.addEventListener('deviceorientation', onTilt);
+    return () => { stage.removeEventListener('pointermove', onPointer); window.removeEventListener('deviceorientation', onTilt); };
   }, [step, joined]);
 
   function join() {
@@ -203,7 +216,7 @@ export default function Player() {
   if (!joined && step === 'form') {
     return (
       <div className="wrap"><div className="center">
-        <h1 className="wm" style={{ fontSize: 44 }}>PUNCHLIN<span className="d">E</span></h1>
+        <h1 className="wm" style={{ fontSize: 44 }}>PUNCHLIN<span className="d">R</span></h1>
         <p className="muted" style={{ marginTop: -8 }}>Le blind test rap FR</p>
         {error && <p className="err">{error}</p>}
         <form className="glass pad" style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 14 }} onSubmit={(e) => { e.preventDefault(); if (code.trim() && name.trim()) setStep('char'); }}>
@@ -211,7 +224,7 @@ export default function Player() {
             <input className="field" style={{ textAlign: 'center', letterSpacing: '.3em', textTransform: 'uppercase', fontFamily: 'var(--disp)', fontSize: 24, marginTop: 6 }} value={code} maxLength={4} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="K7XQ" autoCapitalize="characters" /></div>
           <div><label className="eyebrow">Ton blaze</label>
             <input className="field" style={{ marginTop: 6 }} value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Sacha" /></div>
-          <button className="btn warm big" type="submit" disabled={!code.trim() || !name.trim()}>Choisir mon rappeur →</button>
+          <button className="btn warm big" type="submit" disabled={!code.trim() || !name.trim()}>Entre dans le cercle →</button>
         </form>
       </div></div>
     );
@@ -224,7 +237,7 @@ export default function Player() {
     // taille du nom adaptée à sa longueur → ne déborde jamais sur les stats
     const nameFs = nmU.length > 11 ? 'clamp(17px,5vw,24px)' : nmU.length > 8 ? 'clamp(20px,6vw,29px)' : 'clamp(24px,7.5vw,35px)';
     return (
-      <div className={`cs${isLegend(sel.cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[sel.cat] }}>
+      <div className={`cs${isLegend(sel.cat) ? ' irid holo' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[sel.cat] }}>
         <svg width="0" height="0" style={{ position: 'absolute' }}><defs>
           <g id="bust"><path d="M22,240 C22,168 58,146 100,146 C142,146 178,168 178,240 Z" fill="#0d0917" /><ellipse cx="100" cy="96" rx="40" ry="44" fill="#0d0917" /><path d="M60,70 Q100,22 140,70 Q140,44 100,42 Q60,44 60,70 Z" fill="#0d0917" /><path d="M138,80 C150,120 150,180 150,240 L178,240 C178,168 160,146 138,80 Z" fill="rgba(255,255,255,.10)" /></g>
           {/* filtre VHS : wobble analogique (displacement) + séparation des canaux R/B (aberration
@@ -263,14 +276,15 @@ export default function Player() {
             <div className="cs-pbg" />
             <div className="cs-wm">{initials(sel.name)[0]}</div>
             <svg className="cs-bust" viewBox="0 0 200 240"><use href="#bust" /></svg>
-            {sel.img && <img className="cs-pimg" src={`/avatars/${sel.id}.png`} alt="" onError={hideOnErr} />}
-            {sel.img && <img className="cs-tear" src={`/avatars/${sel.id}.png`} alt="" aria-hidden="true" onError={hideOnErr} />}
+            {sel.img && <img className="cs-pimg" src={`/avatars/${sel.id}.png`} alt="" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
+            {sel.img && <img className="cs-tear" src={`/avatars/${sel.id}.png`} alt="" aria-hidden="true" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
             <div className="cs-pvig" />
             <div className="cs-vhs" aria-hidden="true"><i className="lines" /><i className="tint" /><i className="noise" /><i className="band" /></div>
+            {isLegend(sel.cat) && <div className="cs-holo" aria-hidden="true"><i className="foil" /><i className="glit" /><i className="glare" /></div>}
             {!sel.img && <span className="cs-slot">Portrait — image à venir</span>}
             <div className="cs-catchip"><span>{sel.cat}</span></div>
             <div className="cs-stats-ov">
-              {([['Flow', sel.stats.flow], ['Punch', sel.stats.punch], ['Tech', sel.stats.tech], ['Aura', sel.stats.aura]] as [string, number][]).map(([lab, v]) => (
+              {(() => { const L = sel.statLabels || ['Flow', 'Punch', 'Tech', 'Aura']; return [[L[0], sel.stats.flow], [L[1], sel.stats.punch], [L[2], sel.stats.tech], [L[3], sel.stats.aura]] as [string, number][]; })().map(([lab, v]) => (
                 <div className="cs-srow" key={lab}><span className="cs-slab">{lab}</span><span className="cs-sbar">{[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= v ? 'on' : ''} />)}</span></div>
               ))}
             </div>
@@ -295,7 +309,7 @@ export default function Player() {
                   {members.map((a) => {
                     const lk = takenIds.has(a.id);
                     return (
-                    <button type="button" key={a.id} className={`cs-cell ${avatarId === a.id ? 'sel' : ''} ${lk ? 'lock' : ''}`} disabled={lk} onClick={() => !lk && setAvatarId(a.id)}>
+                    <button type="button" key={a.id} className={`cs-cell ${avatarId === a.id ? 'sel' : ''} ${lk ? 'lock' : ''} ${isLegend(a.cat) ? 'holo' : ''}`} disabled={lk} onClick={() => !lk && setAvatarId(a.id)}>
                       <div className="cs-thumb" style={{ ['--c' as any]: a.color, ...(a.crop?.z ? { ['--z' as any]: a.crop.z } : {}) }}>
                         <svg viewBox="0 0 200 240"><use href="#bust" /></svg>
                         {a.img && <img src={`/avatars/${a.id}.png`} alt="" onError={hideOnErr} />}

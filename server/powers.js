@@ -38,6 +38,18 @@ export const POWERS = {
   medine:     { name: "Don't Panik",            type: 'safety',   floor: 20000, self: 10000 },
   lafouine:   { name: 'Capitale du Crime',      type: 'sabotage', grab: 8000 },
   jewelusain: { name: 'Bruce Lee',             type: 'firstblood', base: 16000, first: 32000 },
+  // ===== Génies incompris — rappeurs mèmes du web FR (pouvoirs calibrés, thème pour les vannes) =====
+  bishok:     { name: 'Complotisme',              type: 'hint',       self: 11000 },   // décrypte le "message caché"
+  bilaldu92:  { name: 'Le Buzz 2006',             type: 'firstblood', base: 16000, first: 32000 }, // la zermi du 92, viral une fois
+  alexdu76:   { name: 'Je Voulais Juste Briller', type: 'decay',      base: 30000, factor: 0.9 },   // le tube qui retombe
+  kortex:     { name: 'Le Clash',                 type: 'sabotage',   grab: 8000 },    // clashe le n°1 (Cyprien, Norman…)
+  // ===== Rookies — encore verts (tier B, mécaniques dupliquées) =====
+  bouss:      { name: 'Motus',                    type: 'veteran',  rounds: 3, floor: 16000 },
+  huntrill:   { name: 'Bosseur',                  type: 'safety',   floor: 20000, self: 10000 },
+  jolagreen23:{ name: 'Sur Courant',              type: 'bonus',    amount: 14000, refuel: true },
+  junglejack: { name: 'Premier de la Jungle',     type: 'firstblood', base: 16000, first: 32000 },
+  lafeve:     { name: "Hors d'Âge",               type: 'freeze',   self: 11000 },
+  okis:       { name: "Coup d'un Soir",           type: 'decay',    base: 30000, factor: 0.9 },
 };
 
 export const firstLetters = (s) =>
