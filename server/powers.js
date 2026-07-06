@@ -43,13 +43,13 @@ export const POWERS = {
   bilaldu92:  { name: 'Le Buzz 2006',             type: 'firstblood', base: 16000, first: 32000 }, // la zermi du 92, viral une fois
   alexdu76:   { name: 'Je Voulais Juste Briller', type: 'decay',      base: 30000, factor: 0.9 },   // le tube qui retombe
   kortex:     { name: 'Le Clash',                 type: 'sabotage',   grab: 8000 },    // clashe le n°1 (Cyprien, Norman…)
-  // ===== Rookies — encore verts (tier B, mécaniques dupliquées) =====
-  bouss:      { name: 'Motus',                    type: 'veteran',  rounds: 3, floor: 16000 },
-  huntrill:   { name: 'Bosseur',                  type: 'safety',   floor: 20000, self: 10000 },
-  jolagreen23:{ name: 'Sur Courant',              type: 'bonus',    amount: 14000, refuel: true },
-  junglejack: { name: 'Premier de la Jungle',     type: 'firstblood', base: 16000, first: 32000 },
-  lafeve:     { name: "Hors d'Âge",               type: 'freeze',   self: 11000 },
-  okis:       { name: "Coup d'un Soir",           type: 'decay',    base: 30000, factor: 0.9 },
+  // ===== Rookies — nouvelle scène FR (mécaniques calibrées, thème collé à l'artiste) =====
+  bouss:      { name: 'Depuis le Temps',          type: 'veteran',  rounds: 3, floor: 16000 }, // "Depuis le temps" (platine), a grindé longtemps
+  huntrill:   { name: 'Le Bruit de la Machine',   type: 'safety',   floor: 20000, self: 10000 }, // son album, trap machine
+  jolagreen23:{ name: 'Barillet',                 type: 'bonus',    amount: 14000, refuel: true }, // "rappe jusqu'à vider le barillet"
+  junglejack: { name: 'Flow Dévastateur',         type: 'firstblood', base: 16000, first: 32000 }, // flow rapide et dévastateur
+  lafeve:     { name: 'Hors du Temps',            type: 'freeze',   self: 11000 }, // new wave expérimentale, hors du temps
+  okis:       { name: 'La Crème',                 type: 'decay',    base: 30000, factor: 0.9 }, // trilogie "La Crème" (Lyon)
 };
 
 export const firstLetters = (s) =>

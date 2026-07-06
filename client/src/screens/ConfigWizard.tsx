@@ -204,22 +204,16 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 {GAMES.map((g) => (
                   <button key={g.id} className={`keycard pick g-${g.id} ${game === g.id ? 'sel on' : ''} ${g.soon ? 'locked' : ''}`} onClick={() => !g.soon && setGame(g.id)}>
                     <span {...H(bracketsSvg)} />
-                    <div className="keyart" {...H(KEYART[g.id])} />
-                    <span {...H(vhsOverlay)} />
+                    <div className="kclip">
+                      <div className="keyart" {...H(KEYART[g.id])} />
+                      <span {...H(vhsOverlay)} />
+                      <div className="kshade" />
+                    </div>
                     <div className="reccue"><i />REC</div>
-                    <div className="kshade" />
                     {g.soon ? <span className="badge-soon"><span>Bientôt</span></span> : <span className="badge-live"><span><span className="dot" style={{ width: 6, height: 6 }} />Jouable</span></span>}
                     <div className="kbody"><div className="kcat">{g.cat}</div><div className="kname">{g.name}</div><div className="kdesc">{g.desc}</div></div>
                   </button>
                 ))}
-              </div>
-              <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px', border: '1px dashed var(--line3)', borderRadius: 4, background: 'rgba(255,255,255,.02)', opacity: .78 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="kcat" style={{ color: 'var(--muted2)', marginBottom: 6 }}>Arcade · hors-ligne · un jeu à part</div>
-                  <div className="kname" style={{ fontSize: 22 }}>Mode Solo</div>
-                  <div className="kdesc" style={{ maxWidth: 'none', marginTop: 6 }}>Campagne contre des boss, déblocage de rappeurs — ce n'est pas du multijoueur.</div>
-                </div>
-                <span className="badge-soon" style={{ position: 'static' }}><span>Bientôt</span></span>
               </div>
               </>
             )}
@@ -320,13 +314,15 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 <div className="npv">{music.nowPlaying >= 0 ? music.tracks[music.nowPlaying].title : 'Musique du menu'}</div>
                 <div className="nps">{music.nowPlaying >= 0 ? music.tracks[music.nowPlaying].artist : 'aléatoire · morceaux entiers'}</div>
               </div>
-              <button className="np-mute" onClick={music.onPrev} aria-label="Précédent"><svg width="13" height="13" viewBox="0 0 15 15" fill="currentColor"><path d="M4 3h1.5v9H4zM12 3v9l-6-4.5z" /></svg></button>
-              <button className="np-mute" onClick={music.onNext} aria-label="Suivant"><svg width="13" height="13" viewBox="0 0 15 15" fill="currentColor"><path d="M9.5 3H11v9H9.5zM3 3v9l6-4.5z" /></svg></button>
-              <button className="np-mute" onClick={music.onToggle} aria-label="Musique">
-                {music.musicOn
-                  ? <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M3 5.5h2.5L9 3v9L5.5 9.5H3z" fill="currentColor" /><path d="M11 5.5c1 1 1 3 0 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
-                  : <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M3 5.5h2.5L9 3v9L5.5 9.5H3z" fill="currentColor" /><path d="M10.5 5l3.5 3.5M14 5l-3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>}
-              </button>
+              <div className="np-ctrls">
+                <button className="np-mute" onClick={music.onPrev} aria-label="Précédent"><svg width="13" height="13" viewBox="0 0 15 15" fill="currentColor"><path d="M4 3h1.5v9H4zM12 3v9l-6-4.5z" /></svg></button>
+                <button className="np-mute" onClick={music.onNext} aria-label="Suivant"><svg width="13" height="13" viewBox="0 0 15 15" fill="currentColor"><path d="M9.5 3H11v9H9.5zM3 3v9l6-4.5z" /></svg></button>
+                <button className="np-mute" onClick={music.onToggle} aria-label="Musique">
+                  {music.musicOn
+                    ? <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M3 5.5h2.5L9 3v9L5.5 9.5H3z" fill="currentColor" /><path d="M11 5.5c1 1 1 3 0 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+                    : <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M3 5.5h2.5L9 3v9L5.5 9.5H3z" fill="currentColor" /><path d="M10.5 5l3.5 3.5M14 5l-3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>}
+                </button>
+              </div>
             </div>
             <button className="btn launch-full" onClick={launch}><span {...H(play)} /> LANCER LA PARTIE</button>
             <div className="mc-note">Défauts calés — ajuste ou lance quand tu veux</div>

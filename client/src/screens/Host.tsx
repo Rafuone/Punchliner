@@ -248,7 +248,7 @@ export default function Host() {
             </div>
           )}
 
-          <button className="btn warm big" style={{ maxWidth: 360 }} onClick={() => setConfiguring(true)} disabled={poolSize < 1}>Configurer la partie →</button>
+          <button className="btn warm big" style={{ maxWidth: 360, marginTop: 14 }} onClick={() => setConfiguring(true)} disabled={poolSize < 1}>Configurer la partie →</button>
           <a className="muted" href="/?dev" target="_blank" rel="noreferrer" style={{ fontSize: 12, textDecoration: 'none' }}>+ ajouter un joueur test</a>
         </div>
       )}
