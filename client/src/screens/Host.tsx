@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
-import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon } from '../data';
+import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon, REACTIONS } from '../data';
 import ConfigWizard from './ConfigWizard';
 import HubBrowse from './HubBrowse';
 import GrungeBg from '../GrungeBg';
+import { sfx, sfxLoop, sfxLoopStop } from '../sfx';
 
 // Fond du lobby (écran du code) : instru d'Alpha Wann. Crossfade vers la playlist (Bishok) à l'entrée du ConfigWizard.
 const LOBBY_TRACK = '/music/alphawann-philly-flingo.mp3';
@@ -43,6 +44,8 @@ export default function Host() {
   const [joinBase, setJoinBase] = useState(window.location.origin.replace(/\/$/, ''));
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [reactions, setReactions] = useState<any[]>([]); // taunts flottants (façon Meet)
+  const reactKeyRef = useRef(0);
   const [prepEndsAt, setPrepEndsAt] = useState(0);
   const [prepReady, setPrepReady] = useState<{ count: number; total: number }>({ count: 0, total: 0 });
   const previewRef = useRef<any>({ url: '', clipMs: 30000, startAt: 0 });
@@ -88,7 +91,7 @@ export default function Host() {
     });
     if (socket.connected) boot();
     socket.on('connect', boot);
-    socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); setWaiting(d.waiting || 0); if (d.phase === 'lobby') setPhase('lobby'); });
+    socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); setWaiting(d.waiting || 0); if (d.phase === 'lobby') { setPhase('lobby'); sfxLoopStop(); } });
     socket.on('round:prep', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
     socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
@@ -96,16 +99,24 @@ export default function Host() {
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
     socket.on('buzz:winner', (d: any) => setBuzzWinner(d.name));
     socket.on('buzz:open', () => setBuzzWinner(null));
-    socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // le son continue de tourner sur la révélation
-    socket.on('game:final', (d: any) => { audioRef.current?.pause(); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final'); });
-    socket.on('power:used', (d: any) => { setPowerLog(`${d.name} a lancé ${d.power}`); setTimeout(() => setPowerLog(''), 4500); });
+    socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); sfx('scratch'); }); // le son continue de tourner sur la révélation
+    socket.on('game:final', (d: any) => { audioRef.current?.pause(); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final'); sfx('horn'); sfxLoop('recap'); });
+    socket.on('power:used', (d: any) => { setPowerLog(`${d.name} a lancé ${d.power}`); setTimeout(() => setPowerLog(''), 4500); sfx('scratch'); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
-    socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); localStorage.removeItem(HKEY); });
-    return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'round:countdown', 'round:host', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'room:closed'].forEach((e) => socket.off(e as any));
+    socket.on('reaction', (d: any) => {
+      const key = reactKeyRef.current++;
+      setReactions((rs) => [...rs.slice(-5), { ...d, key }]);
+      setTimeout(() => setReactions((rs) => rs.filter((r) => r.key !== key)), 4600);
+    });
+    socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); localStorage.removeItem(HKEY); sfxLoopStop(); });
+    return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'round:countdown', 'round:host', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'reaction', 'room:closed'].forEach((e) => socket.off(e as any));
   }, []);
 
   useEffect(() => { if (phase !== 'playing' && phase !== 'prep') return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
   useEffect(() => { if (phase !== 'countdown') return; const id = setInterval(() => setCountdown((c) => Math.max(1, c - 1)), 1000); return () => clearInterval(id); }, [phase]);
+  useEffect(() => { if (phase === 'countdown') sfx('countdown'); }, [countdown, phase]); // tick raccord avec chaque chiffre du décompte
+  const prepSec = phase === 'prep' ? Math.max(0, Math.ceil((prepEndsAt - now) / 1000)) : -1;
+  useEffect(() => { if (phase === 'prep' && prepSec > 0) sfx('countdown'); }, [prepSec]); // idem pendant l'activation des pouvoirs
   useEffect(() => {
     fetch('/api/net').then((r) => r.json()).then(({ ip }) => {
       const loc = window.location; const local = loc.hostname === 'localhost' || loc.hostname === '127.0.0.1';
@@ -235,15 +246,25 @@ export default function Host() {
   function start() {
     const a = audioRef.current;
     if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); }
+    sfx('launch');
     socket.emit('host:start', { rounds: settings.rounds, difficulty: settings.difficulty, mode: settings.mode, mj: settings.mj, rebalance: settings.rebalance }, (res: any) => res?.error && setError(res.error));
   }
   function startWizard(s: { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string; mjId?: string }) {
     const a = audioRef.current;
     if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); }
+    sfx('launch');
     socket.emit('host:start', s, (res: any) => res?.error && setError(res.error));
   }
   // Relance depuis le podium : retour au salon (cumul de série conservé) ; toConfig → droit dans l'assistant.
   function relance(toConfig: boolean) { socket.emit('host:restart', {}, () => { if (toConfig) setConfiguring(true); }); }
+  function newSalon() {
+    if (players.length && !confirm('Ouvrir un NOUVEAU salon ? Les joueurs actuels seront éjectés.')) return;
+    socket.emit('host:new', {}, (res: any) => {
+      if (res?.ok) { setCode(res.code); setPoolSize(res.poolSize); setPlayers([]); setWaiting(0); setConfiguring(false); setReactions([]); setPhase('lobby');
+        try { localStorage.setItem(HKEY, JSON.stringify({ code: res.code, hostToken: res.hostToken })); } catch {} }
+    });
+  }
+  function kick(id: string) { socket.emit('host:kick', { playerId: id }); }
   function resetSeries() { if (confirm('Remettre à zéro le cumul de toutes les parties ?')) socket.emit('host:resetSeries'); }
 
   const remaining = Math.max(0, round.endsAt - now);
@@ -254,20 +275,33 @@ export default function Host() {
     <>
     {hubView && <HubBrowse mode={hubView} onClose={() => setHubView(null)} />}
     {phase === 'lobby' && !configuring && <GrungeBg />}
+    {reactions.length > 0 && (
+      <div className="reactfloat">
+        {reactions.map((r) => (
+          <div className="reactbubble" key={r.key}>
+            <span className="rb-e">{REACTIONS[r.id]?.e || '🔥'}</span>
+            <span className="rb-t"><b>{r.name}</b> {REACTIONS[r.id]?.t || ''}</span>
+          </div>
+        ))}
+      </div>
+    )}
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
       <div className="topbar">
         <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">R</span></h1>
-        <span className="row" style={{ gap: 10 }}>
-          {phase !== 'connecting' && <span className="gpill"><span className="dot" />{phase === 'lobby' ? `Salon ${code}` : `Manche ${round.index + 1}/${round.total} · ${round.difficulty}`} · {players.length} j.</span>}
-          {waiting > 0 && ['prep', 'countdown', 'playing', 'reveal'].includes(phase) && <span className="gpill" style={{ color: 'var(--muted)' }}>{waiting} en attente</span>}
-          {['prep', 'countdown', 'playing', 'reveal'].includes(phase) && <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={() => socket.emit('host:restart')}>← Salon</button>}
+        <span className="row" style={{ gap: 14, alignItems: 'center' }}>
+          {phase === 'lobby' && <span className="gpill"><span className="dot" />Salon {code} · {players.length} j.</span>}
+          {['prep', 'countdown', 'playing', 'reveal'].includes(phase) && (<>
+            <span className="hostmeta">Manche <b>{round.index + 1}/{round.total}</b> · {round.difficulty} · {players.length} j.{waiting > 0 ? ` · ${waiting} en attente` : ''}</span>
+            <span className="salontag"><span className="lbl">Salon</span><b className="cd">{code}</b></span>
+            <button className="btn" style={{ padding: '9px 15px', fontSize: 14 }} onClick={() => socket.emit('host:restart')}>← Salon</button>
+          </>)}
         </span>
       </div>
       {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
       {phase === 'connecting' && <div className="center"><p className="muted">Connexion…</p></div>}
 
       {phase === 'lobby' && !configuring && (
-        <div className="center" style={{ gap: 30, justifyContent: 'flex-start', paddingTop: 'clamp(24px,7vh,80px)' }}>
+        <div className="center" style={{ gap: 22, justifyContent: 'center' }}>
           <span className="eyebrow">Rejoins le salon</span>
           <div className="code glitch" data-code={code}>{code}</div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
@@ -277,18 +311,25 @@ export default function Host() {
           </div>
 
           {players.length > 0 && (
-            <div className="players" style={{ maxWidth: 720 }}>
-              {players.map((p) => (
-                <div className="pcard" key={p.id} style={{ opacity: p.connected ? 1 : 0.5 }}>
-                  <Med avatarId={p.avatar} />
-                  <div><div className="pname">{p.name}</div><div className="muted" style={{ fontSize: 11 }}>{avatarById(p.avatar)?.name}</div></div>
-                </div>
-              ))}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: '100%' }}>
+              <div className="eyebrow"><b style={{ color: 'var(--fluo)' }}>{players.length}</b> dans le cercle</div>
+              <div className="players" style={{ maxWidth: 760 }}>
+                {players.map((p) => (
+                  <div className="pcard join" key={p.id} style={{ opacity: p.connected ? 1 : 0.5 }}>
+                    <Med avatarId={p.avatar} />
+                    <div><div className="pname">{p.name}</div><div className="muted" style={{ fontSize: 11 }}>{avatarById(p.avatar)?.name}</div></div>
+                    <button className="pkick" title="Retirer ce joueur" aria-label="Retirer" onClick={() => kick(p.id)}>×</button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          <button className="btn warm big" style={{ maxWidth: 360, marginTop: 14 }} onClick={() => setConfiguring(true)} disabled={poolSize < 1}>Configurer la partie →</button>
-          <a className="muted" href="/?dev" target="_blank" rel="noreferrer" style={{ fontSize: 12, textDecoration: 'none' }}>+ ajouter un joueur test</a>
+          <button className="btn warm big" style={{ maxWidth: 360, marginTop: 8 }} onClick={() => setConfiguring(true)} disabled={poolSize < 1}>Configurer la partie →</button>
+          <div className="row" style={{ gap: 18 }}>
+            <button className="btn ghost" style={{ fontSize: 12, padding: '7px 13px' }} onClick={newSalon}>⟳ Nouveau salon</button>
+            <a className="muted" href="/?dev" target="_blank" rel="noreferrer" style={{ fontSize: 12, textDecoration: 'none' }}>+ ajouter un joueur test</a>
+          </div>
         </div>
       )}
 
@@ -349,23 +390,22 @@ export default function Host() {
             </div>
           ) : (
             <>
-              <div className="wrap-cols" style={{ width: '100%', maxWidth: 780 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-                  <div className="disc"><span className="q">?</span></div>
-                  <span className="eyebrow">{round.mode === 'buzzer' ? 'Mode buzzer' : 'Extrait en cours'}</span>
+              <div className="playstage">
+                <div className="vinyl">
+                  <div className="grooves spin" aria-hidden="true" />
+                  <span className="q">?</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                  <div className="ring">
-                    <svg viewBox="0 0 120 120">
-                      <defs><linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a6ff00" /><stop offset="1" stopColor="#e4ff1a" /></linearGradient></defs>
-                      <circle cx="60" cy="60" r="54" stroke="rgba(255,255,255,.12)" strokeWidth="10" fill="none" />
-                      <circle cx="60" cy="60" r="54" stroke="url(#tg)" strokeWidth="10" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - frac)} />
-                    </svg>
-                    <span className="n">{seconds}</span>
-                  </div>
-                  <span className="url">secondes</span>
+                <div className="ring big">
+                  <svg viewBox="0 0 120 120">
+                    <defs><linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a6ff00" /><stop offset="1" stopColor="#e4ff1a" /></linearGradient></defs>
+                    <circle cx="60" cy="60" r="54" stroke="rgba(255,255,255,.10)" strokeWidth="9" fill="none" />
+                    <circle cx="60" cy="60" r="54" stroke="url(#tg)" strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - frac)} />
+                  </svg>
+                  <span className="n">{seconds}</span>
                 </div>
               </div>
+              <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
+              <span className="playmeta">{round.mode === 'buzzer' ? 'Mode buzzer' : 'Extrait en cours'} · {round.difficulty}</span>
               {round.mode === 'buzzer' ? (
                 <p className="feedback" style={{ color: buzzWinner ? 'var(--ember)' : 'var(--muted)' }}>{buzzWinner ? `${buzzWinner} a buzzé — à lui de répondre !` : 'Le premier qui buzze prend la main…'}</p>
               ) : (
@@ -403,13 +443,13 @@ export default function Host() {
               <div><b>Scores masqués</b><span>Ça se joue sur la fin — le classement reste secret jusqu'au podium. Personne ne sait qui mène.</span></div>
             </div>
           ) : (
-          <div className="board" style={{ maxWidth: 620 }}>
+          <div className="board tvbig" style={{ maxWidth: 780 }}>
             {reveal.scores.filter((p: any) => !p.isMJ).map((p: any, i: number) => {
               const r = reveal.results.find((x: any) => x.id === p.id);
               const d = p.rankDelta || 0;
               return (
                 <div className={`prow ${i === 0 ? 'lead' : ''}`} key={p.id} style={{ animation: `rowin .32s ease ${i * 0.05}s both` }}>
-                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={26} />{p.name}</span>
+                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={46} />{p.name}</span>
                   <span className="row" style={{ gap: 12 }}>
                     {d !== 0 && (
                       <span style={{ color: d > 0 ? 'var(--green)' : 'var(--bad)', display: 'inline-flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 12 }}>

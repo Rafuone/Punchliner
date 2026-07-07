@@ -420,8 +420,8 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
         <div className="spacer" />
         <button className="btn hublink" onClick={() => onOpenHub?.('roster')}><span {...H(rosterIco)} /> Roster</button>
         <button className="btn hublink" onClick={() => onOpenHub?.('trophies')}><span {...H(trophyIco)} /> Palmarès</button>
-        {/* pas de « Lancer » ici : il vit dans la carte de match (à droite) — on évite le doublon de CTA primaire */}
-        {!last && <button className="btn warm" onClick={() => setStep(step + 1)}>Suivant <span {...H(arrowR)} /></button>}
+        {/* Ni « Suivant » ni « Lancer » ici : un SEUL CTA primaire = « Lancer la partie » dans la carte de match (à droite).
+            Navigation des étapes au clavier (← → · Entrée) — voir le hint ci-dessus. */}
       </div>
     </div>
   );

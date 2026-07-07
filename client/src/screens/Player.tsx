@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { socket } from '../socket';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO, EPITHETS } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO, EPITHETS, UNLOCKS, REACTIONS } from '../data';
 import GrungeBg from '../GrungeBg';
+import { sfx } from '../sfx';
 
 const SKEY = 'pl_session';
 const loadSession = () => { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch { return null; } };
@@ -22,6 +23,8 @@ export default function Player() {
   const [step, setStep] = useState<'form' | 'char' | 'roster' | 'trophies'>('form'); // avant d'avoir rejoint (+ pages hub : roster / palmarès)
   const [unlockedTrophies, setUnlockedTrophies] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('pl_trophies') || '[]'); } catch { return []; } });
   const [revealTrophies, setRevealTrophies] = useState(true); // aperçu : tout afficher (sinon non-débloqués grisés)
+  const [unlockedChars, setUnlockedChars] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('pl_unlocked') || '[]'); } catch { return []; } }); // rappeurs déblocables déjà débloqués
+  const [newChars, setNewChars] = useState<string[]>([]); // débloqués À L'INSTANT (bannière de fin de partie)
   const [changing, setChanging] = useState(false); // change de rappeur entre deux parties (rouvre le character select)
   const [joined, setJoined] = useState(false);
   const [code, setCode] = useState((new URLSearchParams(location.search).get('c') || '').toUpperCase());
@@ -101,16 +104,25 @@ export default function Player() {
   }, []);
 
   useEffect(() => {
-    socket.on('lobby', (d: any) => { setPlayers(d.players); if (d.phase === 'lobby') { setWaiting(false); setPhase('lobby'); } });
+    socket.on('lobby', (d: any) => { setPlayers(d.players); if (d.phase === 'lobby') { setWaiting(false); setPhase('lobby'); setNewChars([]); } });
     socket.on('round:prep', (d: any) => { setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setNow(Date.now()); setPhase('prep'); });
     socket.on('round:countdown', (d: any) => { setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setCountdown(d.seconds || 5); setPhase('countdown'); });
     socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); } });
     socket.on('mj:track', (d: any) => setMjTrack(d));
-    socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); });
+    socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); sfx('scratch'); });
     socket.on('game:final', (d: any) => {
       setPlayers(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final');
-      const mine = (d.awards || []).filter((a: any) => a.playerId === meId.current).map((a: any) => a.id);
-      if (mine.length) setUnlockedTrophies((prev) => { const s = Array.from(new Set([...prev, ...mine])); try { localStorage.setItem('pl_trophies', JSON.stringify(s)); } catch {} return s; });
+      const mineAw = (d.awards || []).filter((a: any) => a.playerId === meId.current).map((a: any) => a.id);
+      if (mineAw.length) setUnlockedTrophies((prev) => { const s = Array.from(new Set([...prev, ...mineAw])); try { localStorage.setItem('pl_trophies', JSON.stringify(s)); } catch {} return s; });
+      // déblocage de rappeurs — mêmes rails que les trophées (persist localStorage `pl_unlocked`)
+      const scores = d.scores || [];
+      const rank = scores.findIndex((p: any) => p.id === meId.current) + 1;
+      const myScore = scores.find((p: any) => p.id === meId.current)?.score ?? 0;
+      sfx(rank === 1 ? 'horn' : 'scratch');
+      const ctx = { won: rank === 1, rank: rank || 99, certifShort: certif(myScore, d.rounds || 0).short, awardIds: mineAw };
+      let cur: string[] = []; try { cur = JSON.parse(localStorage.getItem('pl_unlocked') || '[]'); } catch {}
+      const fresh = UNLOCKS.filter((u) => !cur.includes(u.id) && u.check(ctx)).map((u) => u.id);
+      if (fresh.length) { const s = Array.from(new Set([...cur, ...fresh])); try { localStorage.setItem('pl_unlocked', JSON.stringify(s)); } catch {} setUnlockedChars(s); setNewChars(fresh); }
     });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) setBuzz('mine'); else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
@@ -129,11 +141,13 @@ export default function Player() {
     socket.emit('player:watch', { code: code.trim() }, (res: any) => { if (res?.players) { setPlayers(res.players); setError(''); } }); // salon vivant → efface un éventuel « hôte a quitté » périmé
   }, [step, code]);
   // pré-sélectionne un perso LIBRE (et se décale si le sien vient d'être pris)
+  const charLocked = (id?: string) => { const a = avatarById(id); return !!a?.locked && !unlockedChars.includes(a.id); };
   useEffect(() => {
     if (step !== 'char') return;
     const taken = new Set(players.filter((p) => p.connected && p.id !== meId.current).map((p) => p.avatar));
-    if (!avatarId || taken.has(avatarId)) { const free = AVATARS.find((a) => !taken.has(a.id)); if (free) setAvatarId(free.id); }
-  }, [step, avatarId, players]);
+    const pickable = (a: any) => !taken.has(a.id) && (!a.locked || unlockedChars.includes(a.id));
+    if (!avatarId || taken.has(avatarId) || charLocked(avatarId)) { const free = AVATARS.find(pickable); if (free) setAvatarId(free.id); }
+  }, [step, avatarId, players, unlockedChars]);
   // VHS : glitches de tracking ORGANIQUES (intervalles + tailles aléatoires) — pilotés en JS pour un
   // rendu non répétitif, sans re-render React (on écrit direct sur le DOM du stage).
   useEffect(() => {
@@ -166,7 +180,7 @@ export default function Player() {
       if (res?.error) return setError(res.error);
       meId.current = res.playerId;
       saveSession({ code: code.trim().toUpperCase(), name: name.trim(), avatar: avatarId, playerId: res.playerId });
-      setWaiting(!!res.waiting); setJoined(true); applyState(res.state);
+      setWaiting(!!res.waiting); setJoined(true); applyState(res.state); sfx('confirm');
     });
   }
   function changeChar() {
@@ -176,17 +190,17 @@ export default function Player() {
       setError(''); setChanging(false);
     });
   }
-  function submitAnswer(e?: any) { e?.preventDefault(); if (!guess.trim() || phase !== 'playing') return; socket.emit('player:answer', { text: guess.trim() }, (res: any) => { if (res?.ok) setFeedback({ points: res.points, titleHit: res.titleHit, artistHit: res.artistHit }); }); }
+  function submitAnswer(e?: any) { e?.preventDefault(); if (!guess.trim() || phase !== 'playing') return; socket.emit('player:answer', { text: guess.trim() }, (res: any) => { if (res?.ok) { setFeedback({ points: res.points, titleHit: res.titleHit, artistHit: res.artistHit }); sfx(res.points ? 'confirm' : 'error'); } }); }
   function doBuzz() { socket.emit('player:buzz', {}, (res: any) => { if (res?.winner) setBuzz('mine'); }); }
   function submitQuiz(i: number) {
     if (quizPick !== null || phase !== 'playing') return;
     setQuizPick(i);
     socket.emit('quiz:answer', { choice: i }, (res: any) => {
       if (res?.error) { setQuizPick(null); return; }
-      setFeedback({ correct: res.correct, points: res.points, answer: res.answer });
+      setFeedback({ correct: res.correct, points: res.points, answer: res.answer }); sfx(res.correct ? 'confirm' : 'error');
     });
   }
-  function submitBuzzerAnswer(e?: any) { e?.preventDefault(); if (!guess.trim()) return; socket.emit('buzzer:answer', { text: guess.trim() }, (res: any) => { if (res?.correct) setFeedback({ points: res.points, titleHit: true, artistHit: true }); else if (res?.ok) { setFeedback({ points: 0 }); setGuess(''); } }); }
+  function submitBuzzerAnswer(e?: any) { e?.preventDefault(); if (!guess.trim()) return; socket.emit('buzzer:answer', { text: guess.trim() }, (res: any) => { if (res?.correct) { setFeedback({ points: res.points, titleHit: true, artistHit: true }); sfx('confirm'); } else if (res?.ok) { setFeedback({ points: 0 }); setGuess(''); sfx('error'); } }); }
   function usePower() {
     socket.emit('player:power', {}, (res: any) => {
       if (res?.error) return setPowerMsg(res.error);
@@ -212,10 +226,11 @@ export default function Player() {
       else if (res?.type === 'momentum') setPowerMsg(`En feu ! +${fmtAud(res.detail?.amount || 0)} armé`);
       else if (res?.type === 'decay') setPowerMsg(`Armé : +${fmtAud(res.detail?.amount || 0)} auditeurs`);
       else setPowerMsg(`${res?.power || 'Pouvoir'} armé pour cette manche !`);
-      setPrepDone(true);
+      setPrepDone(true); sfx('scratch');
     });
   }
   function passPower() { socket.emit('player:ready', {}); setPrepDone(true); }
+  function sendReaction(id: number) { socket.emit('player:reaction', { id }); } // taunt affiché sur l'écran hôte (anti-spam serveur)
 
   function mjAward(pid: string, points = 10000) { socket.emit('mj:award', { playerId: pid, points }); }
   function mjReveal() { socket.emit('mj:reveal'); }
@@ -245,10 +260,6 @@ export default function Player() {
             <input className="field" style={{ marginTop: 6 }} value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Sacha" /></div>
           <button className="btn warm big" type="submit" disabled={!code.trim() || !name.trim()}>Entre dans le cercle →</button>
         </form>
-        <div className="row" style={{ gap: 10, marginTop: 2, width: '100%', maxWidth: 360 }}>
-          <button className="btn" style={{ flex: 1 }} onClick={() => setStep('roster')}>Le roster</button>
-          <button className="btn" style={{ flex: 1 }} onClick={() => setStep('trophies')}>Le palmarès</button>
-        </div>
       </div></div></>
     );
   }
@@ -355,21 +366,21 @@ export default function Player() {
 
         <div className="cs-rosterwrap">
           {[...CATEGORY_ORDER, ...Array.from(new Set(AVATARS.map((a) => a.cat))).filter((c) => !CATEGORY_ORDER.includes(c))].map((cat) => {
-            const members = AVATARS.filter((a) => a.cat === cat);
+            const members = AVATARS.filter((a) => a.cat === cat && !a.locked); // les déblocables ne sont PAS collés aux catégories
             if (!members.length) return null;
             return (
               <div className="cs-catgroup" key={cat}>
                 <div className={`cs-catlabel${isLegend(cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[cat] }}>{cat}</div>
                 <div className="cs-catrow">
                   {members.map((a) => {
-                    const lk = takenIds.has(a.id);
+                    const taken = takenIds.has(a.id);
                     return (
-                    <button type="button" key={a.id} className={`cs-cell ${avatarId === a.id ? 'sel' : ''} ${lk ? 'lock' : ''}`} disabled={lk} onClick={() => !lk && setAvatarId(a.id)}>
+                    <button type="button" key={a.id} className={`cs-cell ${avatarId === a.id ? 'sel' : ''} ${taken ? 'lock' : ''}`} disabled={taken} onClick={() => !taken && setAvatarId(a.id)}>
                       <div className="cs-thumb" style={{ ['--c' as any]: a.color, ...(a.crop?.z ? { ['--z' as any]: a.crop.z } : {}) }}>
                         <svg viewBox="0 0 200 240"><use href="#bust" /></svg>
                         {a.img && <img src={`/avatars/${a.id}.png`} alt="" onError={hideOnErr} />}
                         <div className="tg" />
-                        {lk && <span className="cs-taken">PRIS</span>}
+                        {taken && <span className="cs-taken">PRIS</span>}
                       </div>
                       <span className="cs-cn">{a.name}</span>
                     </button>
@@ -378,6 +389,33 @@ export default function Player() {
               </div>
             );
           })}
+          {/* section À PART : déblocables. Cachée au lancement de partie (join) ; visible en aperçu roster
+              (révélés) ou pour les rappeurs déjà débloqués. AUCUN ??? dans le flux de sélection. */}
+          {(() => {
+            const shown = AVATARS.filter((a) => a.locked && (browse || unlockedChars.includes(a.id)));
+            if (!shown.length) return null;
+            return (
+              <div className="cs-catgroup">
+                <div className="cs-catlabel" style={{ ['--cc' as any]: '#8a8f99' }}>{browse ? 'À débloquer' : 'Débloqués'}</div>
+                <div className="cs-catrow">
+                  {shown.map((a) => {
+                    const taken = takenIds.has(a.id);
+                    return (
+                      <button type="button" key={a.id} className={`cs-cell ${avatarId === a.id ? 'sel' : ''} ${taken ? 'lock' : ''}`} disabled={taken} onClick={() => !taken && setAvatarId(a.id)}>
+                        <div className="cs-thumb" style={{ ['--c' as any]: a.color, ...(a.crop?.z ? { ['--z' as any]: a.crop.z } : {}) }}>
+                          <svg viewBox="0 0 200 240"><use href="#bust" /></svg>
+                          {a.img && <img src={`/avatars/${a.id}.png`} alt="" onError={hideOnErr} />}
+                          <div className="tg" />
+                          {taken && <span className="cs-taken">PRIS</span>}
+                        </div>
+                        <span className="cs-cn">{a.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="cs-bottombar">
@@ -575,7 +613,11 @@ export default function Player() {
           <div className="gpill" style={{ fontSize: 16, padding: '12px 20px' }}>{myResult?.points ? `+${fmtAud(myResult.points)} auditeurs` : 'Zéro cette fois'}</div>
           {reveal.hideBoard
             ? <p className="feedback" style={{ color: 'var(--fluo)' }}>Position masquée — suspense jusqu'au bout !</p>
-            : <p className="muted">Ton total : <b style={{ color: 'var(--txt)' }}>{fmtAud(me?.score ?? 0)}</b> auditeurs · {myRank}<sup>{myRank === 1 ? 'er' : 'e'}</sup></p>}</div>
+            : <p className="muted">Ton total : <b style={{ color: 'var(--txt)' }}>{fmtAud(me?.score ?? 0)}</b> auditeurs · {myRank}<sup>{myRank === 1 ? 'er' : 'e'}</sup></p>}
+          {/* réactions/taunts — s'affichent sur l'écran hôte ; le joueur reste actif entre les manches */}
+          <div className="reactbar">{REACTIONS.map((r, i) => <button key={i} type="button" className="reactbtn" onClick={() => sendReaction(i)}><span className="re">{r.e}</span>{r.t}</button>)}</div>
+          {av && <p className="muted" style={{ fontSize: 12, margin: '2px 0 0' }}>Rappel de ton pouvoir : <b style={{ color: 'var(--ember)' }}>{av.power.name}</b></p>}
+          </div>
       )}
 
       {phase === 'final' && (() => {
@@ -601,6 +643,18 @@ export default function Player() {
                   <div className="aw-desc">{a.desc}</div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {newChars.length > 0 && (
+            <div className="glass pad" style={{ marginTop: 4, maxWidth: 380, borderColor: 'var(--fluo)', boxShadow: '0 0 24px -8px var(--fluo)' }}>
+              <div className="eyebrow" style={{ color: 'var(--fluo)' }}>🔓 Nouveau{newChars.length > 1 ? 'x' : ''} challenger{newChars.length > 1 ? 's' : ''} débloqué{newChars.length > 1 ? 's' : ''} !</div>
+              {newChars.map((id) => (
+                <div key={id} className="row" style={{ gap: 8, marginTop: 6, justifyContent: 'center' }}>
+                  <RMed id={id} size={30} /><b style={{ color: 'var(--txt)' }}>{avatarById(id)?.name}</b>
+                </div>
+              ))}
+              <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>Dispo dès ton prochain choix de rappeur.</p>
             </div>
           )}
 

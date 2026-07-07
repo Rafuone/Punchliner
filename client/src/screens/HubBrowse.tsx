@@ -7,7 +7,7 @@ import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegen
 
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
 const cats = [...CATEGORY_ORDER, ...Array.from(new Set(AVATARS.map((a) => a.cat))).filter((c) => !CATEGORY_ORDER.includes(c))];
-const ROSTER = cats.flatMap((cat) => AVATARS.filter((a) => a.cat === cat)); // à plat, rangé par catégorie
+const ROSTER = [...cats.flatMap((cat) => AVATARS.filter((a) => a.cat === cat && !a.locked)), ...AVATARS.filter((a) => a.locked)]; // par catégorie, puis les déblocables (révélés, à part) à la fin
 
 export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophies'; onClose: () => void }) {
   const [selId, setSelId] = useState(AVATARS[0].id);
@@ -178,12 +178,6 @@ export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophie
           <button key={a.id} className={`tvcell ${isLegend(a.cat) ? 'irid' : ''} ${selId === a.id ? 'sel' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[a.cat], ['--c' as any]: a.color }}
             onMouseEnter={() => setSelId(a.id)} onClick={() => setSelId(a.id)} title={a.name}>
             {a.img ? <img src={`/avatars/${a.id}.png`} alt={a.name} onError={hideOnErr} /> : <span className="ini">{initials(a.name)}</span>}
-          </button>
-        ))}
-        {LOCKED_SLOTS.map((s) => (
-          <button key={s.id} className={`tvcell lock ${selId === s.id ? 'sel' : ''}`} style={{ ['--cc' as any]: '#7d8590' }}
-            onMouseEnter={() => setSelId(s.id)} onClick={() => setSelId(s.id)} title="À débloquer">
-            <span className="q">?</span>
           </button>
         ))}
       </div>

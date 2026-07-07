@@ -1,0 +1,2393 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PUNCHLINR — SFX LAB</title>
+<style>
+  :root{
+    --bg:#0b0b0e; --panel:#15151b; --panel2:#1c1c24; --card:#17171e;
+    --ink:#f4f4f2; --mut:#9a9aa8; --line:#2b2b35; --fluo:#a6ff00;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg); color:var(--ink); font-family:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;
+       min-height:100vh; position:relative; overflow-x:hidden}
+  body::before{content:""; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  body::after{content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:radial-gradient(60vw 40vw at 12% -5%, rgba(166,255,0,.08), transparent 60%),radial-gradient(50vw 40vw at 100% 6%, rgba(255,59,107,.07), transparent 60%)}
+  .wrap{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:0 18px 150px}
+  header{display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:20px 0 6px}
+  .wm{font-family:'Haettenschweiler','Arial Narrow',Impact,sans-serif; font-weight:400; font-size:clamp(30px,5vw,44px);
+      letter-spacing:1.5px; line-height:.9; text-transform:uppercase; margin:0; color:#fff}
+  .wm .r{color:var(--fluo); text-shadow:0 0 18px rgba(166,255,0,.5)}
+  .wm .lab{display:inline-block; margin-left:8px; font-size:.4em; letter-spacing:5px; color:var(--bg);
+      background:var(--fluo); padding:2px 10px; transform:translateY(-.32em) skewX(-8deg)}
+  .sub{color:var(--mut); font-size:13.5px; margin:0; flex:1 1 320px; min-width:240px}
+  .sub b{color:var(--ink)}
+  .bar{position:sticky; top:0; z-index:20; margin:14px 0 6px; padding:10px 0;
+       background:linear-gradient(var(--bg) 70%, rgba(11,11,14,0)); display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+  .search{flex:1 1 260px; display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:9px 12px}
+  .search input{flex:1; background:transparent; border:0; color:var(--ink); font-size:15px; outline:none}
+  .search svg{opacity:.5; flex:none}
+  .search .cnt{flex:none; font-size:11.5px; font-weight:800; color:var(--fluo); letter-spacing:.3px; background:#0e0e13; border:1px solid var(--line); padding:3px 8px; border-radius:99px}
+  .chips{display:flex; gap:6px; flex-wrap:wrap}
+  .chip{cursor:pointer; user-select:none; border:1px solid var(--line); background:var(--panel); color:var(--mut); font-weight:700;
+        font-size:12.5px; letter-spacing:.4px; text-transform:uppercase; padding:8px 12px; border-radius:99px; transition:.15s}
+  .chip:hover{color:var(--ink); border-color:#3a3a46}
+  .chip.on{color:var(--bg); background:var(--c,#fff); border-color:transparent}
+  .toggle{display:flex; border:1px solid var(--line); border-radius:11px; overflow:hidden; background:var(--panel)}
+  .toggle button{cursor:pointer; border:0; background:transparent; color:var(--mut); font:inherit; font-weight:700; font-size:12.5px; text-transform:uppercase; letter-spacing:.4px; padding:9px 12px}
+  .toggle button.on{background:var(--fluo); color:var(--bg)}
+  .vol{display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:8px 12px}
+  .vol input{accent-color:var(--fluo); width:80px}
+  .vol span{font-size:11px; color:var(--mut); text-transform:uppercase; letter-spacing:.5px}
+  .stopall{cursor:pointer; border:1px solid var(--line); background:var(--panel); color:var(--mut); border-radius:11px; padding:9px 13px; font-weight:700; font-size:12.5px; text-transform:uppercase}
+  .stopall:hover{color:#fff; border-color:#ff3b6b}
+  section{margin:20px 0 6px}
+  .sec-head{display:flex; align-items:baseline; gap:12px; margin:0 2px 10px; border-left:5px solid var(--c); padding-left:12px}
+  .sec-head h2{font-family:'Haettenschweiler','Arial Narrow',Impact,sans-serif; font-weight:400; font-size:26px; letter-spacing:1px; text-transform:uppercase; margin:0; color:#fff}
+  .sec-head .d{color:var(--mut); font-size:12.5px}
+  .sec-head .n{margin-left:auto; color:var(--c); font-weight:800; font-size:12.5px; align-self:center}
+  .grid{display:grid; gap:8px}
+  #sections.grid-view .grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+  #sections.list-view .grid{grid-template-columns:1fr; gap:5px}
+  .card{position:relative; display:flex; align-items:center; gap:11px; text-align:left; background:var(--card);
+        border:1px solid var(--line); border-left:3px solid var(--c); border-radius:11px; padding:9px 12px; cursor:pointer; color:var(--ink);
+        transition:transform .12s, border-color .15s, background .15s; font:inherit}
+  .card:hover{border-color:var(--c); background:var(--panel2)}
+  #sections.grid-view .card:hover{transform:translateY(-2px)}
+  .card.playing{border-color:var(--c); background:var(--panel2); box-shadow:0 0 0 1px var(--c), 0 8px 26px -10px var(--c)}
+  .card.err{opacity:.45}
+  .knob{flex:none; width:34px; height:34px; border-radius:50%; background:#0e0e13; border:1px solid var(--line); display:grid; place-items:center; color:var(--c)}
+  .card:hover .knob{border-color:var(--c)}
+  .knob .tri{width:0;height:0;border-left:10px solid currentColor;border-top:6px solid transparent;border-bottom:6px solid transparent; margin-left:3px}
+  .eq{display:none; gap:2px; align-items:flex-end; height:15px}
+  .eq i{width:3px; background:var(--c); height:6px; border-radius:2px; animation:eq .8s ease-in-out infinite}
+  .eq i:nth-child(2){animation-delay:.12s} .eq i:nth-child(3){animation-delay:.25s} .eq i:nth-child(4){animation-delay:.37s} .eq i:nth-child(5){animation-delay:.05s}
+  @keyframes eq{0%,100%{height:5px}50%{height:15px}}
+  .card.playing .tri{display:none}
+  .card.playing .eq{display:flex}
+  .meta{display:flex; min-width:0; flex:1; flex-direction:column; gap:2px}
+  .nm{font-weight:600; font-size:14px; line-height:1.25; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical}
+  .mo{color:var(--mut); font-size:11px; text-transform:uppercase; letter-spacing:.3px}
+  .mo b{color:var(--c); font-weight:800}
+  #sections.list-view .meta{flex-direction:row; align-items:baseline; gap:12px}
+  #sections.list-view .nm{flex:1; -webkit-line-clamp:1}
+  #sections.list-view .mo{flex:none; text-align:right; max-width:46%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .pick{flex:none; width:26px; height:26px; border-radius:7px; border:1px solid var(--line); background:#0e0e13; color:var(--mut); display:grid; place-items:center; font-size:16px; line-height:1; cursor:pointer; transition:.15s}
+  #sections.grid-view .pick{position:absolute; top:8px; right:8px; width:24px; height:24px}
+  .pick:hover{color:#fff; border-color:var(--c)}
+  .card.picked{border-left-color:var(--fluo)}
+  .card.picked .pick{background:var(--fluo); color:#0b0b0e; border-color:var(--fluo)}
+  .empty{color:var(--mut); padding:34px 4px; text-align:center; display:none}
+  .dock{position:fixed; left:0; right:0; bottom:0; z-index:40; background:linear-gradient(#12121a,#0c0c11); border-top:1px solid var(--line); box-shadow:0 -12px 40px rgba(0,0,0,.5)}
+  .dock-bar{max-width:1180px; margin:0 auto; padding:11px 18px; display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+  .dock-bar .t{font-family:'Haettenschweiler','Arial Narrow',Impact,sans-serif; font-size:21px; letter-spacing:1px; text-transform:uppercase}
+  .dock-bar .t b{color:var(--fluo)}
+  .dock-bar .sp{flex:1}
+  .btn{cursor:pointer; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:10px; padding:9px 14px; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:.4px}
+  .btn:hover{border-color:var(--fluo)}
+  .btn.ghost{background:transparent; color:var(--mut)}
+  .dock-list{max-width:1180px; margin:0 auto; padding:0 18px; max-height:0; overflow:hidden; transition:max-height .28s ease}
+  .dock.open .dock-list{max-height:44vh; overflow:auto; padding-bottom:14px}
+  .pill{display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; margin:8px 0; background:var(--card)}
+  .pill .c{width:8px; height:8px; border-radius:50%; background:var(--c); flex:none}
+  .pill .pn{font-weight:600; font-size:14px}
+  .pill .pm{color:var(--mut); font-size:12px}
+  .pill .mini{margin-left:auto; display:flex; gap:6px}
+  .pill .mini button{cursor:pointer; background:#0e0e13; border:1px solid var(--line); color:var(--mut); border-radius:7px; padding:5px 9px; font-size:12px}
+  .pill .mini button:hover{color:#fff}
+  textarea.exp{width:100%; height:150px; margin-top:10px; background:#0e0e13; color:var(--fluo); border:1px solid var(--line); border-radius:10px; padding:10px; font-family:ui-monospace,Consolas,monospace; font-size:12px}
+  .foot{color:var(--mut); font-size:12px; margin-top:24px; line-height:1.6}
+  .foot a{color:var(--fluo)}
+  kbd{background:#0e0e13;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;font-size:11px;font-family:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 class="wm">PUNCHLIN<span class="r">R</span><span class="lab">SFX LAB</span></h1>
+    <p class="sub">Palette <b>hip-hop</b> pour choisir les sons du jeu — scratches, 808, air horns, tags, boom-bap. Clique une ligne pour écouter, <b>＋</b> pour garder. Le champ du haut est un <b>filtre</b> (vide = tout).</p>
+  </header>
+
+  <div class="bar">
+    <label class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="q" type="search" placeholder="Filtrer (808, scratch, horn, riser, tag…) — vide = tout" autocomplete="off">
+      <span class="cnt" id="cnt"></span>
+    </label>
+    <div class="chips" id="chips"></div>
+    <div class="toggle" id="viewToggle">
+      <button data-v="list" class="on">☰ Liste</button>
+      <button data-v="grid">▦ Grille</button>
+    </div>
+    <div class="vol"><span>Vol</span><input id="vol" type="range" min="0" max="100" value="80"></div>
+    <div class="stopall" id="stop">■ Stop</div>
+  </div>
+
+  <div id="sections" class="list-view"></div>
+  <div class="empty" id="empty">Aucun son ne correspond à ce filtre. Efface le champ pour tout revoir.</div>
+
+  <p class="foot">
+    Sons via <a href="https://freesound.org" target="_blank" rel="noopener">Freesound</a> (licences Creative Commons — crédit auteur indiqué par son, dans l'export). L'écoute utilise les previews Freesound (connexion requise).
+    On vérifiera la licence exacte des sons retenus avant de les intégrer au jeu.
+  </p>
+</div>
+
+<div class="dock" id="dock">
+  <div class="dock-bar">
+    <span class="t">MA <b>SÉLECTION</b> — <span id="count">0</span> son<span id="plural"></span></span>
+    <span class="sp"></span>
+    <button class="btn ghost" id="toggleDock">Voir ▲</button>
+    <button class="btn" id="exportBtn">Exporter</button>
+    <button class="btn ghost" id="clearBtn">Vider</button>
+  </div>
+  <div class="dock-list" id="dockList"></div>
+</div>
+
+<script>
+const SFX_DATA = [
+    {
+        "name":  "Dj Puzzle Scratch 01",
+        "url":  "https://cdn.freesound.org/previews/661/661404_14498354-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Scratch DJ",
+        "by":  "SaschaRettberg",
+        "page":  "https://freesound.org/s/661404/",
+        "dur":  5.4
+    },
+    {
+        "name":  "Scratch Sample",
+        "url":  "https://cdn.freesound.org/previews/151/151822_1587289-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Scratch DJ",
+        "by":  "templeofhades",
+        "page":  "https://freesound.org/s/151822/",
+        "dur":  2
+    },
+    {
+        "name":  "SCRATCH TRANSFORM 008",
+        "url":  "https://cdn.freesound.org/previews/454/454737_7005313-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Scratch DJ",
+        "by":  "G_M_D_THREE",
+        "page":  "https://freesound.org/s/454737/",
+        "dur":  2.8
+    },
+    {
+        "name":  "DJ Scratch 2",
+        "url":  "https://cdn.freesound.org/previews/527/527375_3364318-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Scratch DJ",
+        "by":  "Trapmusicallstar",
+        "page":  "https://freesound.org/s/527375/",
+        "dur":  0.2
+    },
+    {
+        "name":  "scratch",
+        "url":  "https://cdn.freesound.org/previews/58/58280_169613-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Scratch DJ",
+        "by":  "feveran",
+        "page":  "https://freesound.org/s/58280/",
+        "dur":  1
+    },
+    {
+        "name":  "scratch2",
+        "url":  "https://cdn.freesound.org/previews/58/58281_169613-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Scratch DJ",
+        "by":  "feveran",
+        "page":  "https://freesound.org/s/58281/",
+        "dur":  0.7
+    },
+    {
+        "name":  "Noise Scratch",
+        "url":  "https://cdn.freesound.org/previews/662/662372_14498354-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Scratch DJ",
+        "by":  "SaschaRettberg",
+        "page":  "https://freesound.org/s/662372/",
+        "dur":  5.3
+    },
+    {
+        "name":  "scratch 345 beat looped",
+        "url":  "https://cdn.freesound.org/previews/32/32254_128404-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Scratch DJ",
+        "by":  "junggle",
+        "page":  "https://freesound.org/s/32254/",
+        "dur":  2.4
+    },
+    {
+        "name":  "Vinyl scratch",
+        "url":  "https://cdn.freesound.org/previews/257/257777_4157918-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Vinyl scratch",
+        "by":  "xtrgamr",
+        "page":  "https://freesound.org/s/257777/",
+        "dur":  0.5
+    },
+    {
+        "name":  "Scratch 4x",
+        "url":  "https://cdn.freesound.org/previews/610/610676_8236910-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Vinyl scratch",
+        "by":  "LiftPizzas",
+        "page":  "https://freesound.org/s/610676/",
+        "dur":  3.7
+    },
+    {
+        "name":  "Vinyl Scratch",
+        "url":  "https://cdn.freesound.org/previews/668/668909_7817976-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Vinyl scratch",
+        "by":  "ChuckChuckGoof",
+        "page":  "https://freesound.org/s/668909/",
+        "dur":  0.7
+    },
+    {
+        "name":  "Vinyl Scratch",
+        "url":  "https://cdn.freesound.org/previews/647/647583_5069064-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Vinyl scratch",
+        "by":  "Espinho123",
+        "page":  "https://freesound.org/s/647583/",
+        "dur":  0.6
+    },
+    {
+        "name":  "Record Scratch #5",
+        "url":  "https://cdn.freesound.org/previews/431/431780_817038-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Vinyl scratch",
+        "by":  "musicvision31",
+        "page":  "https://freesound.org/s/431780/",
+        "dur":  1.9
+    },
+    {
+        "name":  "destiny scratch loop",
+        "url":  "https://cdn.freesound.org/previews/161/161481_2908654-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Vinyl scratch",
+        "by":  "phluidbox",
+        "page":  "https://freesound.org/s/161481/",
+        "dur":  1.8
+    },
+    {
+        "name":  "vinylstuiter",
+        "url":  "https://cdn.freesound.org/previews/439/439933_6309396-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Vinyl scratch",
+        "by":  "ratsamples",
+        "page":  "https://freesound.org/s/439933/",
+        "dur":  1.2
+    },
+    {
+        "name":  "13.record scratch",
+        "url":  "https://cdn.freesound.org/previews/655/655675_12596869-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Vinyl scratch",
+        "by":  "always_Hungry2110",
+        "page":  "https://freesound.org/s/655675/",
+        "dur":  6
+    },
+    {
+        "name":  "COMPhono-Blue Snowball Microphone, CU Record, Scratch Nicholas Judy TDC",
+        "url":  "https://cdn.freesound.org/previews/817/817820_6951162-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Record scratch",
+        "by":  "designerschoice",
+        "page":  "https://freesound.org/s/817820/",
+        "dur":  0.8
+    },
+    {
+        "name":  "Scratch",
+        "url":  "https://cdn.freesound.org/previews/274/274129_3874107-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Record scratch",
+        "by":  "jameswrowles",
+        "page":  "https://freesound.org/s/274129/",
+        "dur":  0.4
+    },
+    {
+        "name":  "Clean Record Scratch",
+        "url":  "https://cdn.freesound.org/previews/269/269476_4486188-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Record scratch",
+        "by":  "kwahmah_02",
+        "page":  "https://freesound.org/s/269476/",
+        "dur":  0.7
+    },
+    {
+        "name":  "record scratch",
+        "url":  "https://cdn.freesound.org/previews/71/71853_1062668-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Record scratch",
+        "by":  "ludvique",
+        "page":  "https://freesound.org/s/71853/",
+        "dur":  0.4
+    },
+    {
+        "name":  "record scratch",
+        "url":  "https://cdn.freesound.org/previews/43/43404_465423-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Record scratch",
+        "by":  "simkiott",
+        "page":  "https://freesound.org/s/43404/",
+        "dur":  1.6
+    },
+    {
+        "name":  "record scratch short",
+        "url":  "https://cdn.freesound.org/previews/29/29938_6281-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Record scratch",
+        "by":  "Halleck",
+        "page":  "https://freesound.org/s/29938/",
+        "dur":  1.9
+    },
+    {
+        "name":  "Scratch Speed",
+        "url":  "https://cdn.freesound.org/previews/160/160909_2900466-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Record scratch",
+        "by":  "Racche",
+        "page":  "https://freesound.org/s/160909/",
+        "dur":  0.4
+    },
+    {
+        "name":  "Cue Scratch",
+        "url":  "https://cdn.freesound.org/previews/160/160907_2900466-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Record scratch",
+        "by":  "Racche",
+        "page":  "https://freesound.org/s/160907/",
+        "dur":  0.7
+    },
+    {
+        "name":  "Turntable screaming sound",
+        "url":  "https://cdn.freesound.org/previews/752/752385_13999124-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Turntable",
+        "by":  "Mastersoundboy2005",
+        "page":  "https://freesound.org/s/752385/",
+        "dur":  3.5
+    },
+    {
+        "name":  "Turntable Rewind",
+        "url":  "https://cdn.freesound.org/previews/753/753665_15333658-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Turntable",
+        "by":  "hydroxian",
+        "page":  "https://freesound.org/s/753665/",
+        "dur":  2.6
+    },
+    {
+        "name":  "scratchy (turntable-like)",
+        "url":  "https://cdn.freesound.org/previews/250/250159_4486188-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Turntable",
+        "by":  "kwahmah_02",
+        "page":  "https://freesound.org/s/250159/",
+        "dur":  4
+    },
+    {
+        "name":  "t2tt Turntable Piano 05",
+        "url":  "https://cdn.freesound.org/previews/38/38056_265625-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Turntable",
+        "by":  "Experimental Illness",
+        "page":  "https://freesound.org/s/38056/",
+        "dur":  3.4
+    },
+    {
+        "name":  "recordstartbeeyotchrewax",
+        "url":  "https://cdn.freesound.org/previews/184/184264_4948-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Turntable",
+        "by":  "NoiseCollector",
+        "page":  "https://freesound.org/s/184264/",
+        "dur":  6
+    },
+    {
+        "name":  "Intro Scratch",
+        "url":  "https://cdn.freesound.org/previews/246/246495_3735801-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Turntable",
+        "by":  "rivernile7",
+        "page":  "https://freesound.org/s/246495/",
+        "dur":  0.4
+    },
+    {
+        "name":  "Slowdown sctratch",
+        "url":  "https://cdn.freesound.org/previews/246/246494_3735801-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Turntable",
+        "by":  "rivernile7",
+        "page":  "https://freesound.org/s/246494/",
+        "dur":  1.5
+    },
+    {
+        "name":  "Brakes On 1",
+        "url":  "https://cdn.freesound.org/previews/145/145689_2583849-lq.mp3",
+        "section":  "scratch",
+        "moment":  "Turntable",
+        "by":  "LukeSharples",
+        "page":  "https://freesound.org/s/145689/",
+        "dur":  0.7
+    },
+    {
+        "name":  "KickAC",
+        "url":  "https://cdn.freesound.org/previews/0/808_797-lq.mp3",
+        "section":  "bass",
+        "moment":  "808",
+        "by":  "bdu",
+        "page":  "https://freesound.org/s/808/",
+        "dur":  0.2
+    },
+    {
+        "name":  "808cym2",
+        "url":  "https://cdn.freesound.org/previews/158/158680_177850-lq.mp3",
+        "section":  "bass",
+        "moment":  "808",
+        "by":  "stomachache",
+        "page":  "https://freesound.org/s/158680/",
+        "dur":  1.9
+    },
+    {
+        "name":  "FD808A Tom mid",
+        "url":  "https://cdn.freesound.org/previews/455/455644_3677139-lq.mp3",
+        "section":  "bass",
+        "moment":  "808",
+        "by":  "Uberproduktion",
+        "page":  "https://freesound.org/s/455644/",
+        "dur":  1
+    },
+    {
+        "name":  "808 9",
+        "url":  "https://cdn.freesound.org/previews/482/482077_9637845-lq.mp3",
+        "section":  "bass",
+        "moment":  "808",
+        "by":  "reathance",
+        "page":  "https://freesound.org/s/482077/",
+        "dur":  3.2
+    },
+    {
+        "name":  "Abletunes TSD 808 48 A",
+        "url":  "https://cdn.freesound.org/previews/420/420707_6034830-lq.mp3",
+        "section":  "bass",
+        "moment":  "808",
+        "by":  "abletunes",
+        "page":  "https://freesound.org/s/420707/",
+        "dur":  3.5
+    },
+    {
+        "name":  "void - 808",
+        "url":  "https://cdn.freesound.org/previews/516/516736_5582978-lq.mp3",
+        "section":  "bass",
+        "moment":  "808",
+        "by":  "rorymceachan",
+        "page":  "https://freesound.org/s/516736/",
+        "dur":  1.7
+    },
+    {
+        "name":  "retox unit 808s",
+        "url":  "https://cdn.freesound.org/previews/793/793393_4981184-lq.mp3",
+        "section":  "bass",
+        "moment":  "808",
+        "by":  "Dankesthours182",
+        "page":  "https://freesound.org/s/793393/",
+        "dur":  7.7
+    },
+    {
+        "name":  "Heavy bass - 808 loops",
+        "url":  "https://cdn.freesound.org/previews/474/474826_10098945-lq.mp3",
+        "section":  "bass",
+        "moment":  "808",
+        "by":  "J3rryz808",
+        "page":  "https://freesound.org/s/474826/",
+        "dur":  6.5
+    },
+    {
+        "name":  "808 jungle bass",
+        "url":  "https://cdn.freesound.org/previews/734/734852_15954350-lq.mp3",
+        "section":  "bass",
+        "moment":  "808 bass",
+        "by":  "bartsimp1",
+        "page":  "https://freesound.org/s/734852/",
+        "dur":  2.2
+    },
+    {
+        "name":  "808 Bass Drum Behringer RD-8 Samples by Ama Zeus 2022",
+        "url":  "https://cdn.freesound.org/previews/648/648317_7724104-lq.mp3",
+        "section":  "bass",
+        "moment":  "808 bass",
+        "by":  "AmaZeuSamples",
+        "page":  "https://freesound.org/s/648317/",
+        "dur":  1.1
+    },
+    {
+        "name":  "808bass",
+        "url":  "https://cdn.freesound.org/previews/376/376206_2146247-lq.mp3",
+        "section":  "bass",
+        "moment":  "808 bass",
+        "by":  "infestedpasta",
+        "page":  "https://freesound.org/s/376206/",
+        "dur":  5.4
+    },
+    {
+        "name":  "808 Bass (D)",
+        "url":  "https://cdn.freesound.org/previews/506/506950_11052640-lq.mp3",
+        "section":  "bass",
+        "moment":  "808 bass",
+        "by":  "Xscinix",
+        "page":  "https://freesound.org/s/506950/",
+        "dur":  1.1
+    },
+    {
+        "name":  "100 Monster 808 Sauce - Alien 808",
+        "url":  "https://cdn.freesound.org/previews/608/608613_1603602-lq.mp3",
+        "section":  "bass",
+        "moment":  "808 bass",
+        "by":  "gunnbladez",
+        "page":  "https://freesound.org/s/608613/",
+        "dur":  2.4
+    },
+    {
+        "name":  "break beat 126 808 boom",
+        "url":  "https://cdn.freesound.org/previews/160/160354_33044-lq.mp3",
+        "section":  "bass",
+        "moment":  "808 bass",
+        "by":  "Snapper4298",
+        "page":  "https://freesound.org/s/160354/",
+        "dur":  1.9
+    },
+    {
+        "name":  "808 distorted",
+        "url":  "https://cdn.freesound.org/previews/403/403342_6260939-lq.mp3",
+        "section":  "bass",
+        "moment":  "808 bass",
+        "by":  "emceeciscokid",
+        "page":  "https://freesound.org/s/403342/",
+        "dur":  3.6
+    },
+    {
+        "name":  "LCU 808 11 C#",
+        "url":  "https://cdn.freesound.org/previews/484/484647_10392137-lq.mp3",
+        "section":  "bass",
+        "moment":  "808 bass",
+        "by":  "Loop_Cult",
+        "page":  "https://freesound.org/s/484647/",
+        "dur":  1.7
+    },
+    {
+        "name":  "Color Bass 1",
+        "url":  "https://cdn.freesound.org/previews/727/727610_4508519-lq.mp3",
+        "section":  "bass",
+        "moment":  "Bass drop",
+        "by":  "staticpony1",
+        "page":  "https://freesound.org/s/727610/",
+        "dur":  3.9
+    },
+    {
+        "name":  "bass synth oneshot 98 by CVLTIV8R",
+        "url":  "https://cdn.freesound.org/previews/797/797557_2520418-lq.mp3",
+        "section":  "bass",
+        "moment":  "Bass drop",
+        "by":  "CVLTIV8R",
+        "page":  "https://freesound.org/s/797557/",
+        "dur":  5.3
+    },
+    {
+        "name":  "bass drop",
+        "url":  "https://cdn.freesound.org/previews/503/503774_9637845-lq.mp3",
+        "section":  "bass",
+        "moment":  "Bass drop",
+        "by":  "reathance",
+        "page":  "https://freesound.org/s/503774/",
+        "dur":  4.7
+    },
+    {
+        "name":  "BEAST BASS DROP 2",
+        "url":  "https://cdn.freesound.org/previews/78/78472_1168121-lq.mp3",
+        "section":  "bass",
+        "moment":  "Bass drop",
+        "by":  "xBETRAYLx",
+        "page":  "https://freesound.org/s/78472/",
+        "dur":  5.2
+    },
+    {
+        "name":  "Bass Drop",
+        "url":  "https://cdn.freesound.org/previews/394/394285_7452334-lq.mp3",
+        "section":  "bass",
+        "moment":  "Bass drop",
+        "by":  "marc_drcksn",
+        "page":  "https://freesound.org/s/394285/",
+        "dur":  6
+    },
+    {
+        "name":  "GNP Bass Drum - Drop The Soap",
+        "url":  "https://cdn.freesound.org/previews/49/49747_4649-lq.mp3",
+        "section":  "bass",
+        "moment":  "Bass drop",
+        "by":  "AaronGNP",
+        "page":  "https://freesound.org/s/49747/",
+        "dur":  2.8
+    },
+    {
+        "name":  "Bass Drop",
+        "url":  "https://cdn.freesound.org/previews/212/212768_71257-lq.mp3",
+        "section":  "bass",
+        "moment":  "Bass drop",
+        "by":  "qubodup",
+        "page":  "https://freesound.org/s/212768/",
+        "dur":  4.8
+    },
+    {
+        "name":  "Bass Synth/Drop",
+        "url":  "https://cdn.freesound.org/previews/221/221647_3146242-lq.mp3",
+        "section":  "bass",
+        "moment":  "Bass drop",
+        "by":  "BRYANSMOSH",
+        "page":  "https://freesound.org/s/221647/",
+        "dur":  4.3
+    },
+    {
+        "name":  "snare trap",
+        "url":  "https://cdn.freesound.org/previews/278/278983_4351954-lq.mp3",
+        "section":  "bass",
+        "moment":  "Trap 808",
+        "by":  "dflee4",
+        "page":  "https://freesound.org/s/278983/",
+        "dur":  2
+    },
+    {
+        "name":  "Sorrow State zay 808",
+        "url":  "https://cdn.freesound.org/previews/514/514880_3173681-lq.mp3",
+        "section":  "bass",
+        "moment":  "Trap 808",
+        "by":  "tkky",
+        "page":  "https://freesound.org/s/514880/",
+        "dur":  2.7
+    },
+    {
+        "name":  "808 Kicks 08",
+        "url":  "https://cdn.freesound.org/previews/794/794573_3905081-lq.mp3",
+        "section":  "bass",
+        "moment":  "Trap 808",
+        "by":  "jalastram",
+        "page":  "https://freesound.org/s/794573/",
+        "dur":  1.2
+    },
+    {
+        "name":  "LCHZ 140 Bass 06",
+        "url":  "https://cdn.freesound.org/previews/484/484632_10392137-lq.mp3",
+        "section":  "bass",
+        "moment":  "Trap 808",
+        "by":  "Loop_Cult",
+        "page":  "https://freesound.org/s/484632/",
+        "dur":  6.9
+    },
+    {
+        "name":  "808 (16)",
+        "url":  "https://cdn.freesound.org/previews/542/542824_6414380-lq.mp3",
+        "section":  "bass",
+        "moment":  "Trap 808",
+        "by":  "Rippleys_Circus",
+        "page":  "https://freesound.org/s/542824/",
+        "dur":  3.1
+    },
+    {
+        "name":  "trap-drum-808-snare",
+        "url":  "https://cdn.freesound.org/previews/710/710348_15403065-lq.mp3",
+        "section":  "bass",
+        "moment":  "Trap 808",
+        "by":  "XxOPMCxX",
+        "page":  "https://freesound.org/s/710348/",
+        "dur":  0.1
+    },
+    {
+        "name":  "808 Deep kick",
+        "url":  "https://cdn.freesound.org/previews/208/208447_1137749-lq.mp3",
+        "section":  "bass",
+        "moment":  "Trap 808",
+        "by":  "EKVelika",
+        "page":  "https://freesound.org/s/208447/",
+        "dur":  1.3
+    },
+    {
+        "name":  "trap loop",
+        "url":  "https://cdn.freesound.org/previews/235/235430_3966588-lq.mp3",
+        "section":  "bass",
+        "moment":  "Trap 808",
+        "by":  "TomGoulooze",
+        "page":  "https://freesound.org/s/235430/",
+        "dur":  6
+    },
+    {
+        "name":  "Industrial Air Horn",
+        "url":  "https://cdn.freesound.org/previews/131/131930_1542102-lq.mp3",
+        "section":  "horn",
+        "moment":  "Air horn",
+        "by":  "mcpable",
+        "page":  "https://freesound.org/s/131930/",
+        "dur":  2.6
+    },
+    {
+        "name":  "Fog Horn",
+        "url":  "https://cdn.freesound.org/previews/94/94678_1386366-lq.mp3",
+        "section":  "horn",
+        "moment":  "Air horn",
+        "by":  "CGEffex",
+        "page":  "https://freesound.org/s/94678/",
+        "dur":  6.4
+    },
+    {
+        "name":  "blow yo adam f king horns!",
+        "url":  "https://cdn.freesound.org/previews/705/705658_2305630-lq.mp3",
+        "section":  "horn",
+        "moment":  "Air horn",
+        "by":  "laffik",
+        "page":  "https://freesound.org/s/705658/",
+        "dur":  7.3
+    },
+    {
+        "name":  "brass horn",
+        "url":  "https://cdn.freesound.org/previews/186/186645_3457072-lq.mp3",
+        "section":  "horn",
+        "moment":  "Air horn",
+        "by":  "mmleys",
+        "page":  "https://freesound.org/s/186645/",
+        "dur":  4.1
+    },
+    {
+        "name":  "horn bike",
+        "url":  "https://cdn.freesound.org/previews/774/774253_16682330-lq.mp3",
+        "section":  "horn",
+        "moment":  "Air horn",
+        "by":  "loganzsound",
+        "page":  "https://freesound.org/s/774253/",
+        "dur":  1
+    },
+    {
+        "name":  "horn 02",
+        "url":  "https://cdn.freesound.org/previews/324/324275_1134415-lq.mp3",
+        "section":  "horn",
+        "moment":  "Air horn",
+        "by":  "Kostrava",
+        "page":  "https://freesound.org/s/324275/",
+        "dur":  5.5
+    },
+    {
+        "name":  "BlowingOfHorn",
+        "url":  "https://cdn.freesound.org/previews/324/324730_5586347-lq.mp3",
+        "section":  "horn",
+        "moment":  "Air horn",
+        "by":  "150112",
+        "page":  "https://freesound.org/s/324730/",
+        "dur":  3.6
+    },
+    {
+        "name":  "Airhorn",
+        "url":  "https://cdn.freesound.org/previews/414/414208_6938106-lq.mp3",
+        "section":  "horn",
+        "moment":  "Air horn",
+        "by":  "jacksonacademyashmore",
+        "page":  "https://freesound.org/s/414208/",
+        "dur":  1.6
+    },
+    {
+        "name":  "Free Dancehall Air Horn Sound Effect (EFX)",
+        "url":  "https://cdn.freesound.org/previews/557/557337_12165774-lq.mp3",
+        "section":  "horn",
+        "moment":  "DJ horn",
+        "by":  "neilyhype",
+        "page":  "https://freesound.org/s/557337/",
+        "dur":  5.1
+    },
+    {
+        "name":  "analog bass 04",
+        "url":  "https://cdn.freesound.org/previews/31/31248_128404-lq.mp3",
+        "section":  "horn",
+        "moment":  "DJ horn",
+        "by":  "junggle",
+        "page":  "https://freesound.org/s/31248/",
+        "dur":  2.6
+    },
+    {
+        "name":  "Car Horn",
+        "url":  "https://cdn.freesound.org/previews/493/493751_10331838-lq.mp3",
+        "section":  "horn",
+        "moment":  "DJ horn",
+        "by":  "dj997",
+        "page":  "https://freesound.org/s/493751/",
+        "dur":  3.8
+    },
+    {
+        "name":  "VEHSirn Police Car Siren.Go Under SFX EM",
+        "url":  "https://cdn.freesound.org/previews/692/692523_5828667-lq.mp3",
+        "section":  "horn",
+        "moment":  "Sirene",
+        "by":  "newlocknew",
+        "page":  "https://freesound.org/s/692523/",
+        "dur":  8.8
+    },
+    {
+        "name":  "dub siren lfo square short 9",
+        "url":  "https://cdn.freesound.org/previews/716/716153_6295857-lq.mp3",
+        "section":  "horn",
+        "moment":  "Sirene",
+        "by":  "leonseptavaux",
+        "page":  "https://freesound.org/s/716153/",
+        "dur":  0.8
+    },
+    {
+        "name":  "High-Low Siren",
+        "url":  "https://cdn.freesound.org/previews/521/521779_8472935-lq.mp3",
+        "section":  "horn",
+        "moment":  "Sirene",
+        "by":  "se2001",
+        "page":  "https://freesound.org/s/521779/",
+        "dur":  8.2
+    },
+    {
+        "name":  "Electronic Siren",
+        "url":  "https://cdn.freesound.org/previews/361/361491_4930962-lq.mp3",
+        "section":  "horn",
+        "moment":  "Sirene",
+        "by":  "FartBiscuit1700",
+        "page":  "https://freesound.org/s/361491/",
+        "dur":  5.1
+    },
+    {
+        "name":  "Facility Breach Siren 1",
+        "url":  "https://cdn.freesound.org/previews/539/539350_10403565-lq.mp3",
+        "section":  "horn",
+        "moment":  "Sirene",
+        "by":  "FiveBrosStopMosYT",
+        "page":  "https://freesound.org/s/539350/",
+        "dur":  4.9
+    },
+    {
+        "name":  "Dirty Siren",
+        "url":  "https://cdn.freesound.org/previews/511/511597_9262049-lq.mp3",
+        "section":  "horn",
+        "moment":  "Sirene",
+        "by":  "robpnicholson",
+        "page":  "https://freesound.org/s/511597/",
+        "dur":  4.4
+    },
+    {
+        "name":  "WIM sirene FlowerEdit!",
+        "url":  "https://cdn.freesound.org/previews/34/34280_199517-lq.mp3",
+        "section":  "horn",
+        "moment":  "Sirene",
+        "by":  "hello_flowers",
+        "page":  "https://freesound.org/s/34280/",
+        "dur":  8.5
+    },
+    {
+        "name":  "Doppler siren",
+        "url":  "https://cdn.freesound.org/previews/31/31920_35187-lq.mp3",
+        "section":  "horn",
+        "moment":  "Sirene",
+        "by":  "jobro",
+        "page":  "https://freesound.org/s/31920/",
+        "dur":  7.3
+    },
+    {
+        "name":  "Peanut Butter Hi Hat Roll 3",
+        "url":  "https://cdn.freesound.org/previews/646/646149_11532701-lq.mp3",
+        "section":  "trans",
+        "moment":  "Hi-hat roll",
+        "by":  "deadrobotmusic",
+        "page":  "https://freesound.org/s/646149/",
+        "dur":  0.2
+    },
+    {
+        "name":  "ht roll",
+        "url":  "https://cdn.freesound.org/previews/335/335777_5946936-lq.mp3",
+        "section":  "trans",
+        "moment":  "Hi-hat roll",
+        "by":  "ipaghost",
+        "page":  "https://freesound.org/s/335777/",
+        "dur":  0.2
+    },
+    {
+        "name":  "Reverse Roll 4",
+        "url":  "https://cdn.freesound.org/previews/26/26892_113878-lq.mp3",
+        "section":  "trans",
+        "moment":  "Hi-hat roll",
+        "by":  "VEXST",
+        "page":  "https://freesound.org/s/26892/",
+        "dur":  0.2
+    },
+    {
+        "name":  "MSfxP6 - 161 3 - Drum Loop (BPM 90) - (FS# 66315-22126-506242-334142)",
+        "url":  "https://cdn.freesound.org/previews/507/507726_9497060-lq.mp3",
+        "section":  "trans",
+        "moment":  "Hi-hat roll",
+        "by":  "Erokia",
+        "page":  "https://freesound.org/s/507726/",
+        "dur":  5.3
+    },
+    {
+        "name":  "kick rolling hat",
+        "url":  "https://cdn.freesound.org/previews/183/183460_33044-lq.mp3",
+        "section":  "trans",
+        "moment":  "Hi-hat roll",
+        "by":  "Snapper4298",
+        "page":  "https://freesound.org/s/183460/",
+        "dur":  0.1
+    },
+    {
+        "name":  "HAT roll TS1",
+        "url":  "https://cdn.freesound.org/previews/554/554514_10399641-lq.mp3",
+        "section":  "trans",
+        "moment":  "Hi-hat roll",
+        "by":  "truscience",
+        "page":  "https://freesound.org/s/554514/",
+        "dur":  0.3
+    },
+    {
+        "name":  "Trash Can Roll",
+        "url":  "https://cdn.freesound.org/previews/323/323410_5375051-lq.mp3",
+        "section":  "trans",
+        "moment":  "Hi-hat roll",
+        "by":  "lovesbody",
+        "page":  "https://freesound.org/s/323410/",
+        "dur":  3
+    },
+    {
+        "name":  "DSGNRise Matrix Style Rise Transition 2-1 EM",
+        "url":  "https://cdn.freesound.org/previews/856/856363_5828667-lq.mp3",
+        "section":  "trans",
+        "moment":  "Riser",
+        "by":  "newlocknew",
+        "page":  "https://freesound.org/s/856363/",
+        "dur":  5.2
+    },
+    {
+        "name":  "RISER SWOOSH",
+        "url":  "https://cdn.freesound.org/previews/837/837887_2403755-lq.mp3",
+        "section":  "trans",
+        "moment":  "Riser",
+        "by":  "johnjohnfm",
+        "page":  "https://freesound.org/s/837887/",
+        "dur":  7.5
+    },
+    {
+        "name":  "Sub bass riser",
+        "url":  "https://cdn.freesound.org/previews/436/436581_8941135-lq.mp3",
+        "section":  "trans",
+        "moment":  "Riser",
+        "by":  "MarwanAntonios",
+        "page":  "https://freesound.org/s/436581/",
+        "dur":  5.5
+    },
+    {
+        "name":  "Riser Hit sfx 121",
+        "url":  "https://cdn.freesound.org/previews/824/824937_8698658-lq.mp3",
+        "section":  "trans",
+        "moment":  "Riser",
+        "by":  "AudioPapkin",
+        "page":  "https://freesound.org/s/824937/",
+        "dur":  11
+    },
+    {
+        "name":  "Riser Hit sfx 119",
+        "url":  "https://cdn.freesound.org/previews/822/822419_8698658-lq.mp3",
+        "section":  "trans",
+        "moment":  "Riser",
+        "by":  "AudioPapkin",
+        "page":  "https://freesound.org/s/822419/",
+        "dur":  10.3
+    },
+    {
+        "name":  "CLASSIC RISER BOUNCE",
+        "url":  "https://cdn.freesound.org/previews/832/832275_2403755-lq.mp3",
+        "section":  "trans",
+        "moment":  "Riser",
+        "by":  "johnjohnfm",
+        "page":  "https://freesound.org/s/832275/",
+        "dur":  9
+    },
+    {
+        "name":  "Long bright riser",
+        "url":  "https://cdn.freesound.org/previews/789/789100_13504080-lq.mp3",
+        "section":  "trans",
+        "moment":  "Riser",
+        "by":  "xkeril",
+        "page":  "https://freesound.org/s/789100/",
+        "dur":  12
+    },
+    {
+        "name":  "Riser - Gleamer",
+        "url":  "https://cdn.freesound.org/previews/784/784974_16544389-lq.mp3",
+        "section":  "trans",
+        "moment":  "Riser",
+        "by":  "Sabacky",
+        "page":  "https://freesound.org/s/784974/",
+        "dur":  8.5
+    },
+    {
+        "name":  "Cymbal Hits Reversed",
+        "url":  "https://cdn.freesound.org/previews/148/148930_2259717-lq.mp3",
+        "section":  "trans",
+        "moment":  "Reverse cymbal",
+        "by":  "HUMANOISEMAKER",
+        "page":  "https://freesound.org/s/148930/",
+        "dur":  7
+    },
+    {
+        "name":  "Reverse Splash Cymbal",
+        "url":  "https://cdn.freesound.org/previews/383/383902_7146007-lq.mp3",
+        "section":  "trans",
+        "moment":  "Reverse cymbal",
+        "by":  "deleted_user_7146007",
+        "page":  "https://freesound.org/s/383902/",
+        "dur":  7.2
+    },
+    {
+        "name":  "cymbal-reversed-glassy-resonance",
+        "url":  "https://cdn.freesound.org/previews/9/9523_24197-lq.mp3",
+        "section":  "trans",
+        "moment":  "Reverse cymbal",
+        "by":  "burnttoys",
+        "page":  "https://freesound.org/s/9523/",
+        "dur":  3.2
+    },
+    {
+        "name":  "reverse cymbal",
+        "url":  "https://cdn.freesound.org/previews/23/23127_135910-lq.mp3",
+        "section":  "trans",
+        "moment":  "Reverse cymbal",
+        "by":  "John Rayson",
+        "page":  "https://freesound.org/s/23127/",
+        "dur":  2
+    },
+    {
+        "name":  "Reverse Cymbal Shiny",
+        "url":  "https://cdn.freesound.org/previews/774/774635_16682330-lq.mp3",
+        "section":  "trans",
+        "moment":  "Reverse cymbal",
+        "by":  "loganzsound",
+        "page":  "https://freesound.org/s/774635/",
+        "dur":  2.9
+    },
+    {
+        "name":  "Reverse Crash Cymbal Projection",
+        "url":  "https://cdn.freesound.org/previews/383/383903_7146007-lq.mp3",
+        "section":  "trans",
+        "moment":  "Reverse cymbal",
+        "by":  "deleted_user_7146007",
+        "page":  "https://freesound.org/s/383903/",
+        "dur":  8.9
+    },
+    {
+        "name":  "Riddim Reverse 100bps",
+        "url":  "https://cdn.freesound.org/previews/66/66355_123663-lq.mp3",
+        "section":  "trans",
+        "moment":  "Reverse cymbal",
+        "by":  "InspiredFunk",
+        "page":  "https://freesound.org/s/66355/",
+        "dur":  9.7
+    },
+    {
+        "name":  "reversespacecymbal",
+        "url":  "https://cdn.freesound.org/previews/1/1386_674-lq.mp3",
+        "section":  "trans",
+        "moment":  "Reverse cymbal",
+        "by":  "walkerbelm",
+        "page":  "https://freesound.org/s/1386/",
+        "dur":  6.9
+    },
+    {
+        "name":  "Tape Deck Rewind Short",
+        "url":  "https://cdn.freesound.org/previews/845/845649_14030247-lq.mp3",
+        "section":  "trans",
+        "moment":  "Tape rewind",
+        "by":  "j_soundeffects",
+        "page":  "https://freesound.org/s/845649/",
+        "dur":  4.7
+    },
+    {
+        "name":  "Tape Rewind #1",
+        "url":  "https://cdn.freesound.org/previews/679/679970_13632374-lq.mp3",
+        "section":  "trans",
+        "moment":  "Tape rewind",
+        "by":  "Hajisounds",
+        "page":  "https://freesound.org/s/679970/",
+        "dur":  2.2
+    },
+    {
+        "name":  "Tape recorder rewind (Fanmade)",
+        "url":  "https://cdn.freesound.org/previews/372/372876_903807-lq.mp3",
+        "section":  "trans",
+        "moment":  "Tape rewind",
+        "by":  "simplewave",
+        "page":  "https://freesound.org/s/372876/",
+        "dur":  2.9
+    },
+    {
+        "name":  "Tape Rewind",
+        "url":  "https://cdn.freesound.org/previews/75/75827_1173114-lq.mp3",
+        "section":  "trans",
+        "moment":  "Tape rewind",
+        "by":  "Analog Bleep Ten",
+        "page":  "https://freesound.org/s/75827/",
+        "dur":  3.3
+    },
+    {
+        "name":  "Rewind Short",
+        "url":  "https://cdn.freesound.org/previews/700/700527_11636259-lq.mp3",
+        "section":  "trans",
+        "moment":  "Tape rewind",
+        "by":  "LuKaiX",
+        "page":  "https://freesound.org/s/700527/",
+        "dur":  1.8
+    },
+    {
+        "name":  "Rewind of a magnetic tape.",
+        "url":  "https://cdn.freesound.org/previews/380/380713_2462-lq.mp3",
+        "section":  "trans",
+        "moment":  "Tape rewind",
+        "by":  "urupin",
+        "page":  "https://freesound.org/s/380713/",
+        "dur":  4.3
+    },
+    {
+        "name":  "tape rewind imitation",
+        "url":  "https://cdn.freesound.org/previews/832/832279_16283013-lq.mp3",
+        "section":  "trans",
+        "moment":  "Tape rewind",
+        "by":  "nic_navr08",
+        "page":  "https://freesound.org/s/832279/",
+        "dur":  3.5
+    },
+    {
+        "name":  "13024 reel to reel fast forward with preview",
+        "url":  "https://cdn.freesound.org/previews/733/733146_321967-lq.mp3",
+        "section":  "trans",
+        "moment":  "Tape rewind",
+        "by":  "Robinhood76",
+        "page":  "https://freesound.org/s/733146/",
+        "dur":  4.3
+    },
+    {
+        "name":  "nicola (sword)",
+        "url":  "https://cdn.freesound.org/previews/728/728019_14865420-lq.mp3",
+        "section":  "tag",
+        "moment":  "Tag DJ / hype",
+        "by":  "djbillliardino",
+        "page":  "https://freesound.org/s/728019/",
+        "dur":  4.5
+    },
+    {
+        "name":  "DJ Deee",
+        "url":  "https://cdn.freesound.org/previews/417/417409_8176931-lq.mp3",
+        "section":  "tag",
+        "moment":  "Tag DJ / hype",
+        "by":  "TheScarlettWitch89",
+        "page":  "https://freesound.org/s/417409/",
+        "dur":  3.4
+    },
+    {
+        "name":  "Star entertainment DJs",
+        "url":  "https://cdn.freesound.org/previews/417/417408_8176931-lq.mp3",
+        "section":  "tag",
+        "moment":  "Tag DJ / hype",
+        "by":  "TheScarlettWitch89",
+        "page":  "https://freesound.org/s/417408/",
+        "dur":  4.4
+    },
+    {
+        "name":  "Music note 9",
+        "url":  "https://cdn.freesound.org/previews/462/462808_8386274-lq.mp3",
+        "section":  "tag",
+        "moment":  "Tag DJ / hype",
+        "by":  "qfox123",
+        "page":  "https://freesound.org/s/462808/",
+        "dur":  1.2
+    },
+    {
+        "name":  "kuzman909 pss 190 rocknroll beat through sh 101 filter rwrk",
+        "url":  "https://cdn.freesound.org/previews/58/58588_308-lq.mp3",
+        "section":  "tag",
+        "moment":  "Tag DJ / hype",
+        "by":  "suonho",
+        "page":  "https://freesound.org/s/58588/",
+        "dur":  5.7
+    },
+    {
+        "name":  "Newport Radio Beat tag",
+        "url":  "https://cdn.freesound.org/previews/721/721240_6497529-lq.mp3",
+        "section":  "tag",
+        "moment":  "Tag DJ / hype",
+        "by":  "snaremori",
+        "page":  "https://freesound.org/s/721240/",
+        "dur":  3
+    },
+    {
+        "name":  "gmn santi 1 (clear)",
+        "url":  "https://cdn.freesound.org/previews/416/416408_2188-lq.mp3",
+        "section":  "tag",
+        "moment":  "Tag DJ / hype",
+        "by":  "balloonhead",
+        "page":  "https://freesound.org/s/416408/",
+        "dur":  1.6
+    },
+    {
+        "name":  "MACHINE GUN",
+        "url":  "https://cdn.freesound.org/previews/629/629029_6512938-lq.mp3",
+        "section":  "tag",
+        "moment":  "Tag DJ / hype",
+        "by":  "commercialkings",
+        "page":  "https://freesound.org/s/629029/",
+        "dur":  3.2
+    },
+    {
+        "name":  "Delilah Vocal Chop",
+        "url":  "https://cdn.freesound.org/previews/664/664148_14557099-lq.mp3",
+        "section":  "tag",
+        "moment":  "Vocal chop",
+        "by":  "beatsbygastronaut",
+        "page":  "https://freesound.org/s/664148/",
+        "dur":  3.2
+    },
+    {
+        "name":  "VOCAL-bit (9)",
+        "url":  "https://cdn.freesound.org/previews/22/22286_124239-lq.mp3",
+        "section":  "tag",
+        "moment":  "Vocal chop",
+        "by":  "zeuss",
+        "page":  "https://freesound.org/s/22286/",
+        "dur":  0.3
+    },
+    {
+        "name":  "Plucky Vocal Synth Melody 2 [93bpm] [G Minor]",
+        "url":  "https://cdn.freesound.org/previews/629/629053_11532701-lq.mp3",
+        "section":  "tag",
+        "moment":  "Vocal chop",
+        "by":  "deadrobotmusic",
+        "page":  "https://freesound.org/s/629053/",
+        "dur":  5.2
+    },
+    {
+        "name":  "scratch310",
+        "url":  "https://cdn.freesound.org/previews/32/32186_128404-lq.mp3",
+        "section":  "tag",
+        "moment":  "Vocal chop",
+        "by":  "junggle",
+        "page":  "https://freesound.org/s/32186/",
+        "dur":  2.2
+    },
+    {
+        "name":  "Oh fck voice remix chop scratch",
+        "url":  "https://cdn.freesound.org/previews/333/333620_5863962-lq.mp3",
+        "section":  "tag",
+        "moment":  "Vocal chop",
+        "by":  "Cooltron",
+        "page":  "https://freesound.org/s/333620/",
+        "dur":  1.4
+    },
+    {
+        "name":  "vox glitch 6",
+        "url":  "https://cdn.freesound.org/previews/538/538656_10637780-lq.mp3",
+        "section":  "tag",
+        "moment":  "Vocal chop",
+        "by":  "speakwithanimals",
+        "page":  "https://freesound.org/s/538656/",
+        "dur":  0.4
+    },
+    {
+        "name":  "High Vocode Line",
+        "url":  "https://cdn.freesound.org/previews/817/817239_11771854-lq.mp3",
+        "section":  "tag",
+        "moment":  "Vocal chop",
+        "by":  "aotustudios",
+        "page":  "https://freesound.org/s/817239/",
+        "dur":  4.4
+    },
+    {
+        "name":  "jhd vox do",
+        "url":  "https://cdn.freesound.org/previews/191/191643_2394245-lq.mp3",
+        "section":  "tag",
+        "moment":  "Vocal chop",
+        "by":  "DWSD",
+        "page":  "https://freesound.org/s/191643/",
+        "dur":  1
+    },
+    {
+        "name":  "OPL3Kick A",
+        "url":  "https://cdn.freesound.org/previews/323/323476_636800-lq.mp3",
+        "section":  "tag",
+        "moment":  "Ad-lib",
+        "by":  "stkthree03",
+        "page":  "https://freesound.org/s/323476/",
+        "dur":  0.4
+    },
+    {
+        "name":  "VOXBrt01",
+        "url":  "https://cdn.freesound.org/previews/572/572602_11472815-lq.mp3",
+        "section":  "tag",
+        "moment":  "Ad-lib",
+        "by":  "melisandepope",
+        "page":  "https://freesound.org/s/572602/",
+        "dur":  0.4
+    },
+    {
+        "name":  "girlGiggle B",
+        "url":  "https://cdn.freesound.org/previews/350/350619_3383114-lq.mp3",
+        "section":  "tag",
+        "moment":  "Ad-lib",
+        "by":  "fisu",
+        "page":  "https://freesound.org/s/350619/",
+        "dur":  3.4
+    },
+    {
+        "name":  "Hip Hop Drum Loop",
+        "url":  "https://cdn.freesound.org/previews/489/489034_5042749-lq.mp3",
+        "section":  "tag",
+        "moment":  "Boom bap",
+        "by":  "deleted_user_5042749",
+        "page":  "https://freesound.org/s/489034/",
+        "dur":  5.1
+    },
+    {
+        "name":  "drum loop #001 (078 BPM)",
+        "url":  "https://cdn.freesound.org/previews/232/232190_66729-lq.mp3",
+        "section":  "tag",
+        "moment":  "Boom bap",
+        "by":  "Exorcist",
+        "page":  "https://freesound.org/s/232190/",
+        "dur":  3.1
+    },
+    {
+        "name":  "loop 002DIFF",
+        "url":  "https://cdn.freesound.org/previews/173/173477_3232986-lq.mp3",
+        "section":  "tag",
+        "moment":  "Boom bap",
+        "by":  "mrwiseintelligent",
+        "page":  "https://freesound.org/s/173477/",
+        "dur":  4.8
+    },
+    {
+        "name":  "Boom Bap Snare",
+        "url":  "https://cdn.freesound.org/previews/676/676253_13483597-lq.mp3",
+        "section":  "tag",
+        "moment":  "Boom bap",
+        "by":  "CrushedLoops",
+        "page":  "https://freesound.org/s/676253/",
+        "dur":  0.5
+    },
+    {
+        "name":  "Dub/Dnb/Glitch-Hop Koan Style Snare",
+        "url":  "https://cdn.freesound.org/previews/319/319612_5436764-lq.mp3",
+        "section":  "tag",
+        "moment":  "Boom bap",
+        "by":  "Hybrid_V",
+        "page":  "https://freesound.org/s/319612/",
+        "dur":  0.4
+    },
+    {
+        "name":  "West Coast Lab Hiphop Beat",
+        "url":  "https://cdn.freesound.org/previews/853/853092_18802117-lq.mp3",
+        "section":  "tag",
+        "moment":  "Boom bap",
+        "by":  "gh0stfounder",
+        "page":  "https://freesound.org/s/853092/",
+        "dur":  5.3
+    },
+    {
+        "name":  "Dry Hat",
+        "url":  "https://cdn.freesound.org/previews/626/626906_13483597-lq.mp3",
+        "section":  "tag",
+        "moment":  "Boom bap",
+        "by":  "CrushedLoops",
+        "page":  "https://freesound.org/s/626906/",
+        "dur":  0.5
+    },
+    {
+        "name":  "HotLips86",
+        "url":  "https://cdn.freesound.org/previews/591/591229_13307195-lq.mp3",
+        "section":  "tag",
+        "moment":  "Boom bap",
+        "by":  "sub33",
+        "page":  "https://freesound.org/s/591229/",
+        "dur":  5.6
+    },
+    {
+        "name":  "UI hover item",
+        "url":  "https://cdn.freesound.org/previews/757/757328_1474204-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover / survol",
+        "by":  "steaq",
+        "page":  "https://freesound.org/s/757328/",
+        "dur":  0.3
+    },
+    {
+        "name":  "Simple or Cute UI / UX / Interface Hover sound",
+        "url":  "https://cdn.freesound.org/previews/836/836451_11248454-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover / survol",
+        "by":  "Feraly_",
+        "page":  "https://freesound.org/s/836451/",
+        "dur":  0.5
+    },
+    {
+        "name":  "Upgrade/select UI",
+        "url":  "https://cdn.freesound.org/previews/729/729216_15690038-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover / survol",
+        "by":  "TechspiredMinds",
+        "page":  "https://freesound.org/s/729216/",
+        "dur":  0.4
+    },
+    {
+        "name":  "UIHover2",
+        "url":  "https://cdn.freesound.org/previews/488/488382_10523948-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover / survol",
+        "by":  "wobesound",
+        "page":  "https://freesound.org/s/488382/",
+        "dur":  0.3
+    },
+    {
+        "name":  "HighlightLong",
+        "url":  "https://cdn.freesound.org/previews/641/641216_9458991-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover / survol",
+        "by":  "spiderfair",
+        "page":  "https://freesound.org/s/641216/",
+        "dur":  0.2
+    },
+    {
+        "name":  "UI Click Menu Hover",
+        "url":  "https://cdn.freesound.org/previews/611/611451_10912485-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover / survol",
+        "by":  "EminYILDIRIM",
+        "page":  "https://freesound.org/s/611451/",
+        "dur":  0.8
+    },
+    {
+        "name":  "UI Hover",
+        "url":  "https://cdn.freesound.org/previews/836/836201_16384535-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover / survol",
+        "by":  "MATUSTRM",
+        "page":  "https://freesound.org/s/836201/",
+        "dur":  1.6
+    },
+    {
+        "name":  "Hover 1",
+        "url":  "https://cdn.freesound.org/previews/237/237422_4284968-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover menu",
+        "by":  "plasterbrain",
+        "page":  "https://freesound.org/s/237422/",
+        "dur":  0.2
+    },
+    {
+        "name":  "Hover 2",
+        "url":  "https://cdn.freesound.org/previews/237/237421_4284968-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover menu",
+        "by":  "plasterbrain",
+        "page":  "https://freesound.org/s/237421/",
+        "dur":  0.2
+    },
+    {
+        "name":  "Menu Hover",
+        "url":  "https://cdn.freesound.org/previews/193/193944_3607124-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover menu",
+        "by":  "TheEvilSocks",
+        "page":  "https://freesound.org/s/193944/",
+        "dur":  0.1
+    },
+    {
+        "name":  "Usdr Interface beep select highlight menu button click hover",
+        "url":  "https://cdn.freesound.org/previews/772/772764_6753194-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover menu",
+        "by":  "jerry.berumen",
+        "page":  "https://freesound.org/s/772764/",
+        "dur":  1.5
+    },
+    {
+        "name":  "menu hover 3",
+        "url":  "https://cdn.freesound.org/previews/750/750190_16155788-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover menu",
+        "by":  "EtherAudio",
+        "page":  "https://freesound.org/s/750190/",
+        "dur":  0
+    },
+    {
+        "name":  "highlight",
+        "url":  "https://cdn.freesound.org/previews/209/209058_2397923-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover menu",
+        "by":  "senitiel",
+        "page":  "https://freesound.org/s/209058/",
+        "dur":  0.4
+    },
+    {
+        "name":  "fidget toy",
+        "url":  "https://cdn.freesound.org/previews/857/857285_17537469-lq.mp3",
+        "section":  "ui",
+        "moment":  "Hover menu",
+        "by":  "dyingSatyr",
+        "page":  "https://freesound.org/s/857285/",
+        "dur":  0.2
+    },
+    {
+        "name":  "UI Wrong button13",
+        "url":  "https://cdn.freesound.org/previews/343/343017_5968849-lq.mp3",
+        "section":  "ui",
+        "moment":  "Clic",
+        "by":  "ZenithInfinitiveStudios",
+        "page":  "https://freesound.org/s/343017/",
+        "dur":  1.2
+    },
+    {
+        "name":  "UI click",
+        "url":  "https://cdn.freesound.org/previews/488/488534_5382295-lq.mp3",
+        "section":  "ui",
+        "moment":  "Clic",
+        "by":  "Ranner",
+        "page":  "https://freesound.org/s/488534/",
+        "dur":  0.6
+    },
+    {
+        "name":  "Diamond Click - Luxury UI Click",
+        "url":  "https://cdn.freesound.org/previews/703/703884_6142149-lq.mp3",
+        "section":  "ui",
+        "moment":  "Clic",
+        "by":  "LilMati",
+        "page":  "https://freesound.org/s/703884/",
+        "dur":  0
+    },
+    {
+        "name":  "UI Click",
+        "url":  "https://cdn.freesound.org/previews/546/546974_12153167-lq.mp3",
+        "section":  "ui",
+        "moment":  "Clic",
+        "by":  "finix473",
+        "page":  "https://freesound.org/s/546974/",
+        "dur":  0.3
+    },
+    {
+        "name":  "ClickGlass",
+        "url":  "https://cdn.freesound.org/previews/520/520579_10958078-lq.mp3",
+        "section":  "ui",
+        "moment":  "Clic",
+        "by":  "Divoljud",
+        "page":  "https://freesound.org/s/520579/",
+        "dur":  0.1
+    },
+    {
+        "name":  "menu click",
+        "url":  "https://cdn.freesound.org/previews/736/736912_8594774-lq.mp3",
+        "section":  "ui",
+        "moment":  "Clic",
+        "by":  "jackosnb",
+        "page":  "https://freesound.org/s/736912/",
+        "dur":  0.2
+    },
+    {
+        "name":  "SFX UI Button Click",
+        "url":  "https://cdn.freesound.org/previews/253/253168_4404552-lq.mp3",
+        "section":  "ui",
+        "moment":  "Clic",
+        "by":  "suntemple",
+        "page":  "https://freesound.org/s/253168/",
+        "dur":  0.2
+    },
+    {
+        "name":  "VS Button Click 05",
+        "url":  "https://cdn.freesound.org/previews/707/707042_9658839-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bouton",
+        "by":  "Vilkas_Sound",
+        "page":  "https://freesound.org/s/707042/",
+        "dur":  1
+    },
+    {
+        "name":  "Button Click 1",
+        "url":  "https://cdn.freesound.org/previews/506/506054_10991815-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bouton",
+        "by":  "Mellau",
+        "page":  "https://freesound.org/s/506054/",
+        "dur":  1
+    },
+    {
+        "name":  "Mouse 2 Button Long Click",
+        "url":  "https://cdn.freesound.org/previews/687/687108_11545182-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bouton",
+        "by":  "aphom000",
+        "page":  "https://freesound.org/s/687108/",
+        "dur":  1.3
+    },
+    {
+        "name":  "button 9 funny",
+        "url":  "https://cdn.freesound.org/previews/107/107156_1838182-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bouton",
+        "by":  "bubaproducer",
+        "page":  "https://freesound.org/s/107156/",
+        "dur":  0.1
+    },
+    {
+        "name":  "Button click",
+        "url":  "https://cdn.freesound.org/previews/629/629020_12471724-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bouton",
+        "by":  "Kolombooo",
+        "page":  "https://freesound.org/s/629020/",
+        "dur":  0.3
+    },
+    {
+        "name":  "Videogame Menu BUTTON CLICK",
+        "url":  "https://cdn.freesound.org/previews/342/342200_3908740-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bouton",
+        "by":  "Christopherderp",
+        "page":  "https://freesound.org/s/342200/",
+        "dur":  0.1
+    },
+    {
+        "name":  "Xbox 360 Button Click",
+        "url":  "https://cdn.freesound.org/previews/497/497115_9996727-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bouton",
+        "by":  "danlucaz",
+        "page":  "https://freesound.org/s/497115/",
+        "dur":  0.4
+    },
+    {
+        "name":  "8-Bit Select Menu - Go Back",
+        "url":  "https://cdn.freesound.org/previews/277/277221_5324223-lq.mp3",
+        "section":  "ui",
+        "moment":  "Selection",
+        "by":  "TheDweebMan",
+        "page":  "https://freesound.org/s/277221/",
+        "dur":  0.2
+    },
+    {
+        "name":  "Menu Select 00",
+        "url":  "https://cdn.freesound.org/previews/270/270537_5123851-lq.mp3",
+        "section":  "ui",
+        "moment":  "Selection",
+        "by":  "LittleRobotSoundFactory",
+        "page":  "https://freesound.org/s/270537/",
+        "dur":  2
+    },
+    {
+        "name":  "Game Menu Select Sound 2",
+        "url":  "https://cdn.freesound.org/previews/705/705174_5083868-lq.mp3",
+        "section":  "ui",
+        "moment":  "Selection",
+        "by":  "digimistic",
+        "page":  "https://freesound.org/s/705174/",
+        "dur":  1.8
+    },
+    {
+        "name":  "sf3-sfx-menu-select-L",
+        "url":  "https://cdn.freesound.org/previews/50/50559_594303-lq.mp3",
+        "section":  "ui",
+        "moment":  "Selection",
+        "by":  "broumbroum",
+        "page":  "https://freesound.org/s/50559/",
+        "dur":  0.3
+    },
+    {
+        "name":  "sf3-sfx-menu-select-R",
+        "url":  "https://cdn.freesound.org/previews/50/50560_594303-lq.mp3",
+        "section":  "ui",
+        "moment":  "Selection",
+        "by":  "broumbroum",
+        "page":  "https://freesound.org/s/50560/",
+        "dur":  0.3
+    },
+    {
+        "name":  "Menu Select 00",
+        "url":  "https://cdn.freesound.org/previews/270/270401_5123851-lq.mp3",
+        "section":  "ui",
+        "moment":  "Selection",
+        "by":  "LittleRobotSoundFactory",
+        "page":  "https://freesound.org/s/270401/",
+        "dur":  0.1
+    },
+    {
+        "name":  "Videogame Menu Select",
+        "url":  "https://cdn.freesound.org/previews/471/471937_7724198-lq.mp3",
+        "section":  "ui",
+        "moment":  "Selection",
+        "by":  "Fupicat",
+        "page":  "https://freesound.org/s/471937/",
+        "dur":  0.9
+    },
+    {
+        "name":  "UI 3-3 FHSandal sinus(Sytrus,arpegio,multiprocessing,rsmpl)",
+        "url":  "https://cdn.freesound.org/previews/517/517379_5828667-lq.mp3",
+        "section":  "ui",
+        "moment":  "Confirmer",
+        "by":  "newlocknew",
+        "page":  "https://freesound.org/s/517379/",
+        "dur":  0.2
+    },
+    {
+        "name":  "UI, Mechanical, Select, 01, FX",
+        "url":  "https://cdn.freesound.org/previews/458/458585_5121236-lq.mp3",
+        "section":  "ui",
+        "moment":  "Confirmer",
+        "by":  "InspectorJ",
+        "page":  "https://freesound.org/s/458585/",
+        "dur":  1.1
+    },
+    {
+        "name":  "UI Confirm",
+        "url":  "https://cdn.freesound.org/previews/836/836200_16384535-lq.mp3",
+        "section":  "ui",
+        "moment":  "Confirmer",
+        "by":  "MATUSTRM",
+        "page":  "https://freesound.org/s/836200/",
+        "dur":  1.6
+    },
+    {
+        "name":  "GASP UI Confirm",
+        "url":  "https://cdn.freesound.org/previews/542/542044_6856600-lq.mp3",
+        "section":  "ui",
+        "moment":  "Confirmer",
+        "by":  "Rob_Marion",
+        "page":  "https://freesound.org/s/542044/",
+        "dur":  1.1
+    },
+    {
+        "name":  "vg select",
+        "url":  "https://cdn.freesound.org/previews/829/829014_10594370-lq.mp3",
+        "section":  "ui",
+        "moment":  "Confirmer",
+        "by":  "Mihacappy",
+        "page":  "https://freesound.org/s/829014/",
+        "dur":  0.4
+    },
+    {
+        "name":  "UI TextBlip 08",
+        "url":  "https://cdn.freesound.org/previews/849/849886_17559721-lq.mp3",
+        "section":  "ui",
+        "moment":  "Confirmer",
+        "by":  "Wavewire",
+        "page":  "https://freesound.org/s/849886/",
+        "dur":  0.3
+    },
+    {
+        "name":  "User Interface Elegant Wooden Confirmation Sound",
+        "url":  "https://cdn.freesound.org/previews/822/822568_71257-lq.mp3",
+        "section":  "ui",
+        "moment":  "Confirmer",
+        "by":  "qubodup",
+        "page":  "https://freesound.org/s/822568/",
+        "dur":  0.3
+    },
+    {
+        "name":  "MEDIUM SIZE TOGGLE SWITCH",
+        "url":  "https://cdn.freesound.org/previews/128/128434_3515-lq.mp3",
+        "section":  "ui",
+        "moment":  "Toggle / switch",
+        "by":  "StevenBrown",
+        "page":  "https://freesound.org/s/128434/",
+        "dur":  1.9
+    },
+    {
+        "name":  "Toggle Switch",
+        "url":  "https://cdn.freesound.org/previews/423/423957_6164481-lq.mp3",
+        "section":  "ui",
+        "moment":  "Toggle / switch",
+        "by":  "pillwave",
+        "page":  "https://freesound.org/s/423957/",
+        "dur":  0.4
+    },
+    {
+        "name":  "Switch - 6",
+        "url":  "https://cdn.freesound.org/previews/484/484083_6150892-lq.mp3",
+        "section":  "ui",
+        "moment":  "Toggle / switch",
+        "by":  "SpaceJoe",
+        "page":  "https://freesound.org/s/484083/",
+        "dur":  1.4
+    },
+    {
+        "name":  "Toggle switch On Off",
+        "url":  "https://cdn.freesound.org/previews/556/556636_10713160-lq.mp3",
+        "section":  "ui",
+        "moment":  "Toggle / switch",
+        "by":  "cookies+policy",
+        "page":  "https://freesound.org/s/556636/",
+        "dur":  0.6
+    },
+    {
+        "name":  "toggle switch 1",
+        "url":  "https://cdn.freesound.org/previews/795/795663_11401608-lq.mp3",
+        "section":  "ui",
+        "moment":  "Toggle / switch",
+        "by":  "TheTechTinkerer",
+        "page":  "https://freesound.org/s/795663/",
+        "dur":  2
+    },
+    {
+        "name":  "Switch-090",
+        "url":  "https://cdn.freesound.org/previews/842/842480_10196790-lq.mp3",
+        "section":  "ui",
+        "moment":  "Toggle / switch",
+        "by":  "Moulaythami",
+        "page":  "https://freesound.org/s/842480/",
+        "dur":  0.3
+    },
+    {
+        "name":  "LIGHT SWITCH 018",
+        "url":  "https://cdn.freesound.org/previews/508/508071_4437257-lq.mp3",
+        "section":  "ui",
+        "moment":  "Toggle / switch",
+        "by":  "leonelmail",
+        "page":  "https://freesound.org/s/508071/",
+        "dur":  0.2
+    },
+    {
+        "name":  "sf3-sfx-menu-back-R",
+        "url":  "https://cdn.freesound.org/previews/50/50556_594303-lq.mp3",
+        "section":  "ui",
+        "moment":  "Retour / annuler",
+        "by":  "broumbroum",
+        "page":  "https://freesound.org/s/50556/",
+        "dur":  0.5
+    },
+    {
+        "name":  "sf3-sfx-menu-back-L",
+        "url":  "https://cdn.freesound.org/previews/50/50555_594303-lq.mp3",
+        "section":  "ui",
+        "moment":  "Retour / annuler",
+        "by":  "broumbroum",
+        "page":  "https://freesound.org/s/50555/",
+        "dur":  0.5
+    },
+    {
+        "name":  "sf3-sfx-menu-back",
+        "url":  "https://cdn.freesound.org/previews/50/50557_594303-lq.mp3",
+        "section":  "ui",
+        "moment":  "Retour / annuler",
+        "by":  "broumbroum",
+        "page":  "https://freesound.org/s/50557/",
+        "dur":  0.5
+    },
+    {
+        "name":  "inventory back",
+        "url":  "https://cdn.freesound.org/previews/580/580827_13073387-lq.mp3",
+        "section":  "ui",
+        "moment":  "Retour / annuler",
+        "by":  "obrymec",
+        "page":  "https://freesound.org/s/580827/",
+        "dur":  0.7
+    },
+    {
+        "name":  "Strange Synth Squelch",
+        "url":  "https://cdn.freesound.org/previews/159/159389_2827474-lq.mp3",
+        "section":  "ui",
+        "moment":  "Retour / annuler",
+        "by":  "primeval_polypod",
+        "page":  "https://freesound.org/s/159389/",
+        "dur":  0.3
+    },
+    {
+        "name":  "cancel",
+        "url":  "https://cdn.freesound.org/previews/407/407465_7947620-lq.mp3",
+        "section":  "ui",
+        "moment":  "Retour / annuler",
+        "by":  "Loyalty_Freak_Music",
+        "page":  "https://freesound.org/s/407465/",
+        "dur":  0.1
+    },
+    {
+        "name":  "UI Series: A hollow click",
+        "url":  "https://cdn.freesound.org/previews/333/333434_4682121-lq.mp3",
+        "section":  "ui",
+        "moment":  "Retour / annuler",
+        "by":  "brandondelehoy",
+        "page":  "https://freesound.org/s/333434/",
+        "dur":  0.5
+    },
+    {
+        "name":  "UI Interaction Error Beep - Ghost Metro Ticket",
+        "url":  "https://cdn.freesound.org/previews/859/859155_18681946-lq.mp3",
+        "section":  "ui",
+        "moment":  "Erreur",
+        "by":  "Coghezzi",
+        "page":  "https://freesound.org/s/859155/",
+        "dur":  1
+    },
+    {
+        "name":  "PC Game UI Error",
+        "url":  "https://cdn.freesound.org/previews/423/423169_4284968-lq.mp3",
+        "section":  "ui",
+        "moment":  "Erreur",
+        "by":  "plasterbrain",
+        "page":  "https://freesound.org/s/423169/",
+        "dur":  0.1
+    },
+    {
+        "name":  "User Interface, Beep, Error, 404, Glitch",
+        "url":  "https://cdn.freesound.org/previews/713/713179_14535773-lq.mp3",
+        "section":  "ui",
+        "moment":  "Erreur",
+        "by":  "Vein_Adams",
+        "page":  "https://freesound.org/s/713179/",
+        "dur":  1.8
+    },
+    {
+        "name":  "Hi-Tech Error Alert 1",
+        "url":  "https://cdn.freesound.org/previews/497/497710_936900-lq.mp3",
+        "section":  "ui",
+        "moment":  "Erreur",
+        "by":  "miksmusic",
+        "page":  "https://freesound.org/s/497710/",
+        "dur":  1
+    },
+    {
+        "name":  "ui-popup-sfx",
+        "url":  "https://cdn.freesound.org/previews/849/849841_17113968-lq.mp3",
+        "section":  "ui",
+        "moment":  "Erreur",
+        "by":  "JeffPearson",
+        "page":  "https://freesound.org/s/849841/",
+        "dur":  0.3
+    },
+    {
+        "name":  "Beep error 2",
+        "url":  "https://cdn.freesound.org/previews/581/581604_5487341-lq.mp3",
+        "section":  "ui",
+        "moment":  "Erreur",
+        "by":  "SamsterBirdies",
+        "page":  "https://freesound.org/s/581604/",
+        "dur":  0.2
+    },
+    {
+        "name":  "Robo Nope (16bit flac)",
+        "url":  "https://cdn.freesound.org/previews/594/594210_1474204-lq.mp3",
+        "section":  "ui",
+        "moment":  "Erreur",
+        "by":  "steaq",
+        "page":  "https://freesound.org/s/594210/",
+        "dur":  1.7
+    },
+    {
+        "name":  "UI, Mechanical, Notification, 01, FX",
+        "url":  "https://cdn.freesound.org/previews/458/458586_5121236-lq.mp3",
+        "section":  "ui",
+        "moment":  "Notification",
+        "by":  "InspectorJ",
+        "page":  "https://freesound.org/s/458586/",
+        "dur":  3
+    },
+    {
+        "name":  "GASP UI Notification 1",
+        "url":  "https://cdn.freesound.org/previews/542/542043_6856600-lq.mp3",
+        "section":  "ui",
+        "moment":  "Notification",
+        "by":  "Rob_Marion",
+        "page":  "https://freesound.org/s/542043/",
+        "dur":  1.1
+    },
+    {
+        "name":  "Bubbling Water Notification â€“ UI Alert (CC0)",
+        "url":  "https://cdn.freesound.org/previews/844/844241_18042200-lq.mp3",
+        "section":  "ui",
+        "moment":  "Notification",
+        "by":  "ATP2-kh",
+        "page":  "https://freesound.org/s/844241/",
+        "dur":  1.1
+    },
+    {
+        "name":  "[UI Sound] Approval - High Pitched Bell Synth",
+        "url":  "https://cdn.freesound.org/previews/625/625174_13251199-lq.mp3",
+        "section":  "ui",
+        "moment":  "Notification",
+        "by":  "GabFitzgerald",
+        "page":  "https://freesound.org/s/625174/",
+        "dur":  0.8
+    },
+    {
+        "name":  "UI Pack â€” Generative Sound by Glorb",
+        "url":  "https://cdn.freesound.org/previews/855/855481_15636277-lq.mp3",
+        "section":  "ui",
+        "moment":  "Notification",
+        "by":  "bassimat",
+        "page":  "https://freesound.org/s/855481/",
+        "dur":  2.6
+    },
+    {
+        "name":  "UIMisc Digital, Intreface, Data, Notification, Alert, 50 JW Audio UI1",
+        "url":  "https://cdn.freesound.org/previews/815/815974_13183432-lq.mp3",
+        "section":  "ui",
+        "moment":  "Notification",
+        "by":  "JW_Audio",
+        "page":  "https://freesound.org/s/815974/",
+        "dur":  0.4
+    },
+    {
+        "name":  "UI Completed Status Alert Notification SFX001",
+        "url":  "https://cdn.freesound.org/previews/277/277033_847303-lq.mp3",
+        "section":  "ui",
+        "moment":  "Notification",
+        "by":  "Headphaze",
+        "page":  "https://freesound.org/s/277033/",
+        "dur":  2.6
+    },
+    {
+        "name":  "GASP UI Pop 1",
+        "url":  "https://cdn.freesound.org/previews/541/541993_6856600-lq.mp3",
+        "section":  "ui",
+        "moment":  "Pop",
+        "by":  "Rob_Marion",
+        "page":  "https://freesound.org/s/541993/",
+        "dur":  1.1
+    },
+    {
+        "name":  "The Best Bubble Pop Sound For Game and UI",
+        "url":  "https://cdn.freesound.org/previews/669/669918_9129912-lq.mp3",
+        "section":  "ui",
+        "moment":  "Pop",
+        "by":  "el_boss",
+        "page":  "https://freesound.org/s/669918/",
+        "dur":  0.3
+    },
+    {
+        "name":  "UI POP UP",
+        "url":  "https://cdn.freesound.org/previews/708/708605_13515726-lq.mp3",
+        "section":  "ui",
+        "moment":  "Pop",
+        "by":  "Marevnik",
+        "page":  "https://freesound.org/s/708605/",
+        "dur":  0.1
+    },
+    {
+        "name":  "UI pop sound",
+        "url":  "https://cdn.freesound.org/previews/812/812555_9610610-lq.mp3",
+        "section":  "ui",
+        "moment":  "Pop",
+        "by":  "Aesnas",
+        "page":  "https://freesound.org/s/812555/",
+        "dur":  0.4
+    },
+    {
+        "name":  "Mouth 45",
+        "url":  "https://cdn.freesound.org/previews/290/290524_5123851-lq.mp3",
+        "section":  "ui",
+        "moment":  "Pop",
+        "by":  "LittleRobotSoundFactory",
+        "page":  "https://freesound.org/s/290524/",
+        "dur":  0
+    },
+    {
+        "name":  "Pop in sfx",
+        "url":  "https://cdn.freesound.org/previews/824/824189_5287430-lq.mp3",
+        "section":  "ui",
+        "moment":  "Pop",
+        "by":  "Sadiquecat",
+        "page":  "https://freesound.org/s/824189/",
+        "dur":  0.6
+    },
+    {
+        "name":  "Bubble Pop - High Pitched Short",
+        "url":  "https://cdn.freesound.org/previews/377/377020_1172853-lq.mp3",
+        "section":  "ui",
+        "moment":  "Pop",
+        "by":  "elmasmalo1",
+        "page":  "https://freesound.org/s/377020/",
+        "dur":  0.1
+    },
+    {
+        "name":  "UI Confirmation Alert, C4",
+        "url":  "https://cdn.freesound.org/previews/403/403019_5121236-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bip",
+        "by":  "InspectorJ",
+        "page":  "https://freesound.org/s/403019/",
+        "dur":  1.4
+    },
+    {
+        "name":  "UI Close menu",
+        "url":  "https://cdn.freesound.org/previews/587/587834_5487341-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bip",
+        "by":  "SamsterBirdies",
+        "page":  "https://freesound.org/s/587834/",
+        "dur":  0.2
+    },
+    {
+        "name":  "Roger beep rus",
+        "url":  "https://cdn.freesound.org/previews/842/842282_18154265-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bip",
+        "by":  "stano458",
+        "page":  "https://freesound.org/s/842282/",
+        "dur":  0.7
+    },
+    {
+        "name":  "Double Beep",
+        "url":  "https://cdn.freesound.org/previews/511/511492_5408716-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bip",
+        "by":  "andersmmg",
+        "page":  "https://freesound.org/s/511492/",
+        "dur":  0.5
+    },
+    {
+        "name":  "UI Buzzer 4",
+        "url":  "https://cdn.freesound.org/previews/546/546707_10403565-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bip",
+        "by":  "FiveBrosStopMosYT",
+        "page":  "https://freesound.org/s/546707/",
+        "dur":  0.1
+    },
+    {
+        "name":  "click",
+        "url":  "https://cdn.freesound.org/previews/683/683098_6253486-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bip",
+        "by":  "florianreichelt",
+        "page":  "https://freesound.org/s/683098/",
+        "dur":  1.9
+    },
+    {
+        "name":  "Tonal beep.Warning.Result(17osc)",
+        "url":  "https://cdn.freesound.org/previews/584/584092_5828667-lq.mp3",
+        "section":  "ui",
+        "moment":  "Bip",
+        "by":  "newlocknew",
+        "page":  "https://freesound.org/s/584092/",
+        "dur":  1.1
+    },
+    {
+        "name":  "UI Menu Whosh",
+        "url":  "https://cdn.freesound.org/previews/699/699494_5872390-lq.mp3",
+        "section":  "ui",
+        "moment":  "Swipe menu",
+        "by":  "Valenspire",
+        "page":  "https://freesound.org/s/699494/",
+        "dur":  1.4
+    },
+    {
+        "name":  "Horror UI Select Stinger 01",
+        "url":  "https://cdn.freesound.org/previews/858/858948_18681946-lq.mp3",
+        "section":  "ui",
+        "moment":  "Swipe menu",
+        "by":  "Coghezzi",
+        "page":  "https://freesound.org/s/858948/",
+        "dur":  2.5
+    },
+    {
+        "name":  "Ghostly Whoosh - Horror Game UI",
+        "url":  "https://cdn.freesound.org/previews/850/850767_18681946-lq.mp3",
+        "section":  "ui",
+        "moment":  "Swipe menu",
+        "by":  "Coghezzi",
+        "page":  "https://freesound.org/s/850767/",
+        "dur":  2
+    },
+    {
+        "name":  "Modern Interface - Swoosh - Whoosh Small 02",
+        "url":  "https://cdn.freesound.org/previews/750/750404_16214459-lq.mp3",
+        "section":  "ui",
+        "moment":  "Swipe menu",
+        "by":  "RescopicSound",
+        "page":  "https://freesound.org/s/750404/",
+        "dur":  2
+    },
+    {
+        "name":  "Modern Interface - Swoosh - Whoosh Small 01",
+        "url":  "https://cdn.freesound.org/previews/750/750403_16214459-lq.mp3",
+        "section":  "ui",
+        "moment":  "Swipe menu",
+        "by":  "RescopicSound",
+        "page":  "https://freesound.org/s/750403/",
+        "dur":  1.9
+    },
+    {
+        "name":  "Modern Interface - Swoosh - Whoosh Large 01",
+        "url":  "https://cdn.freesound.org/previews/750/750401_16214459-lq.mp3",
+        "section":  "ui",
+        "moment":  "Swipe menu",
+        "by":  "RescopicSound",
+        "page":  "https://freesound.org/s/750401/",
+        "dur":  1.9
+    },
+    {
+        "name":  "menuSel",
+        "url":  "https://cdn.freesound.org/previews/87/87035_1332467-lq.mp3",
+        "section":  "ui",
+        "moment":  "Valider",
+        "by":  "RunnerPack",
+        "page":  "https://freesound.org/s/87035/",
+        "dur":  0.4
+    },
+    {
+        "name":  "Matrix Style Glitch 1",
+        "url":  "https://cdn.freesound.org/previews/613/613097_5828667-lq.mp3",
+        "section":  "ui",
+        "moment":  "Valider",
+        "by":  "newlocknew",
+        "page":  "https://freesound.org/s/613097/",
+        "dur":  1.1
+    },
+    {
+        "name":  "Distorted Beep Incorrect",
+        "url":  "https://cdn.freesound.org/previews/514/514159_1858328-lq.mp3",
+        "section":  "ui",
+        "moment":  "Valider",
+        "by":  "edwardszakal",
+        "page":  "https://freesound.org/s/514159/",
+        "dur":  0.4
+    }
+];
+const SECTIONS = {
+  scratch:{label:'SCRATCHES & VINYLE',      color:'#ff3b6b', desc:'Scratch · backspin · vinyle · turntable — vol / reveal'},
+  bass:   {label:'808 & BASSES',            color:'#a6ff00', desc:'808 · sub · bass drop · trap — le drop / impact'},
+  horn:   {label:'AIR HORNS & SIRÈNES',     color:'#ffd23f', desc:'Air horn · dancehall · sirène — hype / fin'},
+  trans:  {label:'DRUMS, RISERS & REWINDS', color:'#38d6ff', desc:'Hi-hat roll · riser · reverse cymbal · rewind — transition'},
+  tag:    {label:'TAGS, CHOPS & BOOM-BAP',  color:'#b07cff', desc:'Tag DJ · vocal chop · ad-lib · boucle boom-bap — vibe'},
+  ui:     {label:'INTERFACE & MENUS',       color:'#34e0b0', desc:'Hover · clic · bouton · sélection · retour · erreur · notif — feedback UI'},
+};
+const ORDER = ['scratch','bass','horn','trans','tag','ui'];
+const TOTAL = SFX_DATA.length;
+
+const audio = new Audio(); audio.preload='none';
+let playingEl=null, vol=.8;
+function stopAll(){ audio.pause(); if(playingEl){playingEl.classList.remove('playing'); playingEl=null;} }
+function toggle(el){
+  if(playingEl===el){ stopAll(); return; }
+  stopAll(); audio.src=el.dataset.url; audio.volume=vol;
+  audio.play().catch(()=>{ el.classList.add('err'); });
+  playingEl=el; el.classList.add('playing');
+}
+audio.addEventListener('ended',()=>{ if(playingEl){playingEl.classList.remove('playing'); playingEl=null;} });
+
+let picks=[]; try{ picks=JSON.parse(localStorage.getItem('pl_sfx_pick')||'[]'); }catch(e){}
+function savePicks(){ localStorage.setItem('pl_sfx_pick', JSON.stringify(picks)); }
+function isPicked(url){ return picks.some(p=>p.url===url); }
+function togglePick(d){
+  const i=picks.findIndex(p=>p.url===d.url);
+  if(i>=0) picks.splice(i,1); else picks.push(d);
+  savePicks(); renderDock();
+  document.querySelectorAll('.card').forEach(c=>c.classList.toggle('picked', isPicked(c.dataset.url)));
+}
+
+const secWrap=document.getElementById('sections'), chipsWrap=document.getElementById('chips');
+let filterSec='all', filterText='';
+function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+
+function build(){
+  const mk=(key,label,color)=>{const b=document.createElement('div');b.className='chip'+(key==='all'?' on':'');b.textContent=label;b.style.setProperty('--c',color||'#fff');b.dataset.k=key;b.onclick=()=>{filterSec=key;[...chipsWrap.children].forEach(c=>c.classList.toggle('on',c.dataset.k===key));apply();};chipsWrap.appendChild(b);};
+  mk('all','Tout ('+TOTAL+')','#fff');
+  ORDER.forEach(k=>mk(k,SECTIONS[k].label.split(/[ ,]/)[0].replace('&',''),SECTIONS[k].color));
+  ORDER.forEach(key=>{
+    const items=SFX_DATA.filter(s=>s.section===key); if(!items.length) return;
+    const sec=document.createElement('section'); sec.dataset.section=key; sec.style.setProperty('--c',SECTIONS[key].color);
+    const h=document.createElement('div'); h.className='sec-head';
+    h.innerHTML='<h2>'+SECTIONS[key].label+'</h2><span class="d">'+SECTIONS[key].desc+'</span><span class="n">'+items.length+' sons</span>';
+    sec.appendChild(h);
+    const g=document.createElement('div'); g.className='grid';
+    items.forEach(s=>{
+      const c=document.createElement('button'); c.className='card'+(isPicked(s.url)?' picked':'');
+      c.dataset.url=s.url; c.dataset.section=key; c.dataset.text=(s.name+' '+s.moment+' '+(s.by||'')).toLowerCase();
+      c.title='Freesound'+(s.by?' · par '+s.by:'')+(s.page?' · '+s.page:'');
+      const durTxt=s.dur?' · '+s.dur+'s':'';
+      c.innerHTML='<span class="knob"><span class="tri"></span><span class="eq"><i></i><i></i><i></i><i></i><i></i></span></span>'+
+        '<span class="meta"><span class="nm">'+esc(s.name)+'</span><span class="mo"><b>'+esc(s.moment)+'</b>'+durTxt+'</span></span>'+
+        '<span class="pick" title="Garder ce son">＋</span>';
+      c.addEventListener('click',e=>{ if(e.target.classList.contains('pick')){e.stopPropagation(); togglePick(s);} else toggle(c); });
+      g.appendChild(c);
+    });
+    sec.appendChild(g); secWrap.appendChild(sec);
+  });
+}
+function apply(){
+  let visible=0;
+  document.querySelectorAll('section').forEach(sec=>{
+    const secKey=sec.dataset.section; let shown=0;
+    sec.querySelectorAll('.card').forEach(c=>{
+      const on=(filterSec==='all'||filterSec===secKey) && (!filterText||c.dataset.text.includes(filterText));
+      c.style.display=on?'':'none'; if(on){shown++;visible++;}
+    });
+    sec.style.display=shown?'':'none';
+  });
+  document.getElementById('empty').style.display=visible?'none':'block';
+  document.getElementById('cnt').textContent=visible+' / '+TOTAL;
+}
+document.getElementById('viewToggle').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  secWrap.className=(b.dataset.v==='grid'?'grid-view':'list-view');
+  [...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b));
+});
+function renderDock(){
+  document.getElementById('count').textContent=picks.length;
+  document.getElementById('plural').textContent=picks.length>1?'s':'';
+  const list=document.getElementById('dockList');
+  if(!picks.length){ list.innerHTML='<p style="color:var(--mut);padding:14px 0">Rien pour l\'instant. Clique le <b>＋</b> d\'un son pour le garder ici.</p>'; return; }
+  list.innerHTML='';
+  const keys=ORDER.slice();
+  picks.forEach(p=>{ if(keys.indexOf(p.section)<0) keys.push(p.section); });
+  keys.forEach(key=>{
+    const meta=SECTIONS[key]||{label:'ANCIENNE SÉLECTION',color:'#8a8a99'};
+    picks.filter(p=>p.section===key).forEach(p=>{
+      const el=document.createElement('div'); el.className='pill'; el.style.setProperty('--c',meta.color);
+      el.innerHTML='<span class="c"></span><div><div class="pn">'+esc(p.name)+'</div><div class="pm">'+esc(meta.label.split(' ')[0])+' · '+esc(p.moment||'')+(p.by?' · par '+esc(p.by):'')+'</div></div>'+
+        '<div class="mini"><button data-a="play">▶</button><button data-a="rm">✕</button></div>';
+      el.querySelector('[data-a=play]').onclick=()=>{stopAll();audio.src=p.url;audio.volume=vol;audio.play().catch(()=>{});};
+      el.querySelector('[data-a=rm]').onclick=()=>togglePick(p);
+      list.appendChild(el);
+    });
+  });
+}
+function exportPicks(){
+  if(!picks.length){alert('Sélection vide.');return;}
+  const secName=k=>(SECTIONS[k]||{label:(k||'?')}).label.split(' ')[0];
+  const lines=picks.map(p=>'• ['+secName(p.section)+'] '+(p.moment||'')+' — '+p.name+(p.by?' (par '+p.by+')':'')+'\n  preview: '+p.url+(p.page?'\n  page: '+p.page:''));
+  const txt='PUNCHLINR — sons retenus ('+picks.length+')\n\n'+lines.join('\n')+'\n\n--- JSON ---\n'+JSON.stringify(picks,null,2);
+  // 1) telecharger un fichier JSON (lisible par Claude)
+  try{
+    const blob=new Blob([JSON.stringify(picks,null,2)],{type:'application/json'});
+    const u=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=u; a.download='punchlinr-sfx-selection.json';
+    document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(u);},300);
+  }catch(e){}
+  // 2) afficher + copier (fallback file://)
+  const list=document.getElementById('dockList');
+  document.getElementById('dock').classList.add('open');
+  document.getElementById('toggleDock').textContent='Cacher ▼';
+  let box=document.getElementById('expBox');
+  if(!box){box=document.createElement('div');box.id='expBox';list.prepend(box);}
+  box.innerHTML='<div style="color:var(--fluo);font-weight:800;margin:8px 0 4px">✅ Fichier « punchlinr-sfx-selection.json » téléchargé + copié — donne-le à Claude.</div>';
+  const ta=document.createElement('textarea'); ta.className='exp'; ta.value=txt; box.appendChild(ta);
+  ta.focus(); ta.select();
+  let ok=false; try{ok=document.execCommand('copy');}catch(e){}
+  if(!ok){ try{navigator.clipboard.writeText(txt);}catch(e){} }
+  box.scrollIntoView({behavior:'smooth',block:'start'});
+}
+document.getElementById('q').addEventListener('input',e=>{filterText=e.target.value.trim().toLowerCase();apply();});
+document.getElementById('vol').addEventListener('input',e=>{vol=e.target.value/100;audio.volume=vol;});
+document.getElementById('stop').addEventListener('click',stopAll);
+document.getElementById('toggleDock').addEventListener('click',()=>{const d=document.getElementById('dock');d.classList.toggle('open');document.getElementById('toggleDock').textContent=d.classList.contains('open')?'Cacher ▼':'Voir ▲';});
+document.getElementById('exportBtn').addEventListener('click',exportPicks);
+document.getElementById('clearBtn').addEventListener('click',()=>{if(picks.length&&confirm('Vider la sélection ?')){picks=[];savePicks();renderDock();document.querySelectorAll('.card.picked').forEach(c=>c.classList.remove('picked'));}});
+document.addEventListener('keydown',e=>{ if(e.code==='Space'&&e.target.tagName!=='INPUT'&&e.target.tagName!=='TEXTAREA'){e.preventDefault();stopAll();} });
+build(); apply(); renderDock();
+</script>
+</body>
+</html>

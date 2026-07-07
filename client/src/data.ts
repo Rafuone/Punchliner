@@ -8,10 +8,11 @@ export type Avatar = {
   statLabels?: [string, string, string, string]; // libellés de stats custom (déf. Flow/Punch/Tech/Aura) — cas Bishok
   img?: boolean; // un portrait existe dans client/public/avatars/<id>.png
   crop?: { z?: number; y?: number }; // recadrage : z = zoom vignette (déf. 1.6) · y = focale verticale du showcase (%, déf. 15)
+  locked?: boolean; // déblocable : verrouillé tant que l'objectif (voir UNLOCKS) n'est pas atteint
 };
 
 // Ordre d'affichage des catégories dans le sélecteur (scroll horizontal par catégorie)
-export const CATEGORY_ORDER = ['Légende', 'Mainstream', 'Rap game', 'Plume', 'Conscient', 'Drill', 'Nouvelle scène', 'Rookies', 'Génies incompris'];
+export const CATEGORY_ORDER = ['Légende', 'Mainstream', 'Rap game', 'Plume', 'Conscient', 'Drill', 'Alternative', 'Rookies', 'Génies incompris'];
 
 // Une couleur flashy par genre (chip du showcase + libellés du roster).
 // Légende = rendu IRIDESCENT via la classe .irid ; la valeur ci-dessous n'est que le repli (bordure /
@@ -23,7 +24,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'Plume': '#a6ff00',          // vert bombe
   'Conscient': '#ffcf3f',      // ambre
   'Drill': '#ff5a5a',          // rouge
-  'Nouvelle scène': '#b57cff', // violet néon
+  'Alternative': '#b57cff', // violet néon
   'Troll': '#ff8a3d',          // orange
   'Génies incompris': '#c4e8ff', // bleu-gris glacé
   'Rookies': '#ffa33d',        // orange-doré
@@ -74,9 +75,9 @@ export const AVATARS: Avatar[] = [
   // ---- Drill / Trap ----
   { id: 'gazo', name: 'Gazo', color: '#2A7E48', cat: 'Drill', img: true, power: { name: 'Drill', effect: 'Vole 16 000 auditeurs au joueur en tête.' }, stats: { flow: 3, punch: 5, tech: 3, aura: 4 } },
   { id: 'kaaris', name: 'Kaaris', color: '#5A2333', cat: 'Drill', img: true, power: { name: 'Or Noir', effect: 'Tout ou rien : ×2 si tu marques cette manche, sinon -30 000 auditeurs.' }, stats: { flow: 3, punch: 5, tech: 3, aura: 4 } },
-  // ---- Nouvelle scène (2020s) ----
-  { id: 'laylow', name: 'Laylow', color: '#9E2B3A', cat: 'Nouvelle scène', img: true, power: { name: 'Trinity', effect: 'Hors du temps : tu marques le max de points même en répondant à la dernière seconde.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 4 } },
-  { id: 'jewelusain', name: 'Jewel Usain', color: '#2E7D6B', cat: 'Nouvelle scène', img: true, power: { name: 'Bruce Lee', effect: 'Le conteur, ça résonne : +11 000 auditeurs cette manche ET la manche suivante.' }, stats: { flow: 4, punch: 4, tech: 5, aura: 4 } },
+  // ---- Alternative (rap moderne installé, hors-format : Laylow, Jewel Usain…) ----
+  { id: 'laylow', name: 'Laylow', color: '#9E2B3A', cat: 'Alternative', img: true, power: { name: 'Trinity', effect: 'Hors du temps : tu marques le max de points même en répondant à la dernière seconde.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 4 } },
+  { id: 'jewelusain', name: 'Jewel Usain', color: '#2E7D6B', cat: 'Alternative', img: true, power: { name: 'Bruce Lee', effect: 'Le conteur, ça résonne : +11 000 auditeurs cette manche ET la manche suivante.' }, stats: { flow: 4, punch: 4, tech: 5, aura: 4 } },
   // ---- Génies incompris (rap raté, stats au fond du sac ; SAUF Bishok, l'exception : grosses stats… mais pas des stats de rappeur) ----
   { id: 'bishok', name: 'Bishok', color: '#6E1E28', cat: 'Génies incompris', img: true, crop: { y: 44 },
     power: { name: 'Complotisme', effect: 'Complotisme : Bishok a décrypté le message caché derrière le son — premières lettres du titre ET de l\'artiste révélées.' },
@@ -91,6 +92,12 @@ export const AVATARS: Avatar[] = [
   { id: 'junglejack', name: 'Jungle Jack', color: '#2E3A1E', cat: 'Rookies', img: true, power: { name: 'Flow Dévastateur', effect: 'Flow dévastateur : le 1er à trouver cette manche rafle +32 000 auditeurs. Sinon, rien.' }, stats: { flow: 5, punch: 4, tech: 4, aura: 3 } },
   { id: 'lafeve', name: 'La Fève', color: '#5C1F1F', cat: 'Rookies', img: true, power: { name: 'Hors du Temps', effect: 'Hors du temps : tu marques le max de points même en répondant à la dernière seconde.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 4 } },
   { id: 'okis', name: 'Okis', color: '#3A2E2E', cat: 'Rookies', img: true, power: { name: 'La Crème', effect: 'La crème du rap artisanal : +5 000 auditeurs garantis à chaque manche, pendant 4 manches.' }, stats: { flow: 3, punch: 3, tech: 4, aura: 3 } },
+  // ---- DÉBLOCABLES (verrouillés tant que l'objectif de UNLOCKS n'est pas atteint ; portraits à venir) ----
+  { id: 'freezecorleone', name: 'Freeze Corleone', color: '#241F38', cat: 'Drill', img: true, locked: true, power: { name: 'Freeze Raël', effect: 'Propos problématiques : ta réponse ×2 si tu marques cette manche… sinon il se fait cancel (−20 000 auditeurs).' }, stats: { flow: 5, punch: 5, tech: 5, aura: 4 } },
+  { id: 'lino', name: 'Lino', color: '#38414F', cat: 'Plume', img: true, locked: true, power: { name: 'Requiem', effect: 'Il écrit le requiem du n°1 : 0 auditeur pour lui cette manche, et lui rafle 6 000 auditeurs au passage.' }, stats: { flow: 4, punch: 5, tech: 5, aura: 4 } },
+  { id: 'diams', name: "Diam's", color: '#B23A6B', cat: 'Mainstream', img: true, locked: true, power: { name: 'Jeune Demoiselle', effect: "Le carton mainstream s'emballe : +13 000 auditeurs, +6 000 de plus par manche gagnée d'affilée." }, stats: { flow: 4, punch: 4, tech: 3, aura: 5 } },
+  { id: 'disiz', name: 'Disiz', color: '#45607C', cat: 'Conscient', img: true, locked: true, power: { name: "J'pète les plombs", effect: 'Il pète les plombs et remonte : récupère la moitié de ton retard sur le n°1 (si tu es à la traîne).' }, stats: { flow: 4, punch: 4, tech: 4, aura: 4 } },
+  { id: 'caballerojeanjass', name: 'Caballero & JeanJass', color: '#3E8E5E', cat: 'Alternative', img: true, locked: true, power: { name: 'Double Hélice', effect: 'À deux sur le mic : ta prochaine bonne réponse compte double (×2).' }, stats: { flow: 4, punch: 5, tech: 4, aura: 4 } },
 ];
 
 export const avatarById = (id?: string | null): Avatar | undefined => AVATARS.find((a) => a.id === id);
@@ -107,6 +114,19 @@ export const LOCKED_SLOTS: LockedSlot[] = [
   { id: 'lock6', objective: 'Gagne une partie après avoir été bon dernier au classement (comeback).' },
 ];
 export const isLockedSlot = (id: string) => LOCKED_SLOTS.some((s) => s.id === id);
+
+// Déblocage des rappeurs verrouillés : objectif affiché + condition testée en fin de partie
+// (côté joueur, façon trophées → persisté dans localStorage `pl_unlocked`). Conditions PROVISOIRES,
+// à affiner. `check` reçoit le résultat perso de la partie qui vient de se terminer.
+export type UnlockCtx = { won: boolean; rank: number; certifShort: string; awardIds: string[] };
+export const UNLOCKS: { id: string; objective: string; check: (c: UnlockCtx) => boolean }[] = [
+  { id: 'caballerojeanjass', objective: 'Termine une partie complète.', check: () => true },
+  { id: 'freezecorleone', objective: 'Gagne une partie.', check: (c) => c.won },
+  { id: 'diams', objective: 'Termine une partie sur le podium (1er ou 2ᵉ).', check: (c) => c.rank <= 2 },
+  { id: 'lino', objective: 'Finis une partie avec au moins un Disque de Platine.', check: (c) => ['Platine', '2× Platine', '3× Platine', 'Diamant'].includes(c.certifShort) },
+  { id: 'disiz', objective: 'Décroche le trophée « Comeback King ».', check: (c) => c.awardIds.includes('comeback') },
+];
+export const unlockObjective = (id: string) => UNLOCKS.find((u) => u.id === id)?.objective || 'À débloquer.';
 
 // Fiche de présentation par rappeur (affichée dans le roster) : origine / année / ventes (certifs) + une
 // ligne d'ambiance. Les données réelles (from/since/sales) viennent d'une recherche web (certifs SNEP en
@@ -145,6 +165,12 @@ export const BIOS: Record<string, Bio> = {
   junglejack: { from: 'Paris (20e)', since: '2014', sales: 'Émergent, underground', note: 'Flow dévastateur. Sort de la jungle.' },
   lafeve: { from: 'Paris (20e) / Fontenay (94)', since: '2018', sales: '« ERRR » platine', note: 'La new wave, planante et hors du temps.' },
   okis: { from: 'Lyon (Croix-Rousse)', since: '2022', sales: 'Émergent (rap indé)', note: 'La crème du rap fait maison.' },
+  // ---- déblocables ----
+  freezecorleone: { from: 'Rungis (94)', since: '2015', sales: '« LMF » disque de platine', note: 'La menace fantôme. 667, flow glacial, références en pagaille — et polémiques.' },
+  lino: { from: 'Villiers-le-Bel (95)', since: '1994', sales: "Ärsenik disque d'or, culte", note: 'La lame. Technicien brutal, punchlines chirurgicales.' },
+  diams: { from: 'Paris (née à Nicosie)', since: '1999', sales: '« Dans ma bulle » diamant (best-seller 2006)', note: 'La reine du rap 2000s. A tout raflé, puis a tout quitté.' },
+  disiz: { from: 'Évry (91), origines sénégalaises', since: '2000', sales: '« L\'Amour » (2022) encensé', note: 'La Peste. De « J\'pète les plombs » à « L\'Amour », il se réinvente sans fin.' },
+  caballerojeanjass: { from: 'Bruxelles (Belgique)', since: '2015', sales: 'Saga « Double Hélice » · culte web', note: 'Le duo chill de Bruxelles. Punchlines, weed et second degré.' },
   // ---- persos fictifs : données bidon (chambrage) ----
   bishok: { from: 'Maroc', since: '???', sales: '0 disque, 100 % conviction', note: 'Le révolté. Décrypte les complots. Grosses stats… mais pas de rappeur.' },
   bilaldu92: { from: 'Le 92', since: '2006', sales: '3 CD vendus (à sa famille)', note: 'Sa carrière tient dans un buzz de 2006. Depuis, silence radio.' },
@@ -154,7 +180,7 @@ export const BIOS: Record<string, Bio> = {
 export const bioOf = (id?: string): Bio | undefined => (id ? BIOS[id] : undefined);
 
 // Surnoms affichés sous le nom dans le showcase (character select + roster du hub)
-export const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 76', kortex: 'Le Clasheur', bouss: 'La Voix', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème' };
+export const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 76', kortex: 'Le Clasheur', bouss: 'La Voix', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème', freezecorleone: 'Le Complotiste', lino: 'La Lame', diams: 'La Demoiselle', disiz: 'La Peste', caballerojeanjass: 'Le Duo' };
 
 export const DIFFICULTIES = [
   { key: 'facile', label: 'Grand public', desc: 'Les gros hits, tout le monde connaît' },
@@ -173,6 +199,19 @@ export const REBALANCE = [
   { key: 'comeback', label: 'Comeback', desc: 'À la traîne = jauge + rapide (façon TowerFall)' },
   { key: 'snowball', label: 'Snowball', desc: 'Plus tu gagnes, plus ça monte' },
   { key: 'off', label: 'Neutre', desc: 'Pareil pour tout le monde' },
+];
+
+// Réactions/taunts : boutons (pas de texte libre) que le joueur balance pendant le reveal → remontent
+// sur l'écran hôte façon réactions Meet. Phrasé « street » du projet. Index = id envoyé au serveur.
+export const REACTIONS = [
+  { e: '🔥', t: 'Chaud' },
+  { e: '😮‍💨', t: 'Trop facile' },
+  { e: '🥊', t: 'Grosse frappe' },
+  { e: '😤', t: 'Dans ta face' },
+  { e: '👑', t: 'On est là' },
+  { e: '💀', t: 'La honte' },
+  { e: '🤡', t: 'Petit joueur' },
+  { e: '🐐', t: 'GOAT' },
 ];
 
 export const initials = (s: string) =>

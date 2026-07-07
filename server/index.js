@@ -378,6 +378,41 @@ io.on('connection', (socket) => {
     emitLobby(room);
   });
 
+  // Nouveau salon : ferme celui de l'hôte (le libère, prévient les joueurs) puis en ouvre un neuf
+  socket.on('host:new', (_p, cb) => {
+    const old = rooms.get(socket.data?.roomCode);
+    if (old && old.hostId === socket.id) {
+      io.to(old.code).emit('room:closed', { reason: "Nouveau salon ouvert par l'hôte." });
+      clearTimeout(old.timer); clearTimeout(old.buzzTimer);
+      socket.leave(old.code);
+      rooms.delete(old.code);
+    }
+    const code = makeCode();
+    const hostToken = genId();
+    rooms.set(code, {
+      code, hostId: socket.id, hostToken, hostConnected: true, hostGrace: null,
+      phase: 'lobby', players: new Map(), playlist: [], roundIndex: 0, totalRounds: 8,
+      settings: { difficulty: 'normal', mode: 'multi', mj: false, rebalance: 'comeback' },
+      current: null, answers: new Map(), timer: null, buzzTimer: null, lastReveal: null, createdAt: Date.now(),
+      gamesPlayed: 0, lastFinal: null,
+    });
+    socket.join(code);
+    socket.data = { roomCode: code, role: 'host', playerId: null };
+    cb?.({ ok: true, code, hostToken, poolSize: POOL.length });
+    emitLobby(rooms.get(code));
+  });
+
+  // L'hôte retire un joueur du salon (erreur, doublon, test…) — le joueur est prévenu et éjecté
+  socket.on('host:kick', ({ playerId }) => {
+    const room = rooms.get(socket.data?.roomCode);
+    if (!room || room.hostId !== socket.id) return;
+    const p = room.players.get(playerId);
+    if (!p) return;
+    if (p.socketId) io.to(p.socketId).emit('room:closed', { reason: "Tu as été retiré du salon par l'hôte." });
+    room.players.delete(playerId);
+    emitLobby(room);
+  });
+
   socket.on('player:join', ({ code, name, avatar, playerId }, cb) => {
     code = String(code || '').toUpperCase().trim();
     const room = rooms.get(code);
@@ -466,6 +501,18 @@ io.on('connection', (socket) => {
     room.prevRanks = null;
     cb?.({ ok: true });
     beginRound(room);
+  });
+
+  // Réactions/taunts : le joueur balance une réaction préréglée → relayée à l'écran hôte (façon Meet)
+  socket.on('player:reaction', ({ id }) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room) return;
+    const p = room.players.get(socket.data.playerId);
+    if (!p || p.isMJ) return;
+    const t = Date.now();
+    if (p._lastReact && t - p._lastReact < 700) return; // anti-spam léger
+    p._lastReact = t;
+    io.to(room.hostId).emit('reaction', { id: Number(id) || 0, name: p.name, avatar: p.avatar });
   });
 
   // Mode multi : chacun soumet sa réponse quand il veut

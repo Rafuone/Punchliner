@@ -54,6 +54,12 @@ export const POWERS = {
   junglejack: { name: 'Flow Dévastateur',         type: 'firstblood', base: 16000, first: 32000 }, // flow rapide et dévastateur
   lafeve:     { name: 'Hors du Temps',            type: 'freeze',   self: 11000 }, // new wave expérimentale, hors du temps
   okis:       { name: 'La Crème',                 type: 'sustain',  amount: 8500, rounds: 4 }, // artisanal : petit revenu garanti sur la durée
+  // ===== Déblocables (calibrer avec sim-balance.mjs comme le reste) =====
+  freezecorleone: { name: 'Freeze Raël',      type: 'wager',    mult: 1.8, penalty: 20000 }, // propos problématiques : ×2 ou cancel
+  lino:           { name: 'Requiem',          type: 'sabotage', targets: 1, grab: 6000 },     // muselle le n°1 ET lui rafle une part (le requiem)
+  diams:          { name: 'Jeune Demoiselle', type: 'momentum', base: 13000, per: 6000 },     // carton mainstream qui s'emballe
+  disiz:          { name: "J'pète les plombs",type: 'comeback', factor: 0.5, cap: 32000 },    // il pète les plombs et remonte
+  caballerojeanjass:{ name: 'Double Hélice',  type: 'double',   mult: 1.6 },                  // duo : prochaine bonne réponse ×2
 };
 
 export const firstLetters = (s) =>
