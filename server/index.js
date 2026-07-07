@@ -408,6 +408,20 @@ io.on('connection', (socket) => {
     emitLobby(room);
   });
 
+  // Changer de rappeur ENTRE DEUX PARTIES (uniquement dans le lobby, perso encore libre).
+  socket.on('player:changeChar', ({ avatar } = {}, cb) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room) return cb?.({ error: 'Pas de salon.' });
+    if (room.phase !== 'lobby') return cb?.({ error: 'On change de rappeur entre deux parties, pas en pleine partie.' });
+    const p = room.players.get(socket.data.playerId);
+    if (!p) return cb?.({ error: 'Joueur inconnu.' });
+    if (!avatar) return cb?.({ error: 'Aucun rappeur choisi.' });
+    if ([...room.players.values()].some((x) => x.connected && x.id !== p.id && x.avatar === avatar)) return cb?.({ error: 'Ce rappeur est déjà pris — choisis-en un autre.' });
+    p.avatar = avatar;
+    cb?.({ ok: true, avatar });
+    emitLobby(room);
+  });
+
   // Le joueur qui choisit son perso "observe" le salon pour voir en direct les persos déjà pris.
   socket.on('player:watch', ({ code } = {}, cb) => {
     code = String(code || '').toUpperCase().trim();

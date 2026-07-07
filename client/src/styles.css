@@ -510,6 +510,10 @@ button, input { font-family: inherit; }
 .suspense-card b { font-family: var(--disp); font-size: 17px; color: var(--txt); text-transform: uppercase; }
 .suspense-card span { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
 
+/* ===== hub sur la TV : overlay de consultation (roster / palmarès) ===== */
+.hub-overlay { position: fixed; inset: 0; z-index: 60; overflow-y: auto; background: #0a0b0c; }
+.hub-overlay .wrap { min-height: 100%; }
+
 /* ===== page Palmarès (galerie de trophées) ===== */
 .troph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; width: 100%; max-width: 760px; margin: 0 auto; padding-bottom: 24px; }
 .troph { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 14px 12px 13px;

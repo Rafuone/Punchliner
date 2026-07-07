@@ -136,18 +136,18 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     // pilote de glitch : déchirures de tracking ORGANIQUES (intervalles/tailles aléatoires), repris du showcase perso
     let timer: any;
     const fire = () => {
-      const r = Math.random(), strong = r < 0.4, big = r < 0.15;
-      const gx = (Math.random() * 2 - 1) * (big ? 26 : strong ? 13 : 5);
-      const gh = big ? 10 + Math.random() * 20 : strong ? 5 + Math.random() * 11 : 2 + Math.random() * 6;
+      const r = Math.random(), strong = r < 0.52, big = r < 0.24;
+      const gx = (Math.random() * 2 - 1) * (big ? 40 : strong ? 22 : 9);
+      const gh = big ? 12 + Math.random() * 26 : strong ? 6 + Math.random() * 14 : 3 + Math.random() * 8;
       card.style.setProperty('--gy', (Math.random() * 80).toFixed(1) + '%');
       card.style.setProperty('--gh', gh.toFixed(1) + '%');
       card.style.setProperty('--gx', gx.toFixed(1) + 'px');
       if (tear && v) { try { tear.currentTime = v.currentTime; } catch {} }
       card.classList.add(strong ? 'glx-strong' : 'glx');
-      window.setTimeout(() => card.classList.remove('glx', 'glx-strong'), (strong ? 90 : 55) + Math.random() * (strong ? 220 : 90));
-      timer = window.setTimeout(fire, 500 + Math.random() * 2400);
+      window.setTimeout(() => card.classList.remove('glx', 'glx-strong'), (strong ? 110 : 60) + Math.random() * (strong ? 240 : 110));
+      timer = window.setTimeout(fire, 320 + Math.random() * 1700);
     };
-    timer = window.setTimeout(fire, 600 + Math.random() * 1400);
+    timer = window.setTimeout(fire, 400 + Math.random() * 900);
     return () => { window.clearTimeout(timer); card.classList.remove('glx', 'glx-strong'); };
   }, [game, step]);
 
@@ -205,23 +205,23 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
       <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true"><defs>
         <filter id="wzvhs" x="-6%" y="-3%" width="112%" height="106%" colorInterpolationFilters="sRGB">
           <feTurbulence type="fractalNoise" baseFrequency="0.001 0.021" numOctaves={1} seed={5} result="w" />
-          <feDisplacementMap in="SourceGraphic" in2="w" scale={2.2} xChannelSelector="R" yChannelSelector="G" result="d" />
+          <feDisplacementMap in="SourceGraphic" in2="w" scale={3.6} xChannelSelector="R" yChannelSelector="G" result="d" />
           <feColorMatrix in="d" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cr" />
-          <feOffset in="cr" dx={-2.8} dy={0.6} result="cro" />
+          <feOffset in="cr" dx={-4.2} dy={0.9} result="cro" />
           <feColorMatrix in="d" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cg" />
           <feColorMatrix in="d" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cb" />
-          <feOffset in="cb" dx={2.8} dy={-0.6} result="cbo" />
+          <feOffset in="cb" dx={4.2} dy={-0.9} result="cbo" />
           <feBlend in="cro" in2="cg" mode="screen" result="crg" />
           <feBlend in="crg" in2="cbo" mode="screen" />
         </filter>
         <filter id="wzvhs-strong" x="-10%" y="-5%" width="120%" height="110%" colorInterpolationFilters="sRGB">
           <feTurbulence type="fractalNoise" baseFrequency="0.002 0.03" numOctaves={1} seed={9} result="w2" />
-          <feDisplacementMap in="SourceGraphic" in2="w2" scale={4} xChannelSelector="R" yChannelSelector="G" result="d2" />
+          <feDisplacementMap in="SourceGraphic" in2="w2" scale={7} xChannelSelector="R" yChannelSelector="G" result="d2" />
           <feColorMatrix in="d2" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cr2" />
-          <feOffset in="cr2" dx={-7} dy={1.4} result="cro2" />
+          <feOffset in="cr2" dx={-11} dy={2.2} result="cro2" />
           <feColorMatrix in="d2" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cg2" />
           <feColorMatrix in="d2" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cb2" />
-          <feOffset in="cb2" dx={7} dy={-1.4} result="cbo2" />
+          <feOffset in="cb2" dx={11} dy={-2.2} result="cbo2" />
           <feBlend in="cro2" in2="cg2" mode="screen" result="crg2" />
           <feBlend in="crg2" in2="cbo2" mode="screen" />
         </filter>
@@ -250,7 +250,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                     ? <div className="pp-empty">Personne n'a encore rejoint.</div>
                     : playerList.map((p) => { const a = avatarById(p.avatar); return (
                         <div className="pp-row" key={p.id}>
-                          <span className="pp-av" style={{ background: a?.color || '#5639bf' }}>{initials(a?.name || p.name)}</span>
+                          <span className="pp-av" style={{ background: a?.color || '#5639bf' }}>{a?.img ? <img src={`/avatars/${a.id}.png`} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : initials(a?.name || p.name)}</span>
                           <span className="pp-name">{p.name}</span>
                           {a && <span className="pp-rap">{a.name}</span>}
                         </div>

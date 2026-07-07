@@ -95,6 +95,9 @@ export const AVATARS: Avatar[] = [
 
 export const avatarById = (id?: string | null): Avatar | undefined => AVATARS.find((a) => a.id === id);
 
+// Surnoms affichés sous le nom dans le showcase (character select + roster du hub)
+export const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 76', kortex: 'Le Clasheur', bouss: 'La Voix', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème' };
+
 export const DIFFICULTIES = [
   { key: 'facile', label: 'Grand public', desc: 'Les gros hits, tout le monde connaît' },
   { key: 'normal', label: 'Connaisseur', desc: 'Classiques + sons bien connus' },

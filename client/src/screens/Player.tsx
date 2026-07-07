@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { socket } from '../socket';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO, EPITHETS } from '../data';
 import GrungeBg from '../GrungeBg';
 
 const SKEY = 'pl_session';
 const loadSession = () => { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch { return null; } };
 const saveSession = (s: any) => localStorage.setItem(SKEY, JSON.stringify(s));
-const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 76', kortex: 'Le Clasheur', bouss: 'La Voix', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème' };
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
 // médaillon rond du rappeur (photo si dispo, sinon initiales sur sa couleur)
 function RMed({ id, size = 34 }: { id?: string; size?: number }) {
@@ -23,6 +22,7 @@ export default function Player() {
   const [step, setStep] = useState<'form' | 'char' | 'roster' | 'trophies'>('form'); // avant d'avoir rejoint (+ pages hub : roster / palmarès)
   const [unlockedTrophies, setUnlockedTrophies] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('pl_trophies') || '[]'); } catch { return []; } });
   const [revealTrophies, setRevealTrophies] = useState(true); // aperçu : tout afficher (sinon non-débloqués grisés)
+  const [changing, setChanging] = useState(false); // change de rappeur entre deux parties (rouvre le character select)
   const [joined, setJoined] = useState(false);
   const [code, setCode] = useState((new URLSearchParams(location.search).get('c') || '').toUpperCase());
   const [name, setName] = useState('');
@@ -137,7 +137,8 @@ export default function Player() {
   // VHS : glitches de tracking ORGANIQUES (intervalles + tailles aléatoires) — pilotés en JS pour un
   // rendu non répétitif, sans re-render React (on écrit direct sur le DOM du stage).
   useEffect(() => {
-    if (joined || (step !== 'char' && step !== 'roster')) return;
+    const showcaseVisible = (!joined && (step === 'char' || step === 'roster')) || (joined && changing);
+    if (!showcaseVisible) return;
     const stage = stageRef.current; if (!stage) return;
     let timer: any;
     const fire = () => {
@@ -155,7 +156,7 @@ export default function Player() {
     };
     timer = window.setTimeout(fire, 500 + Math.random() * 1500);
     return () => { window.clearTimeout(timer); stage.classList.remove('glx', 'glx-strong'); };
-  }, [step, joined]);
+  }, [step, joined, changing]);
 
   function join() {
     setJoining(true); setError('');
@@ -166,6 +167,13 @@ export default function Player() {
       meId.current = res.playerId;
       saveSession({ code: code.trim().toUpperCase(), name: name.trim(), avatar: avatarId, playerId: res.playerId });
       setWaiting(!!res.waiting); setJoined(true); applyState(res.state);
+    });
+  }
+  function changeChar() {
+    socket.emit('player:changeChar', { avatar: avatarId }, (res: any) => {
+      if (res?.error) return setError(res.error);
+      saveSession({ code: code.trim().toUpperCase(), name: name.trim(), avatar: avatarId, playerId: meId.current });
+      setError(''); setChanging(false);
     });
   }
   function submitAnswer(e?: any) { e?.preventDefault(); if (!guess.trim() || phase !== 'playing') return; socket.emit('player:answer', { text: guess.trim() }, (res: any) => { if (res?.ok) setFeedback({ points: res.points, titleHit: res.titleHit, artistHit: res.artistHit }); }); }
@@ -276,9 +284,10 @@ export default function Player() {
     );
   }
 
-  /* ---- 2) sélection du perso (avec pouvoir) — sert aussi de page ROSTER (mode browse, sans join) ---- */
-  if (!joined && (step === 'char' || step === 'roster')) {
-    const browse = step === 'roster';
+  /* ---- 2) sélection du perso — join initial, page ROSTER (browse), ou CHANGEMENT entre deux parties ---- */
+  if ((!joined && (step === 'char' || step === 'roster')) || (joined && changing)) {
+    const browse = !joined && step === 'roster';
+    const changeMode = joined && changing;
     const sel = av || AVATARS[0];
     const nmU = sel.name.toUpperCase();
     // taille du nom adaptée à sa longueur → ne déborde jamais sur les stats
@@ -313,7 +322,7 @@ export default function Player() {
           </filter>
         </defs></svg>
 
-        <button className="cs-back" onClick={() => setStep('form')} aria-label="Retour">
+        <button className="cs-back" onClick={() => (changeMode ? setChanging(false) : setStep('form'))} aria-label="Retour">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
         {error && <p className="err cs-err">{error}</p>}
@@ -374,7 +383,12 @@ export default function Player() {
         <div className="cs-bottombar">
           {browse
             ? <button className="btn big" onClick={() => setStep('form')}>← Retour au hub</button>
-            : <button className="btn warm big" onClick={join} disabled={!avatarId || joining || takenIds.has(avatarId)}>{joining ? 'Connexion…' : takenIds.has(avatarId) ? 'Déjà pris — choisis un autre' : `Entrer avec ${sel.name}`}</button>}
+            : changeMode
+              ? <div className="row" style={{ gap: 10, width: '100%', maxWidth: 460 }}>
+                  <button className="btn" style={{ flex: 1 }} onClick={() => setChanging(false)}>Annuler</button>
+                  <button className="btn warm big" style={{ flex: 2 }} onClick={changeChar} disabled={!avatarId || takenIds.has(avatarId)}>{takenIds.has(avatarId) ? 'Déjà pris' : `Passer sur ${sel.name}`}</button>
+                </div>
+              : <button className="btn warm big" onClick={join} disabled={!avatarId || joining || takenIds.has(avatarId)}>{joining ? 'Connexion…' : takenIds.has(avatarId) ? 'Déjà pris — choisis un autre' : `Entrer avec ${sel.name}`}</button>}
         </div>
       </div>
     );
@@ -473,7 +487,8 @@ export default function Player() {
       {phase === 'lobby' && (
         <div className="center"><span className="dot" style={{ width: 12, height: 12 }} /><h2 className="title-xl">Tu es dans la place</h2>
           <p className="muted">Ton perso : <b style={{ color: 'var(--txt)' }}>{av?.name}</b> · pouvoir <b style={{ color: 'var(--ember)' }}>{av?.power.name}</b></p>
-          <p className="muted">En attente… l'hôte va lancer la partie.</p></div>
+          <p className="muted">En attente… l'hôte va lancer la partie.</p>
+          <button className="btn" style={{ marginTop: 4 }} onClick={() => setChanging(true)}>Changer de rappeur</button></div>
       )}
 
       {phase === 'countdown' && (

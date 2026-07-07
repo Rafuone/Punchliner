@@ -148,7 +148,14 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
   - **Hub** (écran d'accueil) : boutons **« Le roster »** (`step:'roster'` = character-select en mode
     browse, façon Street Fighter) et **« Le palmarès »** (`step:'trophies'` = galerie `AWARDS_INFO` ;
     débloqués en `localStorage pl_trophies`, le reste grisé « ??? / à découvrir », toggle Tout voir/Masquer).
-- **Avatars ronds** : `.med` (Host `Med` / Player `RMed`) affiche la PHOTO du rappeur (rond), initiales en repli.
+- **Avatars ronds** : `.med` (Host `Med` / Player `RMed`) + `.pp-av` (popover salon) affichent la PHOTO
+  du rappeur (rond), initiales en repli. Blazes longs → le popster « dans le salon » wrap sur 2 lignes.
+- **HubBrowse.tsx** — vue de consultation **sur la TV** (Host lobby → « Le roster » / « Le palmarès ») :
+  roster façon jeu de combat + galerie des trophées. (Le téléphone garde ses propres accès sur l'accueil.)
+- **Changer de rappeur** : `player:changeChar` (serveur, lobby only) ; bouton « Changer de rappeur » sur le
+  lobby joueur → rouvre le character-select en mode `changing`. Entre deux parties, pas en pleine partie.
+- **Trophées — visuels** : `TROPHIES_PROMPTS.md` (prompts pixel art 16-bit, refs rap) → futurs
+  `client/public/trophies/<id>.png` (LFS), à basculer icône→image avec repli.
 - **ConfigWizard.tsx** — assistant en 5 actes (Jeu / Playlist / Difficulté / Format / Réglages) ;
   dock musique ; **compteur de joueurs cliquable → liste « qui est dans le salon »**. Cartes de mode
   qui s'empilent sous 960px ; l'artwork est clippé dans `.kclip` (le tag P1/brackets ne sont plus rognés).

@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
 import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon } from '../data';
 import ConfigWizard from './ConfigWizard';
+import HubBrowse from './HubBrowse';
 import GrungeBg from '../GrungeBg';
 
 // Fond du lobby (écran du code) : instru d'Alpha Wann. Crossfade vers la playlist (Bishok) à l'entrée du ConfigWizard.
@@ -27,6 +28,7 @@ export default function Host() {
   const [players, setPlayers] = useState<any[]>([]);
   const [settings, setSettings] = useState({ difficulty: 'normal', mode: 'multi', rounds: 8, mj: false, rebalance: 'comeback' });
   const [configuring, setConfiguring] = useState(false);
+  const [hubView, setHubView] = useState<null | 'roster' | 'trophies'>(null); // consultation roster / palmarès sur la TV
   const [powerLog, setPowerLog] = useState('');
   const [round, setRound] = useState<any>({ index: 0, total: 0, endsAt: 0, durationMs: 25000, mode: 'multi', difficulty: '' });
   const [answered, setAnswered] = useState<string[]>([]);
@@ -250,6 +252,7 @@ export default function Host() {
 
   return (
     <>
+    {hubView && <HubBrowse mode={hubView} onClose={() => setHubView(null)} />}
     {phase === 'lobby' && !configuring && <GrungeBg />}
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
       <div className="topbar">
@@ -285,6 +288,10 @@ export default function Host() {
           )}
 
           <button className="btn warm big" style={{ maxWidth: 360, marginTop: 14 }} onClick={() => setConfiguring(true)} disabled={poolSize < 1}>Configurer la partie →</button>
+          <div className="row" style={{ gap: 10 }}>
+            <button className="btn" onClick={() => setHubView('roster')}>Le roster</button>
+            <button className="btn" onClick={() => setHubView('trophies')}>Le palmarès</button>
+          </div>
           <a className="muted" href="/?dev" target="_blank" rel="noreferrer" style={{ fontSize: 12, textDecoration: 'none' }}>+ ajouter un joueur test</a>
         </div>
       )}
