@@ -178,7 +178,6 @@ export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophie
           <button key={a.id} className={`tvcell ${selId === a.id ? 'sel' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[a.cat], ['--c' as any]: a.color }}
             onMouseEnter={() => setSelId(a.id)} onClick={() => setSelId(a.id)} title={a.name}>
             {a.img ? <img src={`/avatars/${a.id}.png`} alt={a.name} onError={hideOnErr} /> : <span className="ini">{initials(a.name)}</span>}
-            <span className="tvcell-nm">{a.name}</span>
           </button>
         ))}
         {LOCKED_SLOTS.map((s) => (

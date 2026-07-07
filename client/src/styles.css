@@ -549,10 +549,18 @@ button, input { font-family: inherit; }
 .tvros-catchip { display: inline-block; margin-bottom: 10px; padding: 4px 12px; border-radius: 2px; background: rgba(0,0,0,.4);
   border: 1px solid color-mix(in srgb, var(--cc, #a6ff00) 50%, rgba(255,255,255,.14));
   font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--cc, #a6ff00); }
-.tvros.irid .tvros-catchip { color: #ffd76b; border-color: rgba(255,215,107,.5); }
+.tvros.irid .tvros-catchip { border-color: rgba(255,215,107,.45); }
+/* Légende : matière iridescente (--irid-grad) — chip, surnom, nom du pouvoir (texte clippé) + stats animées. Comme le character select. */
+.tvros.irid .tvros-catchip span, .tvros.irid .tvros-epi, .tvros.irid .tvros-pname {
+  background-image: var(--irid-grad); background-size: 200% 100%;
+  background-clip: text; -webkit-background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent; text-shadow: none;
+  animation: irid 7s linear infinite; }
+.tvros.irid .tvros-stats { color: #ffd76b; animation: iridhue 5.5s linear infinite; }
+.tvros.irid .tvros-stats .tvros-sbar i.on { background: currentColor; box-shadow: none; }
+@media (prefers-reduced-motion: reduce) { .tvros.irid .tvros-catchip span, .tvros.irid .tvros-epi, .tvros.irid .tvros-pname, .tvros.irid .tvros-stats { animation: none; } }
 .tvros-name { font-family: var(--disp); font-weight: 700; line-height: .84; letter-spacing: -.02em; color: #fff; text-shadow: 0 4px 30px rgba(0,0,0,.7); }
 .tvros-epi { margin-top: 9px; font-family: var(--disp); font-style: italic; font-size: clamp(15px,1.7vw,22px); color: var(--cc, #a6ff00); }
-.tvros.irid .tvros-epi { color: #ffd76b; }
 /* fiche : tags + une ligne d'ambiance */
 .tvros-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 9px; }
 .tvros-tags span { font-size: 12.5px; font-weight: 700; letter-spacing: .02em; color: var(--txt); background: rgba(255,255,255,.06); border: 1px solid var(--line2); border-radius: 20px; padding: 4px 12px; }
@@ -572,7 +580,6 @@ button, input { font-family: inherit; }
 .tvros-sbar i { flex: 1; height: 18px; background: rgba(255,255,255,.14); transform: skewX(-16deg); }  /* pips BISEAUTÉS = même style que le character select */
 .tvros-sbar i.on { background: var(--cc, var(--fluo)); box-shadow: 0 0 10px color-mix(in srgb, var(--cc, #e4ff1a) 45%, transparent); }
 .tvros-pname { font-family: var(--disp); font-weight: 700; font-size: clamp(23px,2.7vw,36px); line-height: 1.02; color: var(--cc, var(--fluo)); text-transform: uppercase; margin-bottom: 9px; }
-.tvros.irid .tvros-pname { color: #ffd76b; }
 .tvros-pfx { font-size: clamp(15px,1.6vw,18px); line-height: 1.5; color: var(--txt); }
 .tvros-objtxt { font-family: var(--disp); font-weight: 700; font-size: clamp(20px,2.4vw,30px); line-height: 1.28; color: #fff; }
 .tvros-objnote { margin-top: 11px; font-size: 15px; color: var(--muted); }
@@ -595,8 +602,6 @@ button, input { font-family: inherit; }
   background: linear-gradient(160deg, color-mix(in srgb, var(--c,#333) 45%, #15161a), #0d0e12); }
 .tvcell .ini { font-size: 14px; }
 .tvcell .q { font-size: clamp(20px,2vw,30px); color: var(--muted2); }
-.tvcell-nm { position: absolute; left: 2px; right: 2px; bottom: 2px; padding: 12px 1px 3px; font-size: 8.5px; font-weight: 800; letter-spacing: .01em; text-align: center; text-transform: uppercase; color: #fff; background: linear-gradient(180deg, transparent, rgba(0,0,0,.9)); opacity: 0; transition: opacity .1s ease; z-index: 2; }
-.tvcell:hover .tvcell-nm, .tvcell.sel .tvcell-nm { opacity: 1; }
 .tvcell:hover { background: var(--cc, #6b7078); transform: translateY(-2px); z-index: 2; }
 .tvcell.sel { background: var(--cc, var(--fluo)); z-index: 3; }
 /* sélection = contour couleur catégorie un peu PLUS ÉPAIS (3px) pour se distinguer du survol */
