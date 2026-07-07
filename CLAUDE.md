@@ -51,10 +51,15 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
 ## Boucle de jeu (server/index.js)
 `lobby` → *(l'hôte configure via ConfigWizard)* → pour chaque manche :
 - **`prep`** (fenêtre POUVOIRS, modes à pouvoirs) **ou** `countdown` 5 s (quiz / MJ) →
-- **`playing`** (le son tourne, on répond) → **`reveal`** (réponse + scores) → … → **`final`** (podium + certif).
+- **`playing`** (le son tourne, on répond) → **`reveal`** (réponse + scores) → … → **`final`** (podium +
+  certif + **trophées** + classement de série). Depuis `final` : **Relancer une partie** (→ assistant) ou
+  **Retour au salon** — on garde le cumul de série (voir plus bas). `finishGame()` remplace l'ancien final inline.
 
 ## Modes de jeu (ConfigWizard, étape « LE JEU »)
-- **Blind Test** (`multi`) : tout le monde tape titre/artiste quand il veut.
+- **Blind Test** (`multi`) : tout le monde tape titre/artiste quand il veut. La carte du mode joue la
+  vidéo `client/public/blind-test.mp4` en fond (muette, **uniquement quand sélectionnée**) sous le voile
+  « diffusion télé » + crunch (`.keyvid` / `.keyvid-fx` dans `wizard.css`).
+- **Format** (étape « LE FORMAT ») : paliers **8 / 16 / 24 / ∞** (défaut 16). Pas de 4 manches (nul pour un blind-test).
 - **Buzzer** : le 1er qui buzze prend la main (8 s pour répondre, sinon lockout et le buzzer rouvre).
 - **Quiz** : QCM de culture rap FR (banque `server/quiz.js`, faite main). Pas d'audio, **pas de pouvoirs**.
 - **Orchestration** : `Automatique` **ou** `Maître du jeu` — un joueur anime : il voit la réponse,
@@ -72,6 +77,20 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
   Espoir → Disque d'Or → Platine → Double → Triple → **Diamant**.
 - **Jauge de pouvoir** (`fillCharges`) : se remplit en fin de manche selon `rebalance`
   (comeback = les derniers rechargent + vite · snowball · off). 1 charge = 1 pouvoir. Cap 5.
+
+## Multi-parties : série, trophées, salle d'attente (server/index.js + server/awards.js)
+- **Le salon survit à une partie.** À la fin (`finishGame`), on **cumule dans la série** : par joueur
+  `total` (auditeurs cumulés), `gameWins`, `totalRounds`. `host:restart` (« Rejouer / Retour au salon »)
+  repart au lobby en **gardant** ce cumul (score/charges/stats de partie remis à zéro). `host:resetSeries`
+  efface le cumul. Le podium montre la partie + (dès la 2ᵉ partie) le **classement général** (certif sur le total).
+- **Trophées de fin** (façon TowerFall) : `server/awards.js` (`computeAwards`, ~22 récompenses, 3 max,
+  pondérées + jitter pour varier, réparties sur des joueurs différents). Basés sur des **stats de partie**
+  (`p.stat` : tentatives/trouvailles/1ers/perfects/best/zéros/pouvoirs/solo/1re-2e mi-temps/pire rang),
+  accumulées dans les handlers de réponse + `endRound`. Textes côté serveur, **icônes** seules côté client
+  (`data.ts → AWARD_ICONS` / `awardIcon`, SVG dessinés).
+- **Salle d'attente** : un **nouveau** joueur qui rejoint **en pleine partie** est accepté avec `waiting:true`
+  (avant : refusé). Il est **exclu** des scores/écrans de jeu (`publicPlayers` filtre `waiting`), voit
+  « Partie en cours », et devient **actif au prochain lobby** (`host:restart` lève `waiting`). Son perso reste réservé.
 
 ## Pouvoirs — source de vérité = `server/powers.js`
 - **Activés dans la fenêtre `prep` AVANT la musique** (sinon on activerait en connaissant déjà la
@@ -132,10 +151,12 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
 - `server/index.js` — boucle de jeu, handlers Socket.IO, scoring, pouvoirs, MJ, quiz, lock perso,
   reconnexion (par `playerId`, marche en pleine partie), `PL_FAST` (test), `/api/dev/*`.
 - `server/powers.js` — définitions des pouvoirs (valeurs calibrées par le sim).
+- `server/awards.js` — catalogue des **trophées de fin** + `computeAwards` (icônes côté `data.ts`).
 - `server/match.js` — matching des réponses (normalize, levenshtein, gradeAnswer, speedMult).
 - `server/quiz.js` — banque de questions du mode Quiz.
 - `server/tracks.js` — `SEED_TRACKS` (résolus via Deezer).
-- `client/src/data.ts` — roster, catégories, certif, fmtAud, difficultés, `MENU_TRACKS`, `isLegend/isGenie`.
+- `client/src/data.ts` — roster, catégories, certif, fmtAud, difficultés, `MENU_TRACKS`, `isLegend/isGenie`,
+  `AWARD_ICONS`/`awardIcon` (icônes SVG des trophées).
 - `sim-balance.mjs` — simulateur d'équilibrage (difficulté-aware). `test-games.mjs` — test d'intégration headless.
 - `AVATARS_PROMPTS.md` — prompts de génération des portraits.
 

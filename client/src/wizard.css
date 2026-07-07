@@ -144,6 +144,26 @@
 .wz .keyvideo[src], .wz .keyvideo.has-src {display:block;}
 .wz .keyart-img {position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1; display:none;}
 .wz .keyart-img[src] {display:block;}
+/* vidéo « diffusion télé » de la carte Blind Test : visible + en lecture uniquement quand le mode est
+   sélectionné (ou survolé). On conserve la DA broadcast (voile grisé + grésille) et on rajoute un
+   crunch/grésille fin repris du showcase perso (scanlines + bruit chroma + bande de balayage + voile froid). */
+.wz .keyvid {position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:50% 40%; z-index:1;
+  opacity:0; transition:opacity .4s ease; transform:scale(1.03);
+  filter:grayscale(.32) contrast(1.04) saturate(.9) brightness(1.32);}
+.wz .keycard.g-blind.sel .keyvid, .wz .keycard.g-blind:hover .keyvid {opacity:1;}
+.wz .keyvid-fx {position:absolute; inset:0; z-index:2; pointer-events:none; overflow:hidden; opacity:0; transition:opacity .4s ease;}
+.wz .keycard.g-blind.sel .keyvid-fx, .wz .keycard.g-blind:hover .keyvid-fx {opacity:1;}
+.wz .keyvid-fx > i {position:absolute; display:block;}
+.wz .keyvid-fx .kvl {inset:0; mix-blend-mode:soft-light; opacity:.5;
+  background:repeating-linear-gradient(0deg, rgba(0,0,0,.5) 0 1px, transparent 1px 3px); animation:vhsroll 9s linear infinite;}
+.wz .keyvid-fx .kvt {inset:0; mix-blend-mode:soft-light; opacity:.32;
+  background:linear-gradient(185deg, rgba(60,150,140,.4), rgba(20,55,60,.55));}
+.wz .keyvid-fx .kvn {inset:-35%; mix-blend-mode:overlay; opacity:.13;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:150px 150px; animation:kvnoise 3.6s linear infinite;}
+.wz .keyvid-fx .kvb {left:0; right:0; height:16%; mix-blend-mode:screen; opacity:.5;
+  background:linear-gradient(180deg, transparent, rgba(190,240,255,.16), transparent); animation:vhsband 6s linear infinite;}
+@keyframes kvnoise {0%{transform:translate(0,0)} 50%{transform:translate(-6%,4%)} 100%{transform:translate(4%,-5%)}}
 .wz .keycard.locked .keyart {filter:grayscale(1) contrast(1.1) brightness(.42);}
 .wz .vhs {position:absolute; inset:0; z-index:2; opacity:0; pointer-events:none; transition:opacity .2s ease; mix-blend-mode:screen;}
 .wz .vhs .lines {position:absolute; inset:0;
@@ -163,7 +183,8 @@
 .wz .reccue i {width:8px; height:8px; border-radius:50%; background:#ff3b3b; box-shadow:0 0 8px #ff3b3b; animation:pulse 1.1s steps(2) infinite;}
 .wz .keycard:hover .reccue, .wz .keycard.sel .reccue {opacity:1;}
 @media(prefers-reduced-motion:reduce) {
-  .wz .vhs .lines, .wz .vhs .band, .wz .vhs .flick, .wz .reccue i {animation:none;}
+  .wz .vhs .lines, .wz .vhs .band, .wz .vhs .flick, .wz .reccue i,
+  .wz .keyvid-fx .kvl, .wz .keyvid-fx .kvn, .wz .keyvid-fx .kvb {animation:none;}
 }
 .wz .keycard .kshade {position:absolute; inset:0; z-index:3;
   background:linear-gradient(180deg, rgba(10,11,12,.15) 0%, rgba(10,11,12,.05) 40%, rgba(10,11,12,.82) 76%, rgba(10,11,12,.97) 100%);}

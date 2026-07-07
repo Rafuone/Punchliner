@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
-import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif } from '../data';
+import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon } from '../data';
 import ConfigWizard from './ConfigWizard';
 import GrungeBg from '../GrungeBg';
 
@@ -31,6 +31,10 @@ export default function Host() {
   const [buzzWinner, setBuzzWinner] = useState<string | null>(null);
   const [reveal, setReveal] = useState<any>(null);
   const [finalScores, setFinalScores] = useState<any[]>([]);
+  const [awards, setAwards] = useState<any[]>([]);       // trophées de la partie qui vient de finir
+  const [series, setSeries] = useState<any>(null);       // cumul de la série (multi-parties)
+  const [finalRounds, setFinalRounds] = useState(0);     // nb de manches de la partie (pour la certif)
+  const [waiting, setWaiting] = useState(0);             // joueurs en salle d'attente
   const [error, setError] = useState('');
   const [joinBase, setJoinBase] = useState(window.location.origin.replace(/\/$/, ''));
   const [audioBlocked, setAudioBlocked] = useState(false);
@@ -60,7 +64,7 @@ export default function Host() {
     } else if (state.phase === 'reveal' && state.reveal) {
       setReveal(state.reveal); setPlayers(state.reveal.scores); setPhase('reveal');
     } else if (state.phase === 'final' && state.final) {
-      setFinalScores(state.final.scores); setPhase('final');
+      setFinalScores(state.final.scores); setAwards(state.final.awards || []); setSeries(state.final.series || null); setFinalRounds(state.final.rounds || round.total || 0); setPhase('final');
     } else setPhase('lobby');
   }
 
@@ -80,7 +84,7 @@ export default function Host() {
     });
     if (socket.connected) boot();
     socket.on('connect', boot);
-    socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); if (d.phase === 'lobby') setPhase('lobby'); });
+    socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); setWaiting(d.waiting || 0); if (d.phase === 'lobby') setPhase('lobby'); });
     socket.on('round:prep', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
     socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
@@ -89,7 +93,7 @@ export default function Host() {
     socket.on('buzz:winner', (d: any) => setBuzzWinner(d.name));
     socket.on('buzz:open', () => setBuzzWinner(null));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // le son continue de tourner sur la révélation
-    socket.on('game:final', (d: any) => { audioRef.current?.pause(); setFinalScores(d.scores); setPhase('final'); });
+    socket.on('game:final', (d: any) => { audioRef.current?.pause(); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final'); });
     socket.on('power:used', (d: any) => { setPowerLog(`${d.name} a lancé ${d.power}`); setTimeout(() => setPowerLog(''), 4500); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); localStorage.removeItem(HKEY); });
@@ -234,6 +238,9 @@ export default function Host() {
     if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); }
     socket.emit('host:start', s, (res: any) => res?.error && setError(res.error));
   }
+  // Relance depuis le podium : retour au salon (cumul de série conservé) ; toConfig → droit dans l'assistant.
+  function relance(toConfig: boolean) { socket.emit('host:restart', {}, () => { if (toConfig) setConfiguring(true); }); }
+  function resetSeries() { if (confirm('Remettre à zéro le cumul de toutes les parties ?')) socket.emit('host:resetSeries'); }
 
   const remaining = Math.max(0, round.endsAt - now);
   const seconds = Math.ceil(remaining / 1000);
@@ -247,7 +254,8 @@ export default function Host() {
         <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">R</span></h1>
         <span className="row" style={{ gap: 10 }}>
           {phase !== 'connecting' && <span className="gpill"><span className="dot" />{phase === 'lobby' ? `Salon ${code}` : `Manche ${round.index + 1}/${round.total} · ${round.difficulty}`} · {players.length} j.</span>}
-          {['countdown', 'playing', 'reveal'].includes(phase) && <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={() => socket.emit('host:restart')}>← Salon</button>}
+          {waiting > 0 && ['prep', 'countdown', 'playing', 'reveal'].includes(phase) && <span className="gpill" style={{ color: 'var(--muted)' }}>{waiting} en attente</span>}
+          {['prep', 'countdown', 'playing', 'reveal'].includes(phase) && <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={() => socket.emit('host:restart')}>← Salon</button>}
         </span>
       </div>
       {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
@@ -410,23 +418,68 @@ export default function Host() {
         </div>
       )}
 
-      {phase === 'final' && (
-        <div className="center">
-          <span className="eyebrow">Podium</span>
-          <div style={{ color: 'var(--fluo)' }}><svg width="104" height="104" viewBox="0 0 24 24" fill="none"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" stroke="currentColor" strokeWidth="1.3" /><path d="M7 5H4v1.6A3.4 3.4 0 0 0 7.3 10M17 5h3v1.6A3.4 3.4 0 0 1 16.7 10" stroke="currentColor" strokeWidth="1.3" /><path d="M9.5 13v3.3h5V13M8 20.5h8M10.4 16.8h3.2v3.7h-3.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></div>
-          <h2 className="title-xl">{finalScores.filter((p: any) => !p.isMJ)[0]?.name} gagne</h2>
-          <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 15, padding: '10px 18px' }}>{certif(finalScores.filter((p: any) => !p.isMJ)[0]?.score ?? 0, round.total).label}</div>
+      {phase === 'final' && (() => {
+        const board = finalScores.filter((p: any) => !p.isMJ);
+        const champ = board[0];
+        const multi = !!series && series.gamesPlayed >= 2;
+        const standings = series?.standings || [];
+        const seriesLeader = standings[0];
+        const gameRounds = finalRounds || round.total || 1;
+        return (
+        <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(14px,3vh,44px)', gap: 20 }}>
+          <span className="eyebrow">{multi ? `Partie ${series.gamesPlayed} — terminée` : 'Podium'}</span>
+          <div style={{ color: 'var(--fluo)' }}><svg width="86" height="86" viewBox="0 0 24 24" fill="none"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" stroke="currentColor" strokeWidth="1.3" /><path d="M7 5H4v1.6A3.4 3.4 0 0 0 7.3 10M17 5h3v1.6A3.4 3.4 0 0 1 16.7 10" stroke="currentColor" strokeWidth="1.3" /><path d="M9.5 13v3.3h5V13M8 20.5h8M10.4 16.8h3.2v3.7h-3.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></div>
+          <h2 className="title-xl">{champ?.name} gagne la partie</h2>
+          <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 15, padding: '10px 18px' }}>{certif(champ?.score ?? 0, gameRounds).label}</div>
+
+          {awards.length > 0 && (
+            <div className="awards">
+              {awards.map((a: any) => (
+                <div className="award" key={a.id}>
+                  <span className="aw-ic" dangerouslySetInnerHTML={{ __html: awardIcon(a.icon) }} />
+                  <div className="aw-title">{a.title}</div>
+                  <div className="aw-who"><Med avatarId={a.avatar} size={22} /><span>{a.playerName}</span></div>
+                  <div className="aw-desc">{a.desc}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="board" style={{ maxWidth: 560 }}>
-            {finalScores.filter((p: any) => !p.isMJ).map((p, i) => (
+            {board.map((p, i) => (
               <div className={`prow ${i === 0 ? 'lead' : ''}`} key={p.id}>
-                <span className="who"><Med avatarId={p.avatar} size={26} />{p.name}</span>
+                <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={26} />{p.name}</span>
                 <span className="pts">{fmtAud(p.score)}</span>
               </div>
             ))}
           </div>
-          <button className="btn" onClick={() => socket.emit('host:restart')}>Rejouer</button>
+
+          {multi && (
+            <div className="series-wrap">
+              <div className="series-head">
+                <span className="eyebrow">Classement général · {series.gamesPlayed} parties</span>
+                {seriesLeader && <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)' }}>{seriesLeader.name} mène la série · {certif(seriesLeader.total, seriesLeader.totalRounds).short}</div>}
+              </div>
+              <div className="board" style={{ maxWidth: 560 }}>
+                {standings.map((p: any, i: number) => (
+                  <div className={`prow ${i === 0 ? 'lead' : ''}`} key={p.id}>
+                    <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={26} />{p.name}
+                      {p.gameWins > 0 && <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>{p.gameWins} gagnée{p.gameWins > 1 ? 's' : ''}</span>}</span>
+                    <span className="pts">{fmtAud(p.total)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="row" style={{ gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
+            <button className="btn warm" onClick={() => relance(true)}>Relancer une partie →</button>
+            <button className="btn" onClick={() => relance(false)}>Retour au salon</button>
+            {multi && <button className="btn ghost" onClick={resetSeries}>Nouvelle série</button>}
+          </div>
         </div>
-      )}
+        );
+      })()}
 
       <audio ref={audioRef} preload="auto" />
       <audio ref={menuAudioRef} preload="auto" onEnded={() => nextTrack()} />

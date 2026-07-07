@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { socket } from '../socket';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon } from '../data';
 import GrungeBg from '../GrungeBg';
 
 const SKEY = 'pl_session';
@@ -39,6 +39,10 @@ export default function Player() {
   const [quizPick, setQuizPick] = useState<number | null>(null); // choix QCM sélectionné (mode quiz)
   const [prepEndsAt, setPrepEndsAt] = useState(0);   // fin de la fenêtre d'activation des pouvoirs
   const [prepDone, setPrepDone] = useState(false);   // ce joueur a activé ou passé
+  const [waiting, setWaiting] = useState(false);     // arrivé en pleine partie → salle d'attente
+  const [awards, setAwards] = useState<any[]>([]);   // trophées de fin de partie
+  const [series, setSeries] = useState<any>(null);   // cumul de la série (multi-parties)
+  const [finalRounds, setFinalRounds] = useState(0);
   const meId = useRef<string>('');
   const stageRef = useRef<HTMLDivElement>(null);
 
@@ -50,7 +54,7 @@ export default function Player() {
     } else if (state.phase === 'prep' && state.round) {
       setRound(state.round); setPrepEndsAt(state.round.endsAt || 0); setPrepDone(false); setNow(Date.now()); setPhase('prep');
     } else if (state.phase === 'reveal' && state.reveal) { setReveal(state.reveal); setPlayers(state.reveal.scores); setPhase('reveal'); }
-    else if (state.phase === 'final' && state.final) { setPlayers(state.final.scores); setPhase('final'); }
+    else if (state.phase === 'final' && state.final) { setPlayers(state.final.scores); setAwards(state.final.awards || []); setSeries(state.final.series || null); setFinalRounds(state.final.rounds || 0); setPhase('final'); }
     else setPhase('lobby');
   }
   function applyBuzz(b: any) {
@@ -66,7 +70,7 @@ export default function Player() {
     const s = loadSession();
     if (s?.code && s?.playerId) {
       socket.emit('player:join', { code: s.code, name: s.name, avatar: s.avatar, playerId: s.playerId }, (res: any) => {
-        if (res?.ok) { meId.current = res.playerId; setCode(s.code); setName(s.name); setAvatarId(s.avatar); setJoined(true); applyState(res.state); }
+        if (res?.ok) { meId.current = res.playerId; setCode(s.code); setName(s.name); setAvatarId(s.avatar); setWaiting(!!res.waiting); setJoined(true); applyState(res.state); }
         else localStorage.removeItem(SKEY);
       });
     }
@@ -82,19 +86,19 @@ export default function Player() {
       const nm = params.get('name') || 'Test-' + Math.random().toString(36).slice(2, 5).toUpperCase();
       socket.emit('player:join', { code: c, name: nm, avatar: a.id }, (res: any) => {
         if (res?.error) return setError(res.error);
-        meId.current = res.playerId; setCode(c); setName(nm); setAvatarId(a.id); setJoined(true); applyState(res.state);
+        meId.current = res.playerId; setCode(c); setName(nm); setAvatarId(a.id); setWaiting(!!res.waiting); setJoined(true); applyState(res.state);
       });
     }).catch(() => setError('Salon injoignable.'));
   }, []);
 
   useEffect(() => {
-    socket.on('lobby', (d: any) => { setPlayers(d.players); if (d.phase === 'lobby') setPhase('lobby'); });
+    socket.on('lobby', (d: any) => { setPlayers(d.players); if (d.phase === 'lobby') { setWaiting(false); setPhase('lobby'); } });
     socket.on('round:prep', (d: any) => { setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setNow(Date.now()); setPhase('prep'); });
     socket.on('round:countdown', (d: any) => { setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setCountdown(d.seconds || 5); setPhase('countdown'); });
     socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); } });
     socket.on('mj:track', (d: any) => setMjTrack(d));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); });
-    socket.on('game:final', (d: any) => { setPlayers(d.scores); setPhase('final'); });
+    socket.on('game:final', (d: any) => { setPlayers(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final'); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) setBuzz('mine'); else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
     socket.on('buzz:open', (d: any) => { if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — attends la prochaine'); } else setBuzz('idle'); });
@@ -148,7 +152,7 @@ export default function Player() {
       if (res?.error) return setError(res.error);
       meId.current = res.playerId;
       saveSession({ code: code.trim().toUpperCase(), name: name.trim(), avatar: avatarId, playerId: res.playerId });
-      setJoined(true); applyState(res.state);
+      setWaiting(!!res.waiting); setJoined(true); applyState(res.state);
     });
   }
   function submitAnswer(e?: any) { e?.preventDefault(); if (!guess.trim() || phase !== 'playing') return; socket.emit('player:answer', { text: guess.trim() }, (res: any) => { if (res?.ok) setFeedback({ points: res.points, titleHit: res.titleHit, artistHit: res.artistHit }); }); }
@@ -325,6 +329,25 @@ export default function Player() {
     );
   }
 
+  /* ---- salle d'attente : arrivé en pleine partie, rejoint à la prochaine ---- */
+  if (joined && waiting) {
+    return (
+      <div className="wrap">
+        <div className="topbar">
+          <span className="row" style={{ gap: 9 }}>{av && <span className="med" style={{ width: 34, height: 34, background: av.color }}>{initials(av.name)}</span>}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17 }}>{name}</span></span>
+          <span className="gpill" style={{ color: 'var(--muted)' }}>En attente</span>
+        </div>
+        {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
+        <div className="center" style={{ gap: 16 }}>
+          <span className="dot" style={{ width: 12, height: 12 }} />
+          <h2 className="title-xl">Partie en cours</h2>
+          <p className="muted" style={{ maxWidth: 380 }}>Tu es dans la place, {name}. Une partie tourne déjà — tu entres <b style={{ color: 'var(--txt)' }}>dès la prochaine</b>. Reste chaud.</p>
+          {av && <p className="muted">Ton perso : <b style={{ color: 'var(--txt)' }}>{av.name}</b> · pouvoir <b style={{ color: 'var(--ember)' }}>{av.power.name}</b></p>}
+        </div>
+      </div>
+    );
+  }
+
   /* ---- pupitre du Maître du jeu ---- */
   if (me?.isMJ) {
     const others = players.filter((p) => !p.isMJ).sort((a, b) => b.score - a.score);
@@ -488,9 +511,43 @@ export default function Player() {
           <p className="muted">Ton total : <b style={{ color: 'var(--txt)' }}>{fmtAud(me?.score ?? 0)}</b> auditeurs · {myRank}<sup>{myRank === 1 ? 'er' : 'e'}</sup></p></div>
       )}
 
-      {phase === 'final' && (
-        <div className="center" style={{ gap: 14 }}><span className="eyebrow">Terminé</span><div className="big-num" style={myRank === 1 ? { color: 'var(--fluo)' } : undefined}>{myRank === 1 ? <svg width="96" height="96" viewBox="0 0 24 24" fill="none"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" stroke="currentColor" strokeWidth="1.3" /><path d="M7 5H4v1.6A3.4 3.4 0 0 0 7.3 10M17 5h3v1.6A3.4 3.4 0 0 1 16.7 10" stroke="currentColor" strokeWidth="1.3" /><path d="M9.5 13v3.3h5V13M8 20.5h8M10.4 16.8h3.2v3.7h-3.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg> : myRank}</div><h2 className="title-xl">{myRank === 1 ? 'Tu as gagné !' : `${myRank}ᵉ place`}</h2><p className="muted">{fmtAud(me?.score ?? 0)} auditeurs</p><div className="gpill" style={{ marginTop: 6, color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 14, padding: '10px 16px' }}>{certif(me?.score ?? 0, round.total).label}</div></div>
-      )}
+      {phase === 'final' && (() => {
+        const myAwards = awards.filter((a: any) => a.playerId === meId.current);
+        const multi = !!series && series.gamesPlayed >= 2;
+        const st = series?.standings || [];
+        const mine = st.find((s: any) => s.id === meId.current);
+        const seriesRank = st.findIndex((s: any) => s.id === meId.current) + 1;
+        return (
+        <div className="center" style={{ gap: 14 }}>
+          <span className="eyebrow">{multi ? `Partie ${series.gamesPlayed} — terminée` : 'Terminé'}</span>
+          <div className="big-num" style={myRank === 1 ? { color: 'var(--fluo)' } : undefined}>{myRank === 1 ? <svg width="96" height="96" viewBox="0 0 24 24" fill="none"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" stroke="currentColor" strokeWidth="1.3" /><path d="M7 5H4v1.6A3.4 3.4 0 0 0 7.3 10M17 5h3v1.6A3.4 3.4 0 0 1 16.7 10" stroke="currentColor" strokeWidth="1.3" /><path d="M9.5 13v3.3h5V13M8 20.5h8M10.4 16.8h3.2v3.7h-3.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg> : myRank}</div>
+          <h2 className="title-xl">{myRank === 1 ? 'Tu as gagné !' : `${myRank}ᵉ place`}</h2>
+          <p className="muted">{fmtAud(me?.score ?? 0)} auditeurs</p>
+          <div className="gpill" style={{ marginTop: 6, color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 14, padding: '10px 16px' }}>{certif(me?.score ?? 0, finalRounds || round.total).label}</div>
+
+          {myAwards.length > 0 && (
+            <div className="awards" style={{ marginTop: 4 }}>
+              {myAwards.map((a: any) => (
+                <div className="award" key={a.id}>
+                  <span className="aw-ic" dangerouslySetInnerHTML={{ __html: awardIcon(a.icon) }} />
+                  <div className="aw-title">{a.title}</div>
+                  <div className="aw-desc">{a.desc}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {multi && mine && (
+            <div className="series-wrap" style={{ maxWidth: 380 }}>
+              <span className="eyebrow">Cumul de la série · {series.gamesPlayed} parties</span>
+              <p className="muted"><b style={{ color: 'var(--txt)' }}>{fmtAud(mine.total)}</b> auditeurs au total · {seriesRank}<sup>{seriesRank === 1 ? 'er' : 'e'}</sup> sur {st.length}</p>
+              <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)' }}>{certif(mine.total, mine.totalRounds).short}{mine.gameWins > 0 ? ` · ${mine.gameWins} gagnée${mine.gameWins > 1 ? 's' : ''}` : ''}</div>
+            </div>
+          )}
+          <p className="muted" style={{ fontSize: 12 }}>L'hôte peut relancer une partie — reste connecté.</p>
+        </div>
+        );
+      })()}
     </div>
   );
 }

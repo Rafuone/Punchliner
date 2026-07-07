@@ -117,6 +117,30 @@ export const REBALANCE = [
 export const initials = (s: string) =>
   s.replace(/\(.*?\)/g, '').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 
+// Trophées de fin de partie (façon TowerFall) : la mécanique + les textes vivent côté serveur
+// (server/awards.js) ; ici on ne porte que l'icône (petit glyphe dessiné, zéro emoji), mappée par id.
+const SVG = (inner: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+export const AWARD_ICONS: Record<string, string> = {
+  crown: SVG('<path d="M4 8l3.5 4 4.5-6 4.5 6L20 8l-1.6 10.5H5.6z"/><path d="M6 18.5h12"/>'),
+  up: SVG('<path d="M12 20V6"/><path d="M6 12l6-6 6 6"/>'),
+  flag: SVG('<path d="M6 21V4"/><path d="M6 4h11l-2 4 2 4H6"/>'),
+  spray: SVG('<path d="M12 12V5M12 12h7M12 12H5M12 12v7M12 12l4.5-4.5M12 12l-4.5 4.5M12 12l4.5 4.5M12 12L7.5 7.5"/>'),
+  target: SVG('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>'),
+  gauge: SVG('<path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16l4.5-3.5"/><circle cx="12" cy="16" r="1.2" fill="currentColor"/>'),
+  bolt: SVG('<path d="M13 3L5 13h5.5L10 21l9-11h-6z"/>'),
+  check: SVG('<path d="M4 12.5l5 5L20 6.5"/>'),
+  diamond: SVG('<path d="M12 3l8 6-8 12L4 9z"/><path d="M4 9h16"/><path d="M9 3.5L12 21M15 3.5L12 21"/>'),
+  mask: SVG('<rect x="3" y="9" width="7" height="5" rx="2.2"/><rect x="14" y="9" width="7" height="5" rx="2.2"/><path d="M10 11.5h4"/>'),
+  dice: SVG('<rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/>'),
+  feather: SVG('<path d="M20 4C11 4 6 9.5 5 18l-1 2"/><path d="M20 4c.5 7-4 12.5-11 13.5"/><path d="M8.5 15H15"/>'),
+  fire: SVG('<path d="M12 3c1.2 4-3 5.5-3 9.5a3 3 0 0 0 6 0c0-1.6-.8-2.6-.8-2.6 2 1 3.3 3 3.3 5.3a5.5 5.5 0 0 1-11 0C6.5 9.5 12 8.5 12 3z"/>'),
+  snail: SVG('<path d="M2 17h4"/><path d="M14 17a6 6 0 1 0-6-6 4 4 0 0 0 8 0"/><path d="M20 8l2.5-2M20 10l3-1"/>'),
+  ghost: SVG('<path d="M5 20V11a7 7 0 0 1 14 0v9l-2.5-2-2.5 2-2-2-2 2z"/><circle cx="9.5" cy="10.5" r="1" fill="currentColor"/><circle cx="14.5" cy="10.5" r="1" fill="currentColor"/>'),
+  skull: SVG('<path d="M5 10.5a7 7 0 0 1 14 0V13l-1 2h-1.5v3H7.5v-3H6l-1-2z"/><circle cx="9" cy="11" r="1.4" fill="currentColor"/><circle cx="15" cy="11" r="1.4" fill="currentColor"/>'),
+  medal: SVG('<circle cx="12" cy="14" r="6"/><path d="M9 3.5l3 5 3-5"/><circle cx="12" cy="14" r="2"/>'),
+};
+export const awardIcon = (id?: string) => AWARD_ICONS[id || ''] || AWARD_ICONS.medal;
+
 // Musique du menu (fichiers dans client/public/music/, servis par Vite à /music/…)
 // Lecture en entier + ordre aléatoire côté Host.
 export type MenuTrack = { title: string; artist: string; src: string };

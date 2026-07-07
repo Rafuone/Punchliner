@@ -123,12 +123,14 @@ async function testReconnectAndLateJoin() {
   if (!rj?.ok || !rj?.reconnected) out.errors.push('reconnexion mid-game KO: ' + JSON.stringify({ ok: rj?.ok, rec: rj?.reconnected, err: rj?.error }));
   a2.on('round:prep', () => a2.emit('player:ready', {}));
   a2.on('round:go', async () => { const ans = await fetchAnswer(code); a2.emit('player:answer', { text: ans.title || 'x' }); });
-  // late-join REFUSÉ en cours de partie (nouveau joueur) — comportement attendu
+  // late-join NOUVEAU en cours de partie → ACCEPTÉ mais mis en SALLE D'ATTENTE (rejoint à la prochaine partie)
   const b = connect(); await onConnect(b);
   const jb = await ack(b, 'player:join', { code, name: 'Bob', avatar: 'iam' });
-  if (jb?.ok) out.errors.push('late-join NOUVEAU accepté en pleine partie (ne devrait pas)');
-  else if (!/commenc/i.test(jb?.error || '')) out.errors.push('mauvais message late-join: ' + jb?.error);
-  await Promise.race([new Promise((r) => host.once('game:final', r)), sleep(40000)]);
+  if (!jb?.ok) out.errors.push('late-join NOUVEAU refusé (devrait être accepté en attente): ' + jb?.error);
+  else if (!jb?.waiting) out.errors.push('late-join NOUVEAU accepté mais pas marqué « en attente »');
+  const fin = await Promise.race([new Promise((r) => host.once('game:final', r)), sleep(40000)]);
+  // le joueur en attente ne doit PAS entrer dans les scores de la partie déjà lancée
+  if (fin && Array.isArray(fin.scores) && fin.scores.some((s) => s.id === jb.playerId)) out.errors.push('le joueur en attente ne doit pas apparaître dans les scores de la partie en cours');
   out.ok = out.errors.length === 0;
   a2.close(); b.close(); host.close();
   return out;
@@ -144,6 +146,49 @@ async function testLateJoinLobby() {
   if (!j?.ok) out.errors.push('join tardif en lobby KO: ' + j?.error);
   out.ok = out.errors.length === 0;
   p.close(); host.close();
+  return out;
+}
+
+// ---- série multi-parties : cumul d'auditeurs + trophées de fin ----
+async function testSeriesAndAwards() {
+  const out = { name: 'série multi-parties + trophées', errors: [], ok: false };
+  const host = connect(); await onConnect(host);
+  const { code } = await ack(host, 'host:create', {});
+  const avs = nextAvatars(2);
+  const socks = [];
+  for (let i = 0; i < 2; i++) {
+    const s = connect(); await onConnect(s);
+    await ack(s, 'player:join', { code, name: 'P' + i, avatar: avs[i] });
+    s.on('round:prep', () => s.emit('player:ready', {}));
+    // P0 répond juste (titre+artiste) → il gagne ; P1 répond à côté
+    s.on('round:go', async () => { const a = await fetchAnswer(code); s.emit('player:answer', { text: (i === 0 && a.title) ? (a.title + (a.artist ? ' ' + a.artist : '')) : 'zzz' }); });
+    socks.push(s);
+  }
+  host.on('round:reveal', () => setTimeout(() => host.emit('host:next'), 100));
+  async function oneGame(rounds) {
+    const p = new Promise((r) => host.once('game:final', r));
+    const st = await ack(host, 'host:start', { rounds, difficulty: 'facile', mode: 'multi', mj: false, rebalance: 'comeback' }, 8000);
+    if (st?.error) { out.errors.push('host:start: ' + st.error); return null; }
+    return await Promise.race([p, sleep(rounds * 5000 + 20000)]);
+  }
+  const g1 = await oneGame(4);
+  if (!g1) out.errors.push('partie 1 : pas de game:final');
+  else {
+    if (!Array.isArray(g1.awards)) out.errors.push('partie 1 : awards manquant');
+    if (!g1.series || g1.series.gamesPlayed !== 1) out.errors.push('partie 1 : gamesPlayed ≠ 1 (' + g1.series?.gamesPlayed + ')');
+  }
+  await ack(host, 'host:restart', {}); await sleep(300);
+  const g2 = await oneGame(4);
+  if (!g2) out.errors.push('partie 2 : pas de game:final');
+  else {
+    if (!g2.series || g2.series.gamesPlayed !== 2) out.errors.push('partie 2 : gamesPlayed ≠ 2 (' + g2.series?.gamesPlayed + ')');
+    const stds = g2.series?.standings || [];
+    if (!stds.length || !stds.every((p) => p.totalRounds === 8)) out.errors.push('cumul de manches ≠ 8 : ' + JSON.stringify(stds.map((p) => p.totalRounds)));
+    if (!(stds[0]?.total > 0)) out.errors.push('cumul d\'auditeurs nul');
+    if (stds.reduce((n, p) => n + (p.gameWins || 0), 0) < 1) out.errors.push('aucune victoire de partie comptabilisée');
+  }
+  out.ok = out.errors.length === 0;
+  host.off('round:reveal'); socks.forEach((s) => s.close()); host.close();
   return out;
 }
 
@@ -168,13 +213,14 @@ async function main() {
     { mode: 'multi', difficulty: 'normal', rounds: 6, mj: true },
   ]) { const r = await playGame(cfg); results.push(r); log(r); }
 
-  // 3) reconnexion + late-join
+  // 3) reconnexion + late-join + série multi-parties/trophées
   const rc = await testReconnectAndLateJoin(); logSpecial(rc);
   const lj = await testLateJoinLobby(); logSpecial(lj);
+  const sa = await testSeriesAndAwards(); logSpecial(sa);
 
   const allPowers = new Set(results.flatMap((r) => [...r.activated]));
-  const failed = results.filter((r) => !r.ok).length + (rc.ok ? 0 : 1) + (lj.ok ? 0 : 1);
-  out(`\n=== BILAN : ${results.length + 2} tests · ${failed} échec(s) ===`);
+  const failed = results.filter((r) => !r.ok).length + (rc.ok ? 0 : 1) + (lj.ok ? 0 : 1) + (sa.ok ? 0 : 1);
+  out(`\n=== BILAN : ${results.length + 3} tests · ${failed} échec(s) ===`);
   out(`Pouvoirs activés au moins une fois : ${allPowers.size}/${POOL.length}`);
   const missing = POOL.filter((a) => !allPowers.has(a));
   if (missing.length) out(`(non activés — souvent "rien à faire" : ${missing.join(', ')})`);

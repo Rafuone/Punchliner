@@ -43,9 +43,9 @@ const DIFFS = [
   { key: 'puriste', name: 'Puriste', desc: 'Le fond du bac, pour les vrais', signal: 4 },
 ];
 const FORMATS = [
-  { rounds: 20, label: 'Échauffement', desc: 'Une manche courte pour lancer la soirée.' },
-  { rounds: 30, label: 'Set complet', desc: 'Le format standard, équilibré et nerveux.' },
-  { rounds: 50, label: 'Marathon', desc: 'Pour les longues sessions et les vrais diggers.' },
+  { rounds: 8, label: 'Petit set', desc: 'Une partie courte pour lancer la soirée.' },
+  { rounds: 16, label: 'Set complet', desc: 'Le format standard, équilibré et nerveux.' },
+  { rounds: 24, label: 'Marathon', desc: 'Pour les longues sessions et les vrais diggers.' },
   { rounds: 'inf' as const, label: 'Sans fin', desc: 'On enchaîne jusqu’à ce que quelqu’un lâche.' },
 ];
 const REBALANCE = [
@@ -78,6 +78,8 @@ const KEYART: Record<string, string> = {
   quiz: `<svg viewBox="0 0 400 560" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><rect width="400" height="560" fill="#131315"/><g transform="translate(200 250)"><g transform="rotate(-8) translate(-150 -6)"><rect x="-42" y="-52" width="84" height="104" rx="4" fill="rgba(0,0,0,.5)" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/><circle r="26" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/><circle r="5" fill="rgba(255,255,255,.16)"/></g><g transform="rotate(8) translate(150 -6)"><rect x="-42" y="-52" width="84" height="104" rx="4" fill="rgba(0,0,0,.5)" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/><circle r="26" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/><circle r="5" fill="rgba(255,255,255,.16)"/></g><rect x="-72" y="-96" width="144" height="192" rx="4" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.3)" stroke-width="2.5"/><text x="0" y="34" text-anchor="middle" font-family="'Clash Display',sans-serif" font-size="130" font-weight="700" fill="rgba(255,255,255,.7)">?</text></g></svg>`,
 };
 const vhsOverlay = '<div class="vhs"><div class="lines"></div><div class="band"></div><div class="flick"></div></div>';
+// crunch/grésille fin par-dessus la vidéo Blind Test (reprise de la DA showcase perso : scanlines + bruit chroma + bande + voile froid)
+const keyvidFx = '<i class="kvl"></i><i class="kvt"></i><i class="kvn"></i><i class="kvb"></i>';
 function dial(active: boolean) {
   const c = active ? 'var(--fluo)' : 'rgba(255,255,255,.28)';
   return `<svg class="dial" viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="16" fill="rgba(0,0,0,.35)" stroke="${c}" stroke-width="2"/><g stroke="${c}" stroke-width="1.4" opacity=".7"><line x1="20" y1="6" x2="20" y2="9"/><line x1="34" y1="20" x2="31" y2="20"/><line x1="20" y1="34" x2="20" y2="31"/><line x1="6" y1="20" x2="9" y2="20"/></g><line x1="20" y1="20" x2="${active ? 28 : 14}" y2="12" stroke="${active ? 'var(--fluo)' : '#fff'}" stroke-width="2.4" stroke-linecap="round"/><circle cx="20" cy="20" r="3" fill="${c}"/></svg>`;
@@ -97,7 +99,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const [era, setEra] = useState('all');
   const [theme, setTheme] = useState('all');
   const [diff, setDiff] = useState('normal');
-  const [rounds, setRounds] = useState<number | 'inf'>(30);
+  const [rounds, setRounds] = useState<number | 'inf'>(16);
   const [rebalance, setRebalance] = useState('comeback');
   const [orch, setOrch] = useState('auto');
   const [mjId, setMjId] = useState('');
@@ -120,6 +122,14 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     const mode = game === 'buzz' ? 'buzzer' : game === 'quiz' ? 'quiz' : 'multi';
     onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance });
   }
+
+  // vidéo « diffusion télé » de la carte Blind Test : ne tourne QUE quand le mode est sélectionné (muette)
+  const blindVidRef = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    const v = blindVidRef.current; if (!v) return;
+    if (step === 0 && game === 'blind') { v.muted = true; const p = v.play(); if (p?.catch) p.catch(() => {}); }
+    else { try { v.pause(); } catch {} }
+  }, [game, step]);
 
   // fond grunge (béton/xerox/coulures) peint en canvas — comme l'exploration
   const texRef = useRef<HTMLCanvasElement | null>(null);
@@ -226,6 +236,12 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                     <span {...H(bracketsSvg)} />
                     <div className="kclip">
                       <div className="keyart" {...H(KEYART[g.id])} />
+                      {g.id === 'blind' && (
+                        <>
+                          <video className="keyvid" ref={blindVidRef} src="/blind-test.mp4" muted loop playsInline preload="auto" disablePictureInPicture />
+                          <div className="keyvid-fx" {...H(keyvidFx)} />
+                        </>
+                      )}
                       <span {...H(vhsOverlay)} />
                       <div className="kshade" />
                     </div>
