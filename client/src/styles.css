@@ -527,13 +527,16 @@ button, input { font-family: inherit; }
 .tvros-hero { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; gap: clamp(22px, 3.6vw, 56px); padding: clamp(10px,2vh,22px) var(--lp) 0; }
 /* portrait : boîte 3:4 (l'illustration entière, sans crop) fondue sur TOUS les bords (aucun rebord visible) */
 .tvros-fig { position: relative; flex: 0 0 auto; height: 100%; aspect-ratio: 3 / 4; max-height: min(62vh, 540px); align-self: center; }
-/* LUEUR INTERNE tout autour du perso : un halo coloré (couleur catégorie) qui noie les bords → intégration super smooth, on ne voit jamais le cadre */
-.tvros-figglow { position: absolute; inset: -18%; z-index: 0; mix-blend-mode: screen; filter: blur(12px);
-  background: radial-gradient(50% 54% at 50% 42%, color-mix(in srgb, var(--cc, #a6ff00) 55%, transparent), transparent 74%); }
-.tvros-portrait { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 4%; z-index: 1; filter: url(#vhs);
-  -webkit-mask-image: radial-gradient(72% 80% at 50% 42%, #000 40%, transparent 96%); mask-image: radial-gradient(72% 80% at 50% 42%, #000 40%, transparent 96%); }
-/* vignette interne : noie encore le cadre dans le fond de page (aucun rebord visible) */
-.tvros-fig::after { content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none; box-shadow: inset 0 0 clamp(30px,4vw,56px) clamp(14px,2vw,28px) #0a0b0e; }
+/* halo coloré léger — visible UNIQUEMENT dans les bords rendus transparents du portrait (jamais derrière l'opaque) */
+.tvros-figglow { position: absolute; inset: -12%; z-index: 0; mix-blend-mode: screen; filter: blur(16px);
+  background: radial-gradient(46% 50% at 50% 40%, color-mix(in srgb, var(--cc, #a6ff00) 45%, transparent), transparent 72%); }
+/* CLÉ : les images ne sont pas transparentes → on FOND les 4 bords de l'image jusqu'à transparence totale
+   (double dégradé croisé), pour que le rectangle de l'image DISPARAISSE. Aucune vignette/bord noir ajouté. */
+.tvros-portrait { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 3%; z-index: 1; filter: url(#vhs);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 17%, #000 83%, transparent), linear-gradient(to bottom, transparent, #000 13%, #000 76%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 17%, #000 83%, transparent), linear-gradient(to bottom, transparent, #000 13%, #000 76%, transparent);
+  mask-composite: intersect; }
 .tvros-portrait.tear { z-index: 2; opacity: 0; pointer-events: none; }
 .tvros-fig.glx .tvros-portrait.tear, .tvros-fig.glx-strong .tvros-portrait.tear { opacity: .95;
   clip-path: inset(var(--gy, 40%) 0 calc(100% - var(--gy, 40%) - var(--gh, 6%)) 0); transform: translateX(var(--gx, 0)); }
