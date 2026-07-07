@@ -586,15 +586,21 @@ button, input { font-family: inherit; }
   background: #3a3e46;
   clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
   transition: background .13s ease, transform .08s ease; }
-.tvcell > img { position: absolute; inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); object-fit: cover; object-position: 50% 10%; }
-.tvcell .ini, .tvcell .q { position: absolute; inset: 2px; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; color: #fff;
+/* le contenu porte un clip biseauté RENTRÉ (~2px) parallèle au contour de la tuile → le contour gris
+   suit la forme partout, y compris sur les diagonales des angles coupés. */
+.tvcell > img, .tvcell .ini, .tvcell .q { position: absolute; inset: 0; width: 100%; height: 100%;
+  clip-path: polygon(2px 2px, calc(100% - 11px) 2px, calc(100% - 2px) 11px, calc(100% - 2px) calc(100% - 2px), 11px calc(100% - 2px), 2px calc(100% - 11px)); }
+.tvcell > img { object-fit: cover; object-position: 50% 10%; }
+.tvcell .ini, .tvcell .q { display: grid; place-items: center; font-family: var(--disp); font-weight: 700; color: #fff;
   background: linear-gradient(160deg, color-mix(in srgb, var(--c,#333) 45%, #15161a), #0d0e12); }
 .tvcell .ini { font-size: 14px; }
 .tvcell .q { font-size: clamp(20px,2vw,30px); color: var(--muted2); }
 .tvcell-nm { position: absolute; left: 2px; right: 2px; bottom: 2px; padding: 12px 1px 3px; font-size: 8.5px; font-weight: 800; letter-spacing: .01em; text-align: center; text-transform: uppercase; color: #fff; background: linear-gradient(180deg, transparent, rgba(0,0,0,.9)); opacity: 0; transition: opacity .1s ease; z-index: 2; }
 .tvcell:hover .tvcell-nm, .tvcell.sel .tvcell-nm { opacity: 1; }
 .tvcell:hover { background: var(--cc, #6b7078); transform: translateY(-2px); z-index: 2; }
-.tvcell.sel { background: var(--fluo); z-index: 3; }
+.tvcell.sel { background: var(--cc, var(--fluo)); z-index: 3; }
+/* sélection = contour couleur catégorie un peu PLUS ÉPAIS (3px) pour se distinguer du survol */
+.tvcell.sel > img, .tvcell.sel .ini, .tvcell.sel .q { clip-path: polygon(3px 3px, calc(100% - 13px) 3px, calc(100% - 3px) 13px, calc(100% - 3px) calc(100% - 3px), 13px calc(100% - 3px), 3px calc(100% - 13px)); }
 .tvcell.lock { background: #2b2f37; }
 .tvcell.lock .q { background: repeating-linear-gradient(45deg, #131419 0 5px, #0e0f13 5px 10px); }
 .tvcell.lock:hover { background: #4a4f57; }
