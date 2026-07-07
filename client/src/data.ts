@@ -141,6 +141,41 @@ export const AWARD_ICONS: Record<string, string> = {
 };
 export const awardIcon = (id?: string) => AWARD_ICONS[id || ''] || AWARD_ICONS.medal;
 
+// Catalogue d'AFFICHAGE des trophées (page Palmarès) — la mécanique de déclenchement vit dans
+// server/awards.js. `blurb` = comment on le décroche (texte de référence, pas le texte dynamique).
+export type AwardInfo = { id: string; title: string; icon: string; blurb: string; salty?: boolean };
+export const AWARDS_INFO: AwardInfo[] = [
+  { id: 'comeback', title: 'Comeback King', icon: 'up', blurb: 'Bon dernier à un moment… et gagne la partie sur la fin.' },
+  { id: 'ecrasant', title: 'Rouleau Compresseur', icon: 'crown', blurb: 'Gagne avec une avance écrasante, personne au niveau.' },
+  { id: 'photofinish', title: 'Photo Finish', icon: 'flag', blurb: 'Gagne sur le fil, à quelques auditeurs près.' },
+  { id: 'sniper', title: 'Le Sniper', icon: 'target', blurb: 'Presque toutes ses tentatives font mouche.' },
+  { id: 'machine', title: 'La Machine', icon: 'gauge', blurb: 'Marque sur la grande majorité des manches.' },
+  { id: 'reflexe', title: 'Réflexe Éclair', icon: 'bolt', blurb: 'Premier à trouver, encore et encore.' },
+  { id: 'sansfaute', title: 'Sans-Faute', icon: 'check', blurb: 'Enchaîne les manches titre ET artiste.' },
+  { id: 'puriste', title: 'Le Puriste', icon: 'diamond', blurb: 'Ne trouve jamais à moitié : toujours titre ET artiste.' },
+  { id: 'diamant', title: 'Le Gros Move', icon: 'diamond', blurb: 'Claque le plus gros score sur une seule manche.' },
+  { id: 'solo', title: 'Cavalier Seul', icon: 'flag', blurb: 'Seul à reconnaître le son, plusieurs fois.' },
+  { id: 'metronome', title: 'Le Métronome', icon: 'gauge', blurb: 'Marque à CHAQUE manche, aucune ratée.' },
+  { id: 'diesel', title: 'Le Diesel', icon: 'snail', blurb: 'Démarrage poussif, gros finish.' },
+  { id: 'sage', title: 'Le Sage', icon: 'feather', blurb: 'Finit dans le haut du panier SANS aucun pouvoir.' },
+  { id: 'perdantmagnifique', title: 'Le Perdant Magnifique', icon: 'up', blurb: 'Fait une énorme partie… et finit 2ᵉ. Rageant.' },
+  { id: 'champion', title: 'La Ceinture', icon: 'crown', blurb: 'Champion de la partie.' },
+  // ---- les salés (on est là pour se chambrer) ----
+  { id: 'mitraillette', title: 'La Mitraillette', icon: 'spray', blurb: 'Balance un max de réponses au petit bonheur.', salty: true },
+  { id: 'feudepaille', title: 'Feu de Paille', icon: 'fire', blurb: 'Démarre en fusée… s\'éteint sur la fin.', salty: true },
+  { id: 'braqueur', title: 'Le Braqueur', icon: 'mask', blurb: 'Dépouille les autres avec un pouvoir de vol.', salty: true },
+  { id: 'kamikaze', title: 'Le Kamikaze', icon: 'dice', blurb: 'Mise tout sur un coup de poker.', salty: true },
+  { id: 'sanspitie', title: 'Le Sans-Pitié', icon: 'mask', blurb: 'Gagne ET dépouille tout le monde au passage.', salty: true },
+  { id: 'escroc', title: "L'Escroc", icon: 'dice', blurb: 'Gagne en n\'ayant trouvé presque aucune manche.', salty: true },
+  { id: 'boulet', title: 'Le Rendement', icon: 'skull', blurb: 'Beaucoup de tentatives, presque rien à la clé.', salty: true },
+  { id: 'fantome', title: 'Le Fantôme', icon: 'ghost', blurb: 'Enchaîne les manches à zéro pointé.', salty: true },
+  { id: 'muet', title: 'Le Muet', icon: 'ghost', blurb: 'Pas une seule réponse tentée de toute la partie.', salty: true },
+  { id: 'lanterne', title: 'La Lanterne Rouge', icon: 'skull', blurb: 'Termine bon dernier.', salty: true },
+  { id: 'touriste', title: 'Le Touriste', icon: 'ghost', blurb: 'Finit la partie à zéro auditeur.', salty: true },
+  { id: 'frimeur', title: 'Le Frimeur', icon: 'mask', blurb: 'Claque plein de pouvoirs et finit dernier.', salty: true },
+  { id: 'radin', title: 'Le Radin', icon: 'skull', blurb: 'Finit dernier sans avoir utilisé un seul pouvoir.', salty: true },
+];
+
 // Musique du menu (fichiers dans client/public/music/, servis par Vite à /music/…)
 // Lecture en entier + ordre aléatoire côté Host.
 export type MenuTrack = { title: string; artist: string; src: string };

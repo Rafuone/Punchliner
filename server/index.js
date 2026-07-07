@@ -181,6 +181,7 @@ function checkPrepDone(room) {
 function startRound(room) {
   if (room.phase !== 'countdown' && room.phase !== 'prep') return; // annulé pendant décompte / fenêtre pouvoirs
   room.phase = 'playing';
+  room.suspense = suspenseActive(room); // manche de fin serrée → on masquera le score en direct + à la révélation
   room.current = room.playlist[room.roundIndex];
   room.answers = new Map();
   room.buzz = { winnerId: null, winnerName: null, open: true, lockedOut: new Set() };
@@ -194,7 +195,7 @@ function startRound(room) {
     room.windowMs = QUIZ_MS; room.diffLabel = 'Culture'; room.mult = 1;
     room.quiz = buildQuizRound(room.current);
     room.roundEndsAt = Date.now() + QUIZ_MS;
-    const base = { index: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: QUIZ_MS, mode: 'quiz', difficulty: 'Culture', mj: false };
+    const base = { index: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: QUIZ_MS, mode: 'quiz', difficulty: 'Culture', mj: false, suspense: room.suspense };
     io.to(room.hostId).emit('round:host', { ...base, quiz: room.quiz }); // l'hôte a la bonne réponse (pour la révélation)
     io.to(room.code).emit('round:go', { ...base, quiz: { id: room.quiz.id, cat: room.quiz.cat, q: room.quiz.q, choices: room.quiz.choices } });
     clearTimeout(room.timer);
@@ -212,7 +213,7 @@ function startRound(room) {
   room.startAt = diff.offset ? Math.floor(Math.random() * Math.min(14000, maxOffset)) : 0;
   room.roundEndsAt = Date.now() + diff.windowMs;
 
-  const base = { index: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: diff.windowMs, mode: room.settings.mode, difficulty: diff.label, mj: room.settings.mj, jam: room.jam ? { by: room.jam.by, ms: room.jam.ms } : null };
+  const base = { index: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: diff.windowMs, mode: room.settings.mode, difficulty: diff.label, mj: room.settings.mj, suspense: room.suspense, jam: room.jam ? { by: room.jam.by, ms: room.jam.ms } : null };
   io.to(room.hostId).emit('round:host', { ...base, preview: room.current.preview, startAt: room.startAt });
   io.to(room.code).emit('round:go', base);
   // le Maître du jeu voit la réponse (lui seul) pour arbitrer à la voix
@@ -237,6 +238,20 @@ function fillCharges(room) {
     while (p.charge >= 100 && (p.charges || 0) < 5) { p.charges = (p.charges || 0) + 1; p.charge -= 100; }
     if (p.charge > 100) p.charge = 100;
   });
+}
+
+// SUSPENSE : sur la/les dernière(s) manche(s), on MASQUE le classement — MAIS uniquement si ça reste
+// jouable (l'écart entre 1er et 2e est rattrapable). Si quelqu'un a une avance imprenable, on l'affiche
+// (être plus fort doit payer — pas de frustration « carapace bleue »).
+function suspenseActive(room) {
+  if (room.settings.mj) return false;                 // le MJ voit tout de toute façon
+  const hideRounds = room.totalRounds >= 12 ? 2 : 1;  // longues parties → 2 dernières masquées
+  if (room.roundIndex < room.totalRounds - hideRounds) return false;
+  const act = [...room.players.values()].filter((p) => !p.isMJ && !p.waiting).sort((a, b) => b.score - a.score);
+  if (act.length < 2) return false;
+  const gap = act[0].score - act[1].score;
+  const roundsLeft = room.totalRounds - room.roundIndex; // manches restantes, celle-ci incluse
+  return gap <= roundsLeft * 38000;                      // rattrapable → suspense ; sinon runaway → on montre
 }
 
 function endRound(room) {
@@ -294,6 +309,7 @@ function endRound(room) {
     roundIndex: room.roundIndex, total: room.totalRounds,
     track: isQuiz ? null : { title: room.current.title, artist: room.current.artist, cover: room.current.cover },
     quiz: isQuiz ? room.quiz : null,
+    hideBoard: suspenseActive(room), // manche de fin serrée : on cache le classement pour garder le suspense
     results, scores,
   };
   io.to(room.code).emit('round:reveal', room.lastReveal);

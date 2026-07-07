@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { socket } from '../socket';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO } from '../data';
 import GrungeBg from '../GrungeBg';
 
 const SKEY = 'pl_session';
@@ -8,12 +8,21 @@ const loadSession = () => { try { return JSON.parse(localStorage.getItem(SKEY) |
 const saveSession = (s: any) => localStorage.setItem(SKEY, JSON.stringify(s));
 const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 76', kortex: 'Le Clasheur', bouss: 'La Voix', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème' };
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
+// médaillon rond du rappeur (photo si dispo, sinon initiales sur sa couleur)
+function RMed({ id, size = 34 }: { id?: string; size?: number }) {
+  const a = avatarById(id);
+  return <span className="med" style={{ width: size, height: size, fontSize: Math.round(size * 0.37), background: a?.color || '#5639bf' }}>
+    {a?.img ? <img src={`/avatars/${a.id}.png`} alt="" onError={hideOnErr} /> : initials(a?.name || id || '?')}
+  </span>;
+}
 // met en gras les chiffres-clés d'un effet (montants, ×N, N %) → on repère vite le point fort du pouvoir
 const FX_FIG = /([×x]\s?\d+(?:[.,]\d+)?|[+\-−]?\d[\d   ]*\d\s?%?|\d+\s?%)/g;
 const boldFx = (text: string) => text.split(FX_FIG).map((seg, i) => (i % 2 === 1 ? <b key={i}>{seg}</b> : seg));
 
 export default function Player() {
-  const [step, setStep] = useState<'form' | 'char'>('form'); // avant d'avoir rejoint
+  const [step, setStep] = useState<'form' | 'char' | 'roster' | 'trophies'>('form'); // avant d'avoir rejoint (+ pages hub : roster / palmarès)
+  const [unlockedTrophies, setUnlockedTrophies] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('pl_trophies') || '[]'); } catch { return []; } });
+  const [revealTrophies, setRevealTrophies] = useState(true); // aperçu : tout afficher (sinon non-débloqués grisés)
   const [joined, setJoined] = useState(false);
   const [code, setCode] = useState((new URLSearchParams(location.search).get('c') || '').toUpperCase());
   const [name, setName] = useState('');
@@ -98,7 +107,11 @@ export default function Player() {
     socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); } });
     socket.on('mj:track', (d: any) => setMjTrack(d));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); });
-    socket.on('game:final', (d: any) => { setPlayers(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final'); });
+    socket.on('game:final', (d: any) => {
+      setPlayers(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final');
+      const mine = (d.awards || []).filter((a: any) => a.playerId === meId.current).map((a: any) => a.id);
+      if (mine.length) setUnlockedTrophies((prev) => { const s = Array.from(new Set([...prev, ...mine])); try { localStorage.setItem('pl_trophies', JSON.stringify(s)); } catch {} return s; });
+    });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) setBuzz('mine'); else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
     socket.on('buzz:open', (d: any) => { if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — attends la prochaine'); } else setBuzz('idle'); });
@@ -124,7 +137,7 @@ export default function Player() {
   // VHS : glitches de tracking ORGANIQUES (intervalles + tailles aléatoires) — pilotés en JS pour un
   // rendu non répétitif, sans re-render React (on écrit direct sur le DOM du stage).
   useEffect(() => {
-    if (joined || step !== 'char') return;
+    if (joined || (step !== 'char' && step !== 'roster')) return;
     const stage = stageRef.current; if (!stage) return;
     let timer: any;
     const fire = () => {
@@ -224,12 +237,48 @@ export default function Player() {
             <input className="field" style={{ marginTop: 6 }} value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Sacha" /></div>
           <button className="btn warm big" type="submit" disabled={!code.trim() || !name.trim()}>Entre dans le cercle →</button>
         </form>
+        <div className="row" style={{ gap: 10, marginTop: 2, width: '100%', maxWidth: 360 }}>
+          <button className="btn" style={{ flex: 1 }} onClick={() => setStep('roster')}>Le roster</button>
+          <button className="btn" style={{ flex: 1 }} onClick={() => setStep('trophies')}>Le palmarès</button>
+        </div>
       </div></div></>
     );
   }
 
-  /* ---- 2) sélection du perso (avec pouvoir) ---- */
-  if (!joined && step === 'char') {
+  /* ---- PALMARÈS : galerie de tous les trophées (débloqués en couleur, le reste grisé « à découvrir ») ---- */
+  if (!joined && step === 'trophies') {
+    const has = (id: string) => unlockedTrophies.includes(id);
+    return (
+      <><GrungeBg />
+      <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
+        <div className="topbar">
+          <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={() => setStep('form')}>← Hub</button>
+          <h1 className="wm" style={{ fontSize: 20 }}>PALMARÈS</h1>
+          <button className="btn" style={{ padding: '8px 12px', fontSize: 12 }} onClick={() => setRevealTrophies((v) => !v)}>{revealTrophies ? 'Masquer' : 'Tout voir'}</button>
+        </div>
+        <p className="muted" style={{ textAlign: 'center', margin: '2px 0 12px', fontSize: 13 }}>
+          {unlockedTrophies.length}/{AWARDS_INFO.length} débloqués · décernés en fin de partie
+        </p>
+        <div className="troph-grid">
+          {AWARDS_INFO.map((t) => {
+            const shown = revealTrophies || has(t.id);
+            return (
+              <div className={`troph ${has(t.id) ? 'got' : ''} ${shown ? '' : 'locked'} ${t.salty ? 'salty' : ''}`} key={t.id}>
+                <span className="troph-ic" dangerouslySetInnerHTML={{ __html: shown ? awardIcon(t.icon) : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 9a3 3 0 1 1 4 2.8c-.8.4-1 .8-1 1.7"/><circle cx="12" cy="17.5" r="1" fill="currentColor" stroke="none"/></svg>' }} />
+                <div className="troph-title">{shown ? t.title : '???'}</div>
+                <div className="troph-desc">{shown ? t.blurb : 'À découvrir'}</div>
+                {has(t.id) && <span className="troph-badge">débloqué</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div></>
+    );
+  }
+
+  /* ---- 2) sélection du perso (avec pouvoir) — sert aussi de page ROSTER (mode browse, sans join) ---- */
+  if (!joined && (step === 'char' || step === 'roster')) {
+    const browse = step === 'roster';
     const sel = av || AVATARS[0];
     const nmU = sel.name.toUpperCase();
     // taille du nom adaptée à sa longueur → ne déborde jamais sur les stats
@@ -323,7 +372,9 @@ export default function Player() {
         </div>
 
         <div className="cs-bottombar">
-          <button className="btn warm big" onClick={join} disabled={!avatarId || joining || takenIds.has(avatarId)}>{joining ? 'Connexion…' : takenIds.has(avatarId) ? 'Déjà pris — choisis un autre' : `Entrer avec ${sel.name}`}</button>
+          {browse
+            ? <button className="btn big" onClick={() => setStep('form')}>← Retour au hub</button>
+            : <button className="btn warm big" onClick={join} disabled={!avatarId || joining || takenIds.has(avatarId)}>{joining ? 'Connexion…' : takenIds.has(avatarId) ? 'Déjà pris — choisis un autre' : `Entrer avec ${sel.name}`}</button>}
         </div>
       </div>
     );
@@ -334,7 +385,7 @@ export default function Player() {
     return (
       <div className="wrap">
         <div className="topbar">
-          <span className="row" style={{ gap: 9 }}>{av && <span className="med" style={{ width: 34, height: 34, background: av.color }}>{initials(av.name)}</span>}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17 }}>{name}</span></span>
+          <span className="row" style={{ gap: 9 }}>{av && <RMed id={av.id} size={34} />}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17 }}>{name}</span></span>
           <span className="gpill" style={{ color: 'var(--muted)' }}>En attente</span>
         </div>
         {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
@@ -385,10 +436,9 @@ export default function Player() {
               <div className="eyebrow" style={{ marginBottom: 8 }}>Qui a trouvé ? Donne les points</div>
               <div className="board">
                 {others.length === 0 ? <p className="muted" style={{ margin: 0 }}>En attente des joueurs…</p> : others.map((p) => {
-                  const pav = avatarById(p.avatar);
                   return (
                     <div className="prow" key={p.id}>
-                      <span className="who"><span className="med" style={{ width: 26, height: 26, background: pav?.color || '#5639bf' }}>{initials(pav?.name || p.name)}</span>{p.name}<span className="muted" style={{ fontSize: 12 }}>· {fmtAud(p.score)}</span></span>
+                      <span className="who"><RMed id={p.avatar} size={26} />{p.name}<span className="muted" style={{ fontSize: 12 }}>· {fmtAud(p.score)}</span></span>
                       <span className="row" style={{ gap: 6 }}>
                         <button className="btn" style={{ padding: '8px 12px', fontSize: 13 }} onClick={() => mjAward(p.id, 5000)}>+5 000</button>
                         <button className="btn warm" style={{ padding: '8px 12px', fontSize: 13 }} onClick={() => mjAward(p.id, 10000)}>+10 000</button>
@@ -415,8 +465,8 @@ export default function Player() {
   return (
     <div className="wrap">
       <div className="topbar">
-        <span className="row" style={{ gap: 9 }}>{av && <span className="med" style={{ width: 34, height: 34, background: av.color }}>{initials(av.name)}</span>}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17 }}>{name}</span></span>
-        {me && <span className="gpill" style={{ color: 'var(--ember)' }}>{fmtAud(me.score)} aud.</span>}
+        <span className="row" style={{ gap: 9 }}>{av && <RMed id={av.id} size={34} />}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17 }}>{name}</span></span>
+        {me && <span className="gpill" style={{ color: 'var(--ember)' }}>{(round?.suspense || reveal?.hideBoard) ? '??? aud.' : `${fmtAud(me.score)} aud.`}</span>}
       </div>
       {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
 
@@ -508,7 +558,9 @@ export default function Player() {
             </>
           )}
           <div className="gpill" style={{ fontSize: 16, padding: '12px 20px' }}>{myResult?.points ? `+${fmtAud(myResult.points)} auditeurs` : 'Zéro cette fois'}</div>
-          <p className="muted">Ton total : <b style={{ color: 'var(--txt)' }}>{fmtAud(me?.score ?? 0)}</b> auditeurs · {myRank}<sup>{myRank === 1 ? 'er' : 'e'}</sup></p></div>
+          {reveal.hideBoard
+            ? <p className="feedback" style={{ color: 'var(--fluo)' }}>Position masquée — suspense jusqu'au bout !</p>
+            : <p className="muted">Ton total : <b style={{ color: 'var(--txt)' }}>{fmtAud(me?.score ?? 0)}</b> auditeurs · {myRank}<sup>{myRank === 1 ? 'er' : 'e'}</sup></p>}</div>
       )}
 
       {phase === 'final' && (() => {

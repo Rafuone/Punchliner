@@ -151,6 +151,46 @@ export const AWARDS = [
     if (last.score >= s[0].score) return null;
     return { playerId: last.id, desc: `Dernier du classement. Quelqu'un doit bien fermer la marche.` };
   } },
+  { id: 'touriste', title: 'Le Touriste', icon: 'ghost', weight: 5, pick(list, c) {
+    if (c.N < 2) return null;
+    const cands = list.filter((p) => p.score <= 0);
+    if (!cands.length) return null;
+    const p = rand(cands);
+    return { playerId: p.id, desc: `Zéro auditeur au compteur. T'es venu visiter ou jouer, ${p.name} ?` };
+  } },
+  { id: 'frimeur', title: 'Le Frimeur', icon: 'mask', weight: 6, pick(list, c) {
+    if (c.N < 3) return null;
+    const cands = list.filter((p) => p.rank === c.N && p.powers >= 2);
+    if (!cands.length) return null;
+    const p = rand(cands);
+    return { playerId: p.id, desc: `${p.powers} pouvoirs claqués… pour finir bon dernier. La grosse lose.` };
+  } },
+  { id: 'radin', title: 'Le Radin', icon: 'skull', weight: 6, pick(list, c) {
+    if (c.N < 3) return null;
+    const cands = list.filter((p) => p.rank === c.N && p.powers === 0);
+    if (!cands.length) return null;
+    const p = rand(cands);
+    return { playerId: p.id, desc: `Dernier sans avoir lâché UN seul pouvoir. Fallait s'en servir, tocard.` };
+  } },
+  { id: 'escroc', title: "L'Escroc", icon: 'dice', weight: 7, pick(list, c) {
+    if (c.N < 2 || c.total < 5) return null;
+    const s = [...list].sort((a, b) => b.score - a.score);
+    const w = s[0];
+    if (w.rank !== 1 || w.score <= 0 || w.scored > Math.ceil(c.total * 0.4)) return null;
+    return { playerId: w.id, desc: `Gagne en n'ayant trouvé que ${w.scored} manche${w.scored > 1 ? 's' : ''}. Sacré roublard.` };
+  } },
+  { id: 'perdantmagnifique', title: 'Le Perdant Magnifique', icon: 'up', weight: 7, pick(list, c) {
+    if (c.N < 3) return null;
+    const s = [...list].sort((a, b) => b.score - a.score);
+    if (s.length < 2 || s[1].score <= 0 || s[1].score < s[0].score * 0.85) return null;
+    return { playerId: s[1].id, desc: `Une partie énorme… et 2ᵉ quand même. Rageant.` };
+  } },
+  { id: 'sanspitie', title: 'Le Sans-Pitié', icon: 'mask', weight: 7, pick(list, c) {
+    if (c.N < 3) return null;
+    const s = [...list].sort((a, b) => b.score - a.score);
+    if (s[0].rank !== 1 || !s[0].denial) return null;
+    return { playerId: s[0].id, desc: `Pas assez de gagner : il a fallu en plus dépouiller tout le monde.` };
+  } },
   { id: 'champion', title: 'La Ceinture', icon: 'crown', weight: 2, pick(list) {
     const s = [...list].sort((a, b) => b.score - a.score);
     if (!s.length || s[0].score <= 0) return null;

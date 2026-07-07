@@ -75,6 +75,10 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
 - **Fautes** : `matchQuality` = 1.0 (exact / contient / tous les mots) vs 0.8 (faute ~20 % Levenshtein).
 - **Certification** de fin (`data.ts → certif`, sur auditeurs/manche, indépendant du nb de manches) :
   Espoir → Disque d'Or → Platine → Double → Triple → **Diamant**.
+- **Suspense** (`suspenseActive`) : sur la/les dernière(s) manche(s), si l'écart 1er↔2e est rattrapable
+  (≤ manches restantes × 38 000), on MASQUE le classement (host = carte « scores masqués » ; joueur =
+  total/rang + score de la barre en `??? aud.`). Si le leader est intouchable, on l'affiche (le plus fort
+  doit gagner — pas de frustration Mario Kart). Flag `suspense` (round) / `hideBoard` (reveal).
 - **Jauge de pouvoir** (`fillCharges`) : se remplit en fin de manche selon `rebalance`
   (comeback = les derniers rechargent + vite · snowball · off). 1 charge = 1 pouvoir. Cap 5.
 
@@ -140,7 +144,11 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
 - **Player.tsx** — le téléphone : formulaire (code + blaze, bouton **« Entre dans le cercle »** réf.
   Fianso), **character select** (showcase grande image + nom + surnom `EPITHETS` + stats ; roster
   **groupé par catégorie en scroll horizontal**, vignettes recadrées via `crop`, anneau de sélection
-  uniforme), fenêtre prep (Activer/Passer), jeu, **pupitre Maître du jeu**.
+  uniforme), fenêtre prep (Activer/Passer), jeu, **pupitre Maître du jeu**, **salle d'attente**.
+  - **Hub** (écran d'accueil) : boutons **« Le roster »** (`step:'roster'` = character-select en mode
+    browse, façon Street Fighter) et **« Le palmarès »** (`step:'trophies'` = galerie `AWARDS_INFO` ;
+    débloqués en `localStorage pl_trophies`, le reste grisé « ??? / à découvrir », toggle Tout voir/Masquer).
+- **Avatars ronds** : `.med` (Host `Med` / Player `RMed`) affiche la PHOTO du rappeur (rond), initiales en repli.
 - **ConfigWizard.tsx** — assistant en 5 actes (Jeu / Playlist / Difficulté / Format / Réglages) ;
   dock musique ; **compteur de joueurs cliquable → liste « qui est dans le salon »**. Cartes de mode
   qui s'empilent sous 960px ; l'artwork est clippé dans `.kclip` (le tag P1/brackets ne sont plus rognés).

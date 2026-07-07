@@ -14,7 +14,9 @@ const SILENT = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAA
 
 function Med({ avatarId, size = 38 }: { avatarId?: string; size?: number }) {
   const a = avatarById(avatarId);
-  return <span className="med" style={{ width: size, height: size, background: a?.color || 'linear-gradient(150deg,#7C5CFF,#432E8C)' }}>{initials(a?.name || '?')}</span>;
+  return <span className="med" style={{ width: size, height: size, fontSize: Math.round(size * 0.37), background: a?.color || 'linear-gradient(150deg,#7C5CFF,#432E8C)' }}>
+    {a?.img ? <img src={`/avatars/${a.id}.png`} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : initials(a?.name || '?')}
+  </span>;
 }
 
 export default function Host() {
@@ -391,6 +393,12 @@ export default function Host() {
               </div>
             </div>
           )}
+          {reveal.hideBoard ? (
+            <div className="suspense-card">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+              <div><b>Scores masqués</b><span>Ça se joue sur la fin — le classement reste secret jusqu'au podium. Personne ne sait qui mène.</span></div>
+            </div>
+          ) : (
           <div className="board" style={{ maxWidth: 620 }}>
             {reveal.scores.filter((p: any) => !p.isMJ).map((p: any, i: number) => {
               const r = reveal.results.find((x: any) => x.id === p.id);
@@ -414,6 +422,7 @@ export default function Host() {
               );
             })}
           </div>
+          )}
           <button className="btn warm" onClick={() => socket.emit('host:next')}>{round.index + 1 >= round.total ? 'Voir le podium' : 'Manche suivante'}</button>
         </div>
       )}

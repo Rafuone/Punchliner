@@ -123,12 +123,32 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance });
   }
 
-  // vidéo « diffusion télé » de la carte Blind Test : ne tourne QUE quand le mode est sélectionné (muette)
+  // vidéo « diffusion télé » de la carte Blind Test : sélectionnée → couleur + lecture + déchirures de
+  // tracking (MÊME effet analogique que le showcase perso) ; sinon → N&B, sur pause.
   const blindVidRef = useRef<HTMLVideoElement | null>(null);
+  const blindTearRef = useRef<HTMLVideoElement | null>(null);
+  const blindCardRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
-    const v = blindVidRef.current; if (!v) return;
-    if (step === 0 && game === 'blind') { v.muted = true; const p = v.play(); if (p?.catch) p.catch(() => {}); }
-    else { try { v.pause(); } catch {} }
+    const v = blindVidRef.current, tear = blindTearRef.current, card = blindCardRef.current;
+    const active = step === 0 && game === 'blind';
+    [v, tear].forEach((el) => { if (!el) return; el.muted = true; if (active) { const p = el.play(); if (p?.catch) p.catch(() => {}); } else { try { el.pause(); } catch {} } });
+    if (!active || !card) return;
+    // pilote de glitch : déchirures de tracking ORGANIQUES (intervalles/tailles aléatoires), repris du showcase perso
+    let timer: any;
+    const fire = () => {
+      const r = Math.random(), strong = r < 0.4, big = r < 0.15;
+      const gx = (Math.random() * 2 - 1) * (big ? 26 : strong ? 13 : 5);
+      const gh = big ? 10 + Math.random() * 20 : strong ? 5 + Math.random() * 11 : 2 + Math.random() * 6;
+      card.style.setProperty('--gy', (Math.random() * 80).toFixed(1) + '%');
+      card.style.setProperty('--gh', gh.toFixed(1) + '%');
+      card.style.setProperty('--gx', gx.toFixed(1) + 'px');
+      if (tear && v) { try { tear.currentTime = v.currentTime; } catch {} }
+      card.classList.add(strong ? 'glx-strong' : 'glx');
+      window.setTimeout(() => card.classList.remove('glx', 'glx-strong'), (strong ? 90 : 55) + Math.random() * (strong ? 220 : 90));
+      timer = window.setTimeout(fire, 500 + Math.random() * 2400);
+    };
+    timer = window.setTimeout(fire, 600 + Math.random() * 1400);
+    return () => { window.clearTimeout(timer); card.classList.remove('glx', 'glx-strong'); };
   }, [game, step]);
 
   // fond grunge (béton/xerox/coulures) peint en canvas — comme l'exploration
@@ -181,6 +201,31 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
 
   return (
     <div className="wz" ref={wzRef}>
+      {/* filtres VHS (aberration chromatique R/B + micro-wobble) — repris du showcase perso, pour la vidéo Blind Test */}
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true"><defs>
+        <filter id="wzvhs" x="-6%" y="-3%" width="112%" height="106%" colorInterpolationFilters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.001 0.021" numOctaves={1} seed={5} result="w" />
+          <feDisplacementMap in="SourceGraphic" in2="w" scale={2.2} xChannelSelector="R" yChannelSelector="G" result="d" />
+          <feColorMatrix in="d" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cr" />
+          <feOffset in="cr" dx={-2.8} dy={0.6} result="cro" />
+          <feColorMatrix in="d" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cg" />
+          <feColorMatrix in="d" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cb" />
+          <feOffset in="cb" dx={2.8} dy={-0.6} result="cbo" />
+          <feBlend in="cro" in2="cg" mode="screen" result="crg" />
+          <feBlend in="crg" in2="cbo" mode="screen" />
+        </filter>
+        <filter id="wzvhs-strong" x="-10%" y="-5%" width="120%" height="110%" colorInterpolationFilters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.002 0.03" numOctaves={1} seed={9} result="w2" />
+          <feDisplacementMap in="SourceGraphic" in2="w2" scale={4} xChannelSelector="R" yChannelSelector="G" result="d2" />
+          <feColorMatrix in="d2" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cr2" />
+          <feOffset in="cr2" dx={-7} dy={1.4} result="cro2" />
+          <feColorMatrix in="d2" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cg2" />
+          <feColorMatrix in="d2" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cb2" />
+          <feOffset in="cb2" dx={7} dy={-1.4} result="cbo2" />
+          <feBlend in="cro2" in2="cg2" mode="screen" result="crg2" />
+          <feBlend in="crg2" in2="cbo2" mode="screen" />
+        </filter>
+      </defs></svg>
       <div className="backdrop">
         <div className="concrete" /><canvas className="wz-tex" ref={texRef} /><div className="halftone" /><div className="grain" /><div className="xeroxbands" /><div className="scan" /><div className="vignette" />
         <div className="gaffer" /><div className="ghostnum">{step + 1}</div>
@@ -232,13 +277,14 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
               <>
               <div className="games-stage">
                 {GAMES.map((g) => (
-                  <button key={g.id} className={`keycard pick g-${g.id} ${game === g.id ? 'sel on' : ''} ${g.soon ? 'locked' : ''}`} onClick={() => !g.soon && setGame(g.id)}>
+                  <button key={g.id} ref={g.id === 'blind' ? blindCardRef : undefined} className={`keycard pick g-${g.id} ${game === g.id ? 'sel on' : ''} ${g.soon ? 'locked' : ''}`} onClick={() => !g.soon && setGame(g.id)}>
                     <span {...H(bracketsSvg)} />
                     <div className="kclip">
                       <div className="keyart" {...H(KEYART[g.id])} />
                       {g.id === 'blind' && (
                         <>
                           <video className="keyvid" ref={blindVidRef} src="/blind-test.mp4" muted loop playsInline preload="auto" disablePictureInPicture />
+                          <video className="keyvid-tear" ref={blindTearRef} src="/blind-test.mp4" muted loop playsInline preload="auto" aria-hidden="true" disablePictureInPicture />
                           <div className="keyvid-fx" {...H(keyvidFx)} />
                         </>
                       )}
