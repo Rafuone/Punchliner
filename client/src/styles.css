@@ -555,7 +555,8 @@ button, input { font-family: inherit; }
 .tvros.irid .tvros-epi { color: #ffd76b; }
 /* fiche : tags + une ligne d'ambiance */
 .tvros-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 9px; }
-.tvros-tags span { font-size: 12px; font-weight: 700; letter-spacing: .02em; color: var(--txt); background: rgba(255,255,255,.06); border: 1px solid var(--line2); border-radius: 20px; padding: 3px 11px; }
+.tvros-tags span { font-size: 12.5px; font-weight: 700; letter-spacing: .02em; color: var(--txt); background: rgba(255,255,255,.06); border: 1px solid var(--line2); border-radius: 20px; padding: 4px 12px; }
+.tvros-tags span.sales { color: #ffd76b; border-color: rgba(255,215,107,.4); background: rgba(255,215,107,.09); }
 .tvros-bionote { font-size: clamp(15px, 1.6vw, 19px); line-height: 1.42; color: var(--muted); max-width: 860px; }
 /* séparateur double-ligne (comme le zoning) — s'étend sur toute la zone droite */
 .tvros-divider { height: 4px; margin: 4px 0 2px;
@@ -579,20 +580,24 @@ button, input { font-family: inherit; }
 /* GRILLE : tout le roster, PLEINE LARGEUR, tuiles biseautées grandes, de l'air en bas (pas collée), zéro scroll */
 .tvros-grid { flex: 0 0 auto; z-index: 4; align-self: center; margin: 6px auto clamp(22px, 4.5vh, 52px); width: calc(100% - 2 * var(--lp));
   display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.tvcell { position: relative; width: clamp(64px, 6.2vw, 92px); aspect-ratio: 1; overflow: hidden; cursor: pointer; padding: 0; border: 0;
-  background: linear-gradient(160deg, color-mix(in srgb, var(--c,#333) 50%, #15161a), #0d0e12);
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); transition: transform .08s ease; }
-.tvcell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 10%; }
-.tvcell .ini { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; font-size: 14px; color: #fff; }
-.tvcell::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--cc, transparent); opacity: .85; }
-.tvcell-nm { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 1px 3px; font-size: 8.5px; font-weight: 800; letter-spacing: .01em; text-align: center; text-transform: uppercase; color: #fff; background: linear-gradient(180deg, transparent, rgba(0,0,0,.9)); opacity: 0; transition: opacity .1s ease; }
+/* tuile : le FOND (gris clean) = le contour, qui suit la forme biseautée ; l'image est en retrait de 2px.
+   La forme est clippée sur toute la tuile → le contour épouse les biseaux. Hover → contour couleur catégorie. */
+.tvcell { position: relative; width: clamp(64px, 6.2vw, 92px); aspect-ratio: 1; cursor: pointer; padding: 0; border: 0;
+  background: #3a3e46;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  transition: background .13s ease, transform .08s ease; }
+.tvcell > img { position: absolute; inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); object-fit: cover; object-position: 50% 10%; }
+.tvcell .ini, .tvcell .q { position: absolute; inset: 2px; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; color: #fff;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--c,#333) 45%, #15161a), #0d0e12); }
+.tvcell .ini { font-size: 14px; }
+.tvcell .q { font-size: clamp(20px,2vw,30px); color: var(--muted2); }
+.tvcell-nm { position: absolute; left: 2px; right: 2px; bottom: 2px; padding: 12px 1px 3px; font-size: 8.5px; font-weight: 800; letter-spacing: .01em; text-align: center; text-transform: uppercase; color: #fff; background: linear-gradient(180deg, transparent, rgba(0,0,0,.9)); opacity: 0; transition: opacity .1s ease; z-index: 2; }
 .tvcell:hover .tvcell-nm, .tvcell.sel .tvcell-nm { opacity: 1; }
-.tvcell:hover { transform: translateY(-2px); z-index: 2; }
-.tvcell.sel { box-shadow: inset 0 0 0 3px var(--fluo); z-index: 3; }
-.tvcell.sel::after { background: var(--fluo); opacity: 1; }
-.tvcell.lock { background: repeating-linear-gradient(45deg, #131419 0 5px, #0e0f13 5px 10px); }
-.tvcell.lock .q { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; font-size: clamp(20px,2vw,30px); color: var(--muted2); }
-.tvcell.lock::after { background: #4a4f57; }
+.tvcell:hover { background: var(--cc, #6b7078); transform: translateY(-2px); z-index: 2; }
+.tvcell.sel { background: var(--fluo); z-index: 3; }
+.tvcell.lock { background: #2b2f37; }
+.tvcell.lock .q { background: repeating-linear-gradient(45deg, #131419 0 5px, #0e0f13 5px 10px); }
+.tvcell.lock:hover { background: #4a4f57; }
 
 @media (max-width: 900px) {
   .tvros-hero { flex-direction: column; align-items: flex-start; gap: 12px; overflow-y: auto; }

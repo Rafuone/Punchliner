@@ -142,7 +142,11 @@ export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophie
             <>
               {bio && (
                 <div className="tvros-bio">
-                  {bio.tags && <div className="tvros-tags">{bio.tags.map((t) => <span key={t}>{t}</span>)}</div>}
+                  <div className="tvros-tags">
+                    {bio.from && <span>{bio.from}</span>}
+                    {bio.since && <span>Depuis {bio.since}</span>}
+                    {bio.sales && <span className="sales">{bio.sales}</span>}
+                  </div>
                   <div className="tvros-bionote">{bio.note}</div>
                 </div>
               )}
