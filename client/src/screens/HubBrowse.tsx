@@ -118,7 +118,6 @@ export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophie
             <svg className="tvros-bust" viewBox="0 0 200 240"><use href="#bust" /></svg>
             {sel.img && <img className="tvros-portrait" src={`/avatars/${sel.id}.png`} alt="" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
             {sel.img && <img className="tvros-portrait tear" src={`/avatars/${sel.id}.png`} alt="" aria-hidden="true" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
-            <div className="cs-vhs tvros-vhs" aria-hidden="true"><i className="lines" /><i className="tint" /><i className="noise" /><i className="band" /></div>
           </>
         )}
         <div className="tvros-fade" />

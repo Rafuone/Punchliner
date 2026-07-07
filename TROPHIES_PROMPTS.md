@@ -1,72 +1,73 @@
-# PUNCHLINR — Prompts des visuels de trophées
+# PUNCHLINR — Prompts des visuels de trophées (v2 : simples & lisibles)
 
-Petites **images carrées** (remplacent les icônes SVG du palmarès), **même DA que les avatars**
-(16-bit SNES, contour vert acide, fond anthracite baigné orange-rosé). ~28 trophées.
+Retour du proprio sur la v1 : **trop chargé** (mec qui sort d'un ring + ville rouge + couronne + halo vert
+partout = « bordel sans nom », et plus il y a de détails, plus la génération se plante). On repart propre.
 
-- Cible fichier : `client/public/trophies/<id>.png` (carré, ~256×256). L'`id` est dans la colonne du tableau
-  et correspond à `server/awards.js` / `data.ts → AWARDS_INFO`.
-- Comme c'est **petit**, on vise un **emblème lisible d'un coup d'œil** (1–2 objets max), pas une scène chargée.
-- On assume la **culture hip-hop/rap** : micro doré, chaîne en or, boombox, vinyle, cassette, spray, snapback,
-  ceinture de champion, ring de boxe… (pas besoin de vrais rappeurs — ça reste petit).
+## Règles (les respecter à la lettre)
+- **UN SEUL emblème/objet, gros et lisible.** Pas de scène, pas de décor, pas de personnage entier, pas de
+  fond compliqué (ni ville, ni ring, ni foule). Un pictogramme, façon **icône de jeu**.
+- **Ça reste PETIT sur la TV** (une tuile carrée, pas la moitié de l'écran) → il faut que ça se lise d'un
+  coup d'œil. Formes **épaisses**, contours nets, silhouette claire.
+- **Palette limitée (2–3 couleurs)** : un objet + un accent + un fond sombre uni. **PAS de vert partout** —
+  on **varie l'accent** d'un trophée à l'autre (voir colonne « accent »). Le vert reste possible, mais rare.
+- **Moins de détails = moins d'erreurs.** Dans le doute, simplifie encore.
 
-## LE PROMPT (colle-le, change juste `[SCÈNE]`)
+## LE PROMPT (colle-le, change juste `[ACCENT]` et `[OBJET]`)
 
 ```
-16-bit SNES-era pixel art badge, crisp visible pixels, limited palette, no text, no logo, no letters.
-Composition: a single centered emblem, chunky and readable at small size, filling a square 1:1 frame.
-Background: dark anthracite washed in a warm orange-to-pink neon glow (sunset haze), subtle film grain.
-Lighting: bold acid-green rim light hugging the emblem — the PUNCHLINR signature glow — cool neon-green
-edge popping against the warm orange-pink background.
-Subject: [SCÈNE]
-Vibe: 90s–2000s French rap / hip-hop iconography, street, a little grimy.
+16-bit pixel art game icon, single centered object, flat and bold, thick clean outline, crisp visible
+pixels, minimal shading (2 tones max on the object). Limited palette: [ACCENT] object on a plain dark
+charcoal background (near-black), one soft glow of the accent color behind it. No scene, no landscape, no
+character, no extra props, no text, no letters, no logo. Readable at small size, high contrast, iconic.
+Object: [OBJET]
 ```
 
-- **Couleurs = DA de l'app** : contour **vert bombe** (`#a6ff00` / jaune acide `#e4ff1a`) sur **fond anthracite + halo orange-rosé**.
-- Pour les **salés** (chambrage), pousse le côté **cartoon/ironique** ; pour les **flatteurs**, plus **héroïque/doré**.
-- Astuce cohérence : garde le **même cadrage carré + même halo** partout → la grille du palmarès reste homogène.
+- **[ACCENT]** = la couleur dominante de l'objet (colonne du tableau).
+- **[OBJET]** = un seul objet simple, imagerie rap/hip-hop (micro, chaîne, cassette, couronne, dé, etc.).
+- Cible fichier : `client/public/trophies/<id>.png` (carré ~256×256). `id` = colonne du tableau.
 
-## Les [SCÈNE] — trophées complets
+## Les trophées
 
-### Flatteurs (dorés / héroïques)
+### Flatteurs
 
-| Trophée | id | [SCÈNE] |
-|---|---|---|
-| Comeback King | `comeback` | A hooded rapper rising off the canvas of a boxing ring, one fist and a golden crown lifting into a green spotlight. |
-| Rouleau Compresseur | `ecrasant` | A heavy gold-chain steamroller flattening a row of tiny microphones — total domination. |
-| Photo Finish | `photofinish` | Two microphones neck-and-neck crossing a checkered finish line, one edging ahead by a pixel. |
-| Le Sniper | `sniper` | A golden microphone built like a sniper scope, crosshair locked dead-center on a spinning vinyl bullseye. |
-| La Machine | `machine` | A boombox packed with pistons and gears, blasting steady sound-wave rings — an unstoppable rap machine. |
-| Réflexe Éclair | `reflexe` | A hand slamming a red buzzer at lightning speed, electric acid-green sparks flying off. |
-| Sans-Faute | `sansfaute` | A clean spray-painted green check mark on a brick wall, the tag still dripping fresh, flawless lines. |
-| Le Puriste | `puriste` | A diamond-studded vinyl record held up like a holy relic in two hands, reverent glow. |
-| Le Gros Move | `diamant` | A single huge diamond bursting out of a cracked speaker cone, shards flying. |
-| Cavalier Seul | `solo` | A lone rapper under one narrow spotlight on an otherwise dark empty stage, mic raised high. |
-| Le Métronome | `metronome` | A gold metronome ticking, its pendulum a small microphone, perfectly steady beat lines. |
-| Le Diesel | `diesel` | An old lowrider backfiring a puff of smoke then rocketing forward on acid-green flames — slow start, big finish. |
-| Le Sage | `sage` | A calm hooded rapper sitting cross-legged, a halo of small vinyls floating around his head, zero bling — pure talent. |
-| Le Perdant Magnifique | `perdantmagnifique` | A rapper on the 2nd-place podium step tossing confetti anyway, huge proud grin despite the silver. |
-| La Ceinture | `champion` | A championship boxing belt with a golden microphone as its center medallion, the rap king's belt. |
+| Trophée | id | accent | [OBJET] |
+|---|---|---|---|
+| Comeback King | `comeback` | or | a golden crown with a small upward arrow just under it |
+| Rouleau Compresseur | `ecrasant` | rouge | a chunky steamroller drum, simple front view |
+| Photo Finish | `photofinish` | blanc/rouge | a single checkered racing flag on a short pole |
+| Le Sniper | `sniper` | cyan | a clean crosshair reticle centered on a single dot |
+| La Machine | `machine` | bleu acier | a single cog wheel with a tiny sound-wave arc |
+| Réflexe Éclair | `reflexe` | jaune | one bold lightning bolt |
+| Sans-Faute | `sansfaute` | vert | one thick check mark |
+| Le Puriste | `puriste` | blanc glacé | one brilliant-cut diamond |
+| Le Gros Move | `diamant` | bleu glacé | a vinyl record with a diamond gem as its center label |
+| Cavalier Seul | `solo` | ambre | a single downward spotlight beam cone |
+| Le Métronome | `metronome` | turquoise | one classic metronome, pendulum centered |
+| Le Diesel | `diesel` | orange | a single snail with a tiny exhaust puff |
+| Le Sage | `sage` | blanc doré | one single feather |
+| Le Perdant Magnifique | `perdantmagnifique` | argent | a silver second-place medal on a short ribbon |
+| La Ceinture | `champion` | or | a championship belt buckle, oval, a star in the middle |
 
-### Salés (chambrage / cartoon)
+### Salés (chambrage)
 
-| Trophée | id | [SCÈNE] |
-|---|---|---|
-| La Mitraillette | `mitraillette` | A graffiti spray can shaped like a tommy gun, spraying a wild hail of tiny microphones everywhere. |
-| Feu de Paille | `feudepaille` | A firework-microphone that bursts bright then fizzles down into a sad little curl of smoke. |
-| Le Braqueur | `braqueur` | A masked rapper in a bandana snatching a gold chain, a loot bag with a dollar sign over his shoulder. |
-| Le Kamikaze | `kamikaze` | A rapper riding a rocket-powered microphone shooting straight up, two dice tumbling beside him — all in. |
-| Le Sans-Pitié | `sanspitie` | A crowned rapper standing over rivals' turned-out empty pockets, gold coins raining into his open hand. |
-| L'Escroc | `escroc` | A sly grinning rapper with an ace card up his sleeve, winking, wearing an obviously fake plastic gold chain. |
-| Le Rendement | `boulet` | A rapper tangled in his own mic cable dragging a ball-and-chain, score meter stuck near empty. |
-| Le Fantôme | `fantome` | A translucent ghost-rapper floating, his hand passing right through a microphone, a big zero on the meter. |
-| Le Muet | `muet` | A dusty forgotten microphone with a spider web on the stand and a zipped-shut mouth icon beside it. |
-| La Lanterne Rouge | `lanterne` | A weary rapper at the very back of the pack holding up a glowing red lantern in the dark. |
-| Le Touriste | `touriste` | A rapper in a loud flowery tourist shirt with a camera and a folded map — no mic in sight, just visiting. |
-| Le Frimeur | `frimeur` | A rapper buried under a ridiculous mountain of fake gold chains, tripping over them, a last-place ribbon pinned on. |
-| Le Radin | `radin` | A stingy rapper clutching a thick fan of unused power-up cards to his chest, a moth fluttering out of his empty wallet. |
+| Trophée | id | accent | [OBJET] |
+|---|---|---|---|
+| La Mitraillette | `mitraillette` | rose fluo | a single graffiti spray can, nozzle up |
+| Feu de Paille | `feudepaille` | orange-rouge | one burning match, flame leaning into a wisp of smoke |
+| Le Braqueur | `braqueur` | anthracite/rouge | a single black bandit balaclava mask |
+| Le Kamikaze | `kamikaze` | rouge | one tumbling dice showing a single pip |
+| Le Sans-Pitié | `sanspitie` | cramoisi | a clenched fist wearing a chunky gold ring |
+| L'Escroc | `escroc` | violet | a single ace playing card with a small hidden card behind it |
+| Le Rendement | `boulet` | gris fer | one iron ball-and-chain |
+| Le Fantôme | `fantome` | cyan pâle | one simple pixel ghost |
+| Le Muet | `muet` | gris | a microphone crossed out by a red no-sound slash |
+| La Lanterne Rouge | `lanterne` | rouge | one glowing red paper lantern |
+| Le Touriste | `touriste` | teal | one small tourist camera with a neck strap |
+| Le Frimeur | `frimeur` | or clinquant | one oversized gold dollar-sign chain medallion |
+| Le Radin | `radin` | vert billet/gris | a closed padlock over a single coin |
 
 ## Câblage (quand les images seront prêtes)
 - Déposer chaque PNG dans `client/public/trophies/<id>.png`.
-- Ajouter la règle **LFS** : `client/public/trophies/*.png filter=lfs diff=lfs merge=lfs -text` dans `.gitattributes`.
-- Basculer l'affichage icône → image : dans le palmarès (Player + `HubBrowse` + cartes de fin `Host`),
-  afficher `<img src="/trophies/<id>.png">` si présente, sinon garder `awardIcon()` en repli.
+- Règle LFS : `client/public/trophies/*.png filter=lfs diff=lfs merge=lfs -text` dans `.gitattributes`.
+- Basculer icône → image : afficher `<img src="/trophies/<id>.png">` si présente, sinon `awardIcon()` en repli
+  (palmarès Player + `HubBrowse` + cartes de fin `Host`).
