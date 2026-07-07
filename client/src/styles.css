@@ -606,6 +606,9 @@ button, input { font-family: inherit; }
 .tvcell.sel { background: var(--cc, var(--fluo)); z-index: 3; }
 /* sélection = contour couleur catégorie un peu PLUS ÉPAIS (3px) pour se distinguer du survol */
 .tvcell.sel > img, .tvcell.sel .ini, .tvcell.sel .q { clip-path: polygon(3px 3px, calc(100% - 13px) 3px, calc(100% - 3px) 13px, calc(100% - 3px) calc(100% - 3px), 13px calc(100% - 3px), 3px calc(100% - 13px)); }
+/* Légende : au survol / sélection, le contour est IRIDESCENT (comme le reste de l'effet Légende), pas doré uni */
+.tvcell.irid:hover, .tvcell.irid.sel { background: var(--irid-grad); background-size: 200% 100%; animation: irid 7s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .tvcell.irid:hover, .tvcell.irid.sel { animation: none; } }
 .tvcell.lock { background: #2b2f37; }
 .tvcell.lock .q { background: repeating-linear-gradient(45deg, #131419 0 5px, #0e0f13 5px 10px); }
 .tvcell.lock:hover { background: #4a4f57; }
