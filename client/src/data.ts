@@ -108,6 +108,49 @@ export const LOCKED_SLOTS: LockedSlot[] = [
 ];
 export const isLockedSlot = (id: string) => LOCKED_SLOTS.some((s) => s.id === id);
 
+// Petite fiche de présentation par rappeur (affichée dans le roster pour meubler + donner du contexte).
+// tags = faits courts (ville, époque, certif…) ; note = une ligne d'ambiance (un peu chambreuse pour les persos ratés).
+export type Bio = { tags?: string[]; note: string };
+export const BIOS: Record<string, Bio> = {
+  booba: { tags: ['Boulogne (92)', 'Depuis 1995', 'Multi-diamant'], note: 'Le Duc. A structuré le rap game FR à lui tout seul.' },
+  iam: { tags: ['Marseille', 'Depuis 1989', 'Légende'], note: 'Les pharaons du 13. « L\'École du micro d\'argent », un monument.' },
+  ntm: { tags: ['Seine-Saint-Denis', 'Depuis 1989', 'Légende'], note: 'L\'énergie punk du rap FR. « Qu\'est-ce qu\'on attend ».' },
+  jul: { tags: ['Marseille', 'Depuis 2013', 'Disques de diamant'], note: 'La machine à tubes. Sort trois albums pendant que tu lis ça.' },
+  gims: { tags: ['Paris', 'Sexion d\'Assaut', 'Mainstream'], note: 'Le tube incarné, lunettes noires vissées. « Sapés comme jamais ».' },
+  rohff: { tags: ['Vitry (94)', 'Depuis 1996', 'Le padre'], note: 'Prolifique et bagarreur. Le code de l\'honneur avant tout.' },
+  lafouine: { tags: ['Trappes (78)', 'Depuis 2000s'], note: 'Capitale du crime. Laouni, plume et clashs.' },
+  pnl: { tags: ['Corbeil (91)', 'Depuis 2014', 'QLF'], note: 'Le rap cloud, à part. Onizuka, deux frères, aucun feat.' },
+  vald: { tags: ['Aulnay (93)', 'NQNT'], note: 'L\'alien : technique redoutable, provoc assumée.' },
+  ninho: { tags: ['Longjumeau (91)', 'Depuis 2015', 'Roi des certifs'], note: 'Certifié diamant les yeux fermés. La régularité faite rappeur.' },
+  sch: { tags: ['Aix / Marseille', 'JVLIVS', 'Rap game'], note: 'Le S. Esthétique mafieuse, costard et cinéma.' },
+  plk: { tags: ['Paris (18e)', 'Le Polak'], note: 'Surrégime permanent. Enfant de la ville.' },
+  damso: { tags: ['Bruxelles', 'Depuis 2016', 'Dems'], note: 'Plume acérée, vice et virtuosité. Le vice belge.' },
+  alphawann: { tags: ['Paris', 'Don Dada', 'Plume'], note: 'Le technicien. Orfèvre du mot, une main lave l\'autre.' },
+  nekfeu: { tags: ['Paris', '1995 / S-Crew', 'Depuis 2011'], note: 'Le Feu. Du cypher à la première place des charts.' },
+  oxmo: { tags: ['Paris', 'Depuis 1996', 'Le poète'], note: 'Le conteur, mines de cristal. Une voix, mille images.' },
+  orelsan: { tags: ['Caen (14)', 'Depuis 2009', 'San'], note: 'L\'ironie et le vrai. « Basique », mais jamais simple.' },
+  fabe: { tags: ['Paris', 'Depuis 1995', 'Underground'], note: 'Le sage des 90s. Le fond ET la forme, sans compromis.' },
+  solaar: { tags: ['Val-de-Marne', 'Depuis 1990', 'Le prince'], note: 'Le prince des mots. Zéro faute, que des rimes.' },
+  kery: { tags: ['Orly (94)', 'Ideal J', 'Conscient'], note: 'Le combattant. Banlieusards et lettre au Président.' },
+  medine: { tags: ['Le Havre (76)', 'Conscient'], note: 'L\'insoumis. Don\'t Panik, keffieh et convictions.' },
+  youssoupha: { tags: ['Paris', 'Congo', 'La plume'], note: 'Prise de position permanente. Le verbe engagé.' },
+  gazo: { tags: ['Paris', 'Depuis 2020', 'Drill'], note: 'A imposé la drill FR au grand public. Die.' },
+  kaaris: { tags: ['Sevran (93)', 'Depuis 2013', 'Riska'], note: 'La trap brutale. « Or Noir », la barbe et le 4matic.' },
+  laylow: { tags: ['Toulouse (31)', 'Trinity', 'Nouvelle scène'], note: 'Le visionnaire. Rap et sci-fi, hors du temps.' },
+  jewelusain: { tags: ['France', 'Nouvelle scène'], note: 'Le conteur. Ça résonne, ça reste.' },
+  bouss: { tags: ['Rookie', 'Nouvelle scène FR'], note: 'La voix qui monte. Surfe sur la vague.' },
+  huntrill: { tags: ['Rookie', 'Trap'], note: 'Le bruit de la machine ne s\'arrête jamais.' },
+  jolagreen23: { tags: ['Rookie'], note: 'La green. Vide le barillet d\'un coup.' },
+  junglejack: { tags: ['Rookie'], note: 'Flow dévastateur. Sort de la jungle.' },
+  lafeve: { tags: ['Paris', 'Depuis 2018', 'New wave'], note: 'La new wave, planante et hors du temps.' },
+  okis: { tags: ['Rookie', 'Artisanal'], note: 'La crème du rap fait maison. +5 000 garantis.' },
+  bishok: { tags: ['Maroc', 'Pote d\'Alexandre', '0 disque'], note: 'Le révolté. Décrypte les complots. Grosses stats… mais pas de rappeur.' },
+  bilaldu92: { tags: ['92', 'Un seul buzz : 2006'], note: 'Sa carrière tient dans un buzz de 2006. Depuis, silence radio.' },
+  alexdu76: { tags: ['Le 76', 'Génie incompris'], note: 'La star du 76… dans sa tête. Voulait juste briller.' },
+  kortex: { tags: ['Génie incompris', 'Le clasheur'], note: 'Il clashe tout le monde. Personne ne le calcule.' },
+};
+export const bioOf = (id?: string): Bio | undefined => (id ? BIOS[id] : undefined);
+
 // Surnoms affichés sous le nom dans le showcase (character select + roster du hub)
 export const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 76', kortex: 'Le Clasheur', bouss: 'La Voix', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème' };
 

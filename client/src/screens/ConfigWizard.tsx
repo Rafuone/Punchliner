@@ -71,6 +71,8 @@ const arrowL = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><pat
 const arrowR = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const play = '<svg width="19" height="19" viewBox="0 0 18 18" fill="none"><path d="M5.6 3.9 L14.3 9 L5.6 14.1 Z" fill="currentColor" stroke="currentColor" stroke-width="2.9" stroke-linejoin="round" stroke-linecap="round"/></svg>';
 const chevron = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const rosterIco = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.2"/><rect x="9" y="1" width="6" height="6" rx="1.2"/><rect x="1" y="9" width="6" height="6" rx="1.2"/><rect x="9" y="9" width="6" height="6" rx="1.2"/></svg>';
+const trophyIco = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4v1.5A3.4 3.4 0 0 0 7.3 10M17 5h3v1.5A3.4 3.4 0 0 1 16.7 10"/><path d="M9.6 13v3.2h4.8V13M8.2 20.5h7.6"/></svg>';
 const bracketsSvg = '<span class="p1tag">P1</span><span class="brackets"><b class="tl"></b><b class="tr"></b><b class="bl"></b><b class="br"></b></span>';
 const KEYART: Record<string, string> = {
   blind: `<svg viewBox="0 0 400 560" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><rect width="400" height="560" fill="#141517"/><g transform="translate(200 250)"><circle r="118" fill="rgba(0,0,0,.4)"/><circle r="112" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2.5"/><circle r="86" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1"/><circle r="64" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="1"/><circle r="40" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.5)" stroke-width="2"/><circle r="8" fill="#fff"/><g stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".85"><line x1="-172" y1="34" x2="-172" y2="-34"/><line x1="-150" y1="52" x2="-150" y2="-52"/><line x1="-128" y1="26" x2="-128" y2="-26"/><line x1="172" y1="34" x2="172" y2="-34"/><line x1="150" y1="52" x2="150" y2="-52"/><line x1="128" y1="26" x2="128" y2="-26"/></g><g stroke="rgba(255,255,255,.28)" stroke-width="2" fill="none"><circle r="140"/><circle r="164"/></g></g></svg>`,
@@ -239,8 +241,6 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
           <div className="sess-right">
             <span className="gpill onair"><span className="dot live" />ON&nbsp;AIR</span>
             <span className="gpill"><span className="dot" />Salon&nbsp;<span className="roomcode">{roomCode}</span></span>
-            <button className="gpill hubnav" onClick={() => onOpenHub?.('roster')}>Roster</button>
-            <button className="gpill hubnav" onClick={() => onOpenHub?.('trophies')}>Palmarès</button>
             <div className="players-wrap">
               <button className="gpill players-btn" onClick={() => setShowPlayers((v) => !v)} aria-expanded={showPlayers}>
                 {players}&nbsp;joueur{players > 1 ? 's' : ''} <span {...H(chevron)} />
@@ -418,9 +418,10 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
         <button className="btn ghost" onClick={() => (step === 0 ? onBack() : setStep(step - 1))}><span {...H(arrowL)} /> Retour</button>
         <div className="hint"><kbd>← →</kbd> naviguer · <kbd>Entrée</kbd> valider</div>
         <div className="spacer" />
-        {last
-          ? <button className="btn warm" onClick={launch}><span {...H(play)} /> Lancer la partie</button>
-          : <button className="btn warm" onClick={() => setStep(step + 1)}>Suivant <span {...H(arrowR)} /></button>}
+        <button className="btn hublink" onClick={() => onOpenHub?.('roster')}><span {...H(rosterIco)} /> Roster</button>
+        <button className="btn hublink" onClick={() => onOpenHub?.('trophies')}><span {...H(trophyIco)} /> Palmarès</button>
+        {/* pas de « Lancer » ici : il vit dans la carte de match (à droite) — on évite le doublon de CTA primaire */}
+        {!last && <button className="btn warm" onClick={() => setStep(step + 1)}>Suivant <span {...H(arrowR)} /></button>}
       </div>
     </div>
   );

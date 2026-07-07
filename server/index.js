@@ -149,7 +149,9 @@ function beginRound(room) {
   clearTimeout(room.cdTimer);
   const diffLabel = (DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal).label;
   // Fenêtre d'activation des pouvoirs AVANT la musique (sinon on active en connaissant déjà la réponse).
-  const powerPhase = (room.settings.mode === 'multi' || room.settings.mode === 'buzzer') && !room.settings.mj;
+  // PAS à la manche 1 : sans classement établi, les pouvoirs anti-leader n'ont aucune cible → on n'ouvre
+  // la fenêtre qu'à partir de la manche 2 (après au moins une question jouée).
+  const powerPhase = (room.settings.mode === 'multi' || room.settings.mode === 'buzzer') && !room.settings.mj && room.roundIndex >= 1;
   if (powerPhase) {
     room.phase = 'prep';
     const seconds = FAST ? 2 : 10;
