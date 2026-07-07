@@ -517,13 +517,15 @@ button, input { font-family: inherit; }
 /* ===== roster TV : écran de jeu (portrait fondu tous bords + fiche + grille alignée à gauche, ZÉRO scroll) ===== */
 .tvros { --lp: clamp(24px, 4vw, 64px); position: fixed; inset: 0; display: flex; flex-direction: column; overflow: hidden; color: var(--txt);
   background: radial-gradient(120% 100% at 50% 0%, #171019, #0a0b0e 60%, #060608); }
-.tvros-head { flex: 0 0 auto; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px clamp(16px, 3vw, 40px); }
-.tvros-head .wm { font-family: var(--disp); font-weight: 700; }
+/* bouton retour FLOTTANT (plus de barre de nav qui mange le haut) */
+.tvros-back { position: absolute; top: 16px; left: 16px; z-index: 8; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%;
+  background: rgba(10,11,14,.6); backdrop-filter: blur(6px); border: 1px solid var(--line2); color: var(--txt); cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.tvros-back:hover { border-color: var(--fluo); color: var(--fluo); background: rgba(10,11,14,.85); }
 
-/* HÉRO : portrait (gauche) + colonne infos (droite) */
-.tvros-hero { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; gap: clamp(20px, 3.4vw, 52px); padding: clamp(6px,1.5vh,16px) var(--lp) 0; }
+/* HÉRO : portrait (gauche) + colonne infos (droite). Remonte quasi en haut (plus de header) → tout plus grand. */
+.tvros-hero { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; gap: clamp(22px, 3.6vw, 56px); padding: clamp(10px,2vh,22px) var(--lp) 0; }
 /* portrait : boîte 3:4 (l'illustration entière, sans crop) fondue sur TOUS les bords (aucun rebord visible) */
-.tvros-fig { position: relative; flex: 0 0 auto; height: 100%; aspect-ratio: 3 / 4; max-height: min(56vh, 500px); align-self: center; }
+.tvros-fig { position: relative; flex: 0 0 auto; height: 100%; aspect-ratio: 3 / 4; max-height: min(66vh, 600px); align-self: center; }
 .tvros-figglow { position: absolute; inset: -6% -6% -2% -6%; z-index: 0; mix-blend-mode: screen;
   background: radial-gradient(60% 60% at 50% 40%, color-mix(in srgb, var(--cc, #a6ff00) 30%, transparent), transparent 72%); }
 .tvros-portrait { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 4%; z-index: 1; filter: url(#vhs);
@@ -564,10 +566,10 @@ button, input { font-family: inherit; }
 .tvros-objtxt { font-family: var(--disp); font-weight: 700; font-size: clamp(20px,2.4vw,30px); line-height: 1.28; color: #fff; }
 .tvros-objnote { margin-top: 11px; font-size: 15px; color: var(--muted); }
 
-/* GRILLE : tout le roster, ALIGNÉ À GAUCHE (avec le nom), tuiles biseautées plus grandes, zéro scroll */
-.tvros-grid { flex: 0 0 auto; z-index: 4; align-self: flex-start; margin: 10px var(--lp) 16px; width: min(1080px, calc(100% - 2 * var(--lp)));
-  display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 5px; }
-.tvcell { position: relative; width: clamp(60px, 5.4vw, 82px); aspect-ratio: 1; overflow: hidden; cursor: pointer; padding: 0; border: 0;
+/* GRILLE : tout le roster, CENTRÉE, tuiles biseautées grandes, zéro scroll */
+.tvros-grid { flex: 0 0 auto; z-index: 4; align-self: center; margin: 8px auto 16px; width: min(1220px, 96%);
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.tvcell { position: relative; width: clamp(62px, 5.6vw, 80px); aspect-ratio: 1; overflow: hidden; cursor: pointer; padding: 0; border: 0;
   background: linear-gradient(160deg, color-mix(in srgb, var(--c,#333) 50%, #15161a), #0d0e12);
   clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); transition: transform .08s ease; }
 .tvcell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 10%; }
