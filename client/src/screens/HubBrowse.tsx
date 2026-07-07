@@ -103,8 +103,9 @@ export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophie
   return (
     <div className={`hub-overlay tvros${isLegend(sel.cat) && !lockedSel ? ' irid' : ''}`} style={{ ['--c' as any]: lockedSel ? '#20222a' : sel.color, ['--cc' as any]: lockedSel ? '#7d8590' : CATEGORY_COLORS[sel.cat] }}>
       {defs}
-      <button className="tvros-back" onClick={onClose} aria-label="Retour au hub">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      <button className="tvros-back" onClick={onClose}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        RETOUR
       </button>
 
       <div className="tvros-hero">
@@ -145,6 +146,7 @@ export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophie
                   <div className="tvros-bionote">{bio.note}</div>
                 </div>
               )}
+              <div className="tvros-divider" />
               <div className="tvros-statpow">
                 <div className="tvros-block tvros-stats">
                   <div className="tvros-blabel">Statistiques</div>

@@ -517,19 +517,23 @@ button, input { font-family: inherit; }
 /* ===== roster TV : écran de jeu (portrait fondu tous bords + fiche + grille alignée à gauche, ZÉRO scroll) ===== */
 .tvros { --lp: clamp(24px, 4vw, 64px); position: fixed; inset: 0; display: flex; flex-direction: column; overflow: hidden; color: var(--txt);
   background: radial-gradient(120% 100% at 50% 0%, #171019, #0a0b0e 60%, #060608); }
-/* bouton retour FLOTTANT (plus de barre de nav qui mange le haut) */
-.tvros-back { position: absolute; top: 16px; left: 16px; z-index: 8; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%;
-  background: rgba(10,11,14,.6); backdrop-filter: blur(6px); border: 1px solid var(--line2); color: var(--txt); cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
-.tvros-back:hover { border-color: var(--fluo); color: var(--fluo); background: rgba(10,11,14,.85); }
+/* bouton RETOUR FLOTTANT, étiqueté (plus de barre de nav qui mange le haut) */
+.tvros-back { position: absolute; top: 18px; left: 18px; z-index: 8; display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 8px;
+  background: rgba(10,11,14,.62); backdrop-filter: blur(6px); border: 1px solid var(--line2); color: var(--txt); cursor: pointer;
+  font-family: var(--disp); font-weight: 700; font-size: 14px; letter-spacing: .06em; text-transform: uppercase; transition: border-color .15s, color .15s, background .15s; }
+.tvros-back:hover { border-color: var(--fluo); color: var(--fluo); background: rgba(10,11,14,.86); }
 
 /* HÉRO : portrait (gauche) + colonne infos (droite). Remonte quasi en haut (plus de header) → tout plus grand. */
 .tvros-hero { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; gap: clamp(22px, 3.6vw, 56px); padding: clamp(10px,2vh,22px) var(--lp) 0; }
 /* portrait : boîte 3:4 (l'illustration entière, sans crop) fondue sur TOUS les bords (aucun rebord visible) */
-.tvros-fig { position: relative; flex: 0 0 auto; height: 100%; aspect-ratio: 3 / 4; max-height: min(66vh, 600px); align-self: center; }
-.tvros-figglow { position: absolute; inset: -6% -6% -2% -6%; z-index: 0; mix-blend-mode: screen;
-  background: radial-gradient(60% 60% at 50% 40%, color-mix(in srgb, var(--cc, #a6ff00) 30%, transparent), transparent 72%); }
+.tvros-fig { position: relative; flex: 0 0 auto; height: 100%; aspect-ratio: 3 / 4; max-height: min(62vh, 540px); align-self: center; }
+/* LUEUR INTERNE tout autour du perso : un halo coloré (couleur catégorie) qui noie les bords → intégration super smooth, on ne voit jamais le cadre */
+.tvros-figglow { position: absolute; inset: -18%; z-index: 0; mix-blend-mode: screen; filter: blur(12px);
+  background: radial-gradient(50% 54% at 50% 42%, color-mix(in srgb, var(--cc, #a6ff00) 55%, transparent), transparent 74%); }
 .tvros-portrait { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 4%; z-index: 1; filter: url(#vhs);
-  -webkit-mask-image: radial-gradient(82% 88% at 50% 42%, #000 55%, transparent 100%); mask-image: radial-gradient(82% 88% at 50% 42%, #000 55%, transparent 100%); }
+  -webkit-mask-image: radial-gradient(72% 80% at 50% 42%, #000 40%, transparent 96%); mask-image: radial-gradient(72% 80% at 50% 42%, #000 40%, transparent 96%); }
+/* vignette interne : noie encore le cadre dans le fond de page (aucun rebord visible) */
+.tvros-fig::after { content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none; box-shadow: inset 0 0 clamp(30px,4vw,56px) clamp(14px,2vw,28px) #0a0b0e; }
 .tvros-portrait.tear { z-index: 2; opacity: 0; pointer-events: none; }
 .tvros-fig.glx .tvros-portrait.tear, .tvros-fig.glx-strong .tvros-portrait.tear { opacity: .95;
   clip-path: inset(var(--gy, 40%) 0 calc(100% - var(--gy, 40%) - var(--gh, 6%)) 0); transform: translateX(var(--gx, 0)); }
@@ -550,9 +554,12 @@ button, input { font-family: inherit; }
 .tvros-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 9px; }
 .tvros-tags span { font-size: 12px; font-weight: 700; letter-spacing: .02em; color: var(--txt); background: rgba(255,255,255,.06); border: 1px solid var(--line2); border-radius: 20px; padding: 3px 11px; }
 .tvros-bionote { font-size: clamp(15px, 1.6vw, 19px); line-height: 1.42; color: var(--muted); max-width: 720px; }
-/* stats + pouvoir côte à côte */
-.tvros-statpow { display: flex; flex-wrap: wrap; gap: 14px; }
-.tvros-block, .tvros-obj { flex: 1 1 300px; background: rgba(8,9,12,.5); border: 1px solid var(--line2); border-radius: 8px; padding: 16px 18px; }
+/* séparateur double-ligne (comme le zoning) */
+.tvros-divider { height: 4px; margin: 4px 0 2px; max-width: 720px;
+  background: linear-gradient(var(--line3), var(--line3)) top / 100% 2px no-repeat, linear-gradient(var(--line), var(--line)) bottom / 100% 1px no-repeat; }
+/* stats + pouvoir : deux GROS blocs côte à côte */
+.tvros-statpow { display: flex; flex-wrap: wrap; gap: 16px; max-width: 720px; }
+.tvros-block, .tvros-obj { flex: 1 1 280px; min-height: clamp(168px, 24vh, 250px); display: flex; flex-direction: column; justify-content: center; background: rgba(8,9,12,.5); border: 1px solid var(--line2); border-radius: 10px; padding: 22px 24px; }
 .tvros-blabel { font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--muted2); margin-bottom: 13px; }
 .tvros-srow { display: flex; align-items: center; gap: 15px; margin-bottom: 12px; }
 .tvros-srow:last-child { margin-bottom: 0; }
@@ -566,10 +573,10 @@ button, input { font-family: inherit; }
 .tvros-objtxt { font-family: var(--disp); font-weight: 700; font-size: clamp(20px,2.4vw,30px); line-height: 1.28; color: #fff; }
 .tvros-objnote { margin-top: 11px; font-size: 15px; color: var(--muted); }
 
-/* GRILLE : tout le roster, CENTRÉE, tuiles biseautées grandes, zéro scroll */
-.tvros-grid { flex: 0 0 auto; z-index: 4; align-self: center; margin: 8px auto 16px; width: min(1220px, 96%);
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-.tvcell { position: relative; width: clamp(62px, 5.6vw, 80px); aspect-ratio: 1; overflow: hidden; cursor: pointer; padding: 0; border: 0;
+/* GRILLE : tout le roster, PLEINE LARGEUR, tuiles biseautées grandes, de l'air en bas (pas collée), zéro scroll */
+.tvros-grid { flex: 0 0 auto; z-index: 4; align-self: center; margin: 6px auto clamp(22px, 4.5vh, 52px); width: calc(100% - 2 * var(--lp));
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.tvcell { position: relative; width: clamp(64px, 6.2vw, 92px); aspect-ratio: 1; overflow: hidden; cursor: pointer; padding: 0; border: 0;
   background: linear-gradient(160deg, color-mix(in srgb, var(--c,#333) 50%, #15161a), #0d0e12);
   clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); transition: transform .08s ease; }
 .tvcell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 10%; }
