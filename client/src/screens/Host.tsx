@@ -100,13 +100,15 @@ export default function Host() {
     socket.on('buzz:winner', (d: any) => setBuzzWinner(d.name));
     socket.on('buzz:open', () => setBuzzWinner(null));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); sfx('scratch'); }); // le son continue de tourner sur la révélation
-    socket.on('game:final', (d: any) => { audioRef.current?.pause(); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final'); sfx('horn'); sfxLoop('recap'); });
+    socket.on('game:final', (d: any) => { audioRef.current?.pause(); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final'); sfxLoop('recap'); });
     socket.on('power:used', (d: any) => { setPowerLog(`${d.name} a lancé ${d.power}`); setTimeout(() => setPowerLog(''), 4500); sfx('scratch'); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('reaction', (d: any) => {
       const key = reactKeyRef.current++;
-      setReactions((rs) => [...rs.slice(-5), { ...d, key }]);
-      setTimeout(() => setReactions((rs) => rs.filter((r) => r.key !== key)), 4600);
+      const side = key % 2 === 0 ? 'l' : 'r';      // alterne gauche/droite (marges), jamais devant le contenu centré
+      const pos = 3 + Math.random() * 13;          // 3–16 % depuis le bord
+      setReactions((rs) => [...rs.slice(-7), { ...d, key, side, pos }]);
+      setTimeout(() => setReactions((rs) => rs.filter((r) => r.key !== key)), 5600);
     });
     socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); localStorage.removeItem(HKEY); sfxLoopStop(); });
     return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'round:countdown', 'round:host', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'reaction', 'room:closed'].forEach((e) => socket.off(e as any));
@@ -274,11 +276,11 @@ export default function Host() {
   return (
     <>
     {hubView && <HubBrowse mode={hubView} onClose={() => setHubView(null)} />}
-    {phase === 'lobby' && !configuring && <GrungeBg />}
+    {((phase === 'lobby' && !configuring) || ['prep', 'countdown', 'playing', 'reveal', 'final'].includes(phase)) && <GrungeBg />}
     {reactions.length > 0 && (
       <div className="reactfloat">
         {reactions.map((r) => (
-          <div className="reactbubble" key={r.key}>
+          <div className="reactbubble" key={r.key} style={r.side === 'r' ? { right: `${r.pos}%` } : { left: `${r.pos}%` }}>
             <span className="rb-e">{REACTIONS[r.id]?.e || '🔥'}</span>
             <span className="rb-t"><b>{r.name}</b> {REACTIONS[r.id]?.t || ''}</span>
           </div>

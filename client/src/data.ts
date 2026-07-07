@@ -36,11 +36,12 @@ export const isGenie = (cat: string) => cat === 'Génies incompris'; // cartes �
 export const fmtAud = (n: number) => Math.round(n || 0).toLocaleString('fr-FR');
 export function certif(score: number, rounds: number) {
   const per = (score || 0) / Math.max(1, rounds || 1); // auditeurs / manche → indépendant de la longueur de partie
-  if (per >= 28000) return { label: 'Disque de Diamant', short: 'Diamant' };
-  if (per >= 20000) return { label: 'Triple Platine', short: '3× Platine' };
-  if (per >= 14000) return { label: 'Double Platine', short: '2× Platine' };
-  if (per >= 9000) return { label: 'Disque de Platine', short: 'Platine' };
-  if (per >= 4500) return { label: "Disque d'Or", short: 'Or' };
+  // Paliers DURCIS (gagner ne doit plus donner du 3× Platine trop facilement ; Diamant = exceptionnel). À affiner en playtest.
+  if (per >= 42000) return { label: 'Disque de Diamant', short: 'Diamant' };
+  if (per >= 29000) return { label: 'Triple Platine', short: '3× Platine' };
+  if (per >= 20000) return { label: 'Double Platine', short: '2× Platine' };
+  if (per >= 13000) return { label: 'Disque de Platine', short: 'Platine' };
+  if (per >= 7000) return { label: "Disque d'Or", short: 'Or' };
   return { label: 'Espoir du rap', short: 'Espoir' };
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { socket } from '../socket';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO, EPITHETS, UNLOCKS, REACTIONS } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO, EPITHETS, REACTIONS } from '../data';
 import GrungeBg from '../GrungeBg';
 import { sfx } from '../sfx';
 
@@ -23,7 +23,7 @@ export default function Player() {
   const [step, setStep] = useState<'form' | 'char' | 'roster' | 'trophies'>('form'); // avant d'avoir rejoint (+ pages hub : roster / palmarès)
   const [unlockedTrophies, setUnlockedTrophies] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('pl_trophies') || '[]'); } catch { return []; } });
   const [revealTrophies, setRevealTrophies] = useState(true); // aperçu : tout afficher (sinon non-débloqués grisés)
-  const [unlockedChars, setUnlockedChars] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('pl_unlocked') || '[]'); } catch { return []; } }); // rappeurs déblocables déjà débloqués
+  const [unlockedChars] = useState<string[]>([]); // challengers déblocables DÉSACTIVÉS pour l'instant (rien affiché comme débloqué)
   const [newChars, setNewChars] = useState<string[]>([]); // débloqués À L'INSTANT (bannière de fin de partie)
   const [changing, setChanging] = useState(false); // change de rappeur entre deux parties (rouvre le character select)
   const [joined, setJoined] = useState(false);
@@ -38,6 +38,7 @@ export default function Player() {
   const [round, setRound] = useState<any>({ index: 0, total: 0, endsAt: 0, durationMs: 25000, mode: 'multi', difficulty: '' });
   const [guess, setGuess] = useState('');
   const [feedback, setFeedback] = useState<any>(null);
+  const [submitted, setSubmitted] = useState(false); // a validé cette manche → verrouille (1 seule tentative, résultat à la révélation)
   const [reveal, setReveal] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [now, setNow] = useState(Date.now());
@@ -105,24 +106,16 @@ export default function Player() {
 
   useEffect(() => {
     socket.on('lobby', (d: any) => { setPlayers(d.players); if (d.phase === 'lobby') { setWaiting(false); setPhase('lobby'); setNewChars([]); } });
-    socket.on('round:prep', (d: any) => { setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setNow(Date.now()); setPhase('prep'); });
+    socket.on('round:prep', (d: any) => { setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setSubmitted(false); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setNow(Date.now()); setPhase('prep'); });
     socket.on('round:countdown', (d: any) => { setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setCountdown(d.seconds || 5); setPhase('countdown'); });
-    socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); } });
+    socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setSubmitted(false); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); } });
     socket.on('mj:track', (d: any) => setMjTrack(d));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); sfx('scratch'); });
     socket.on('game:final', (d: any) => {
       setPlayers(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final');
       const mineAw = (d.awards || []).filter((a: any) => a.playerId === meId.current).map((a: any) => a.id);
       if (mineAw.length) setUnlockedTrophies((prev) => { const s = Array.from(new Set([...prev, ...mineAw])); try { localStorage.setItem('pl_trophies', JSON.stringify(s)); } catch {} return s; });
-      // déblocage de rappeurs — mêmes rails que les trophées (persist localStorage `pl_unlocked`)
-      const scores = d.scores || [];
-      const rank = scores.findIndex((p: any) => p.id === meId.current) + 1;
-      const myScore = scores.find((p: any) => p.id === meId.current)?.score ?? 0;
-      sfx(rank === 1 ? 'horn' : 'scratch');
-      const ctx = { won: rank === 1, rank: rank || 99, certifShort: certif(myScore, d.rounds || 0).short, awardIds: mineAw };
-      let cur: string[] = []; try { cur = JSON.parse(localStorage.getItem('pl_unlocked') || '[]'); } catch {}
-      const fresh = UNLOCKS.filter((u) => !cur.includes(u.id) && u.check(ctx)).map((u) => u.id);
-      if (fresh.length) { const s = Array.from(new Set([...cur, ...fresh])); try { localStorage.setItem('pl_unlocked', JSON.stringify(s)); } catch {} setUnlockedChars(s); setNewChars(fresh); }
+      // Déblocage des CHALLENGERS désactivé pour l'instant (Alexandre : conditions à refondre + affichage à repenser).
     });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) setBuzz('mine'); else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
@@ -190,17 +183,17 @@ export default function Player() {
       setError(''); setChanging(false);
     });
   }
-  function submitAnswer(e?: any) { e?.preventDefault(); if (!guess.trim() || phase !== 'playing') return; socket.emit('player:answer', { text: guess.trim() }, (res: any) => { if (res?.ok) { setFeedback({ points: res.points, titleHit: res.titleHit, artistHit: res.artistHit }); sfx(res.points ? 'confirm' : 'error'); } }); }
+  function submitAnswer(e?: any) { e?.preventDefault(); if (!guess.trim() || phase !== 'playing' || submitted) return; socket.emit('player:answer', { text: guess.trim() }, (res: any) => { if (res?.ok) setSubmitted(true); }); } // 1 validation, résultat à la révélation (pas de points affichés avant)
   function doBuzz() { socket.emit('player:buzz', {}, (res: any) => { if (res?.winner) setBuzz('mine'); }); }
   function submitQuiz(i: number) {
     if (quizPick !== null || phase !== 'playing') return;
     setQuizPick(i);
     socket.emit('quiz:answer', { choice: i }, (res: any) => {
       if (res?.error) { setQuizPick(null); return; }
-      setFeedback({ correct: res.correct, points: res.points, answer: res.answer }); sfx(res.correct ? 'confirm' : 'error');
+      setFeedback({ correct: res.correct, points: res.points, answer: res.answer });
     });
   }
-  function submitBuzzerAnswer(e?: any) { e?.preventDefault(); if (!guess.trim()) return; socket.emit('buzzer:answer', { text: guess.trim() }, (res: any) => { if (res?.correct) { setFeedback({ points: res.points, titleHit: true, artistHit: true }); sfx('confirm'); } else if (res?.ok) { setFeedback({ points: 0 }); setGuess(''); sfx('error'); } }); }
+  function submitBuzzerAnswer(e?: any) { e?.preventDefault(); if (!guess.trim()) return; socket.emit('buzzer:answer', { text: guess.trim() }, (res: any) => { if (res?.correct) { setFeedback({ points: res.points, titleHit: true, artistHit: true }); } else if (res?.ok) { setFeedback({ points: 0 }); setGuess(''); } }); }
   function usePower() {
     socket.emit('player:power', {}, (res: any) => {
       if (res?.error) return setPowerMsg(res.error);
@@ -422,10 +415,7 @@ export default function Player() {
           {browse
             ? <button className="btn big" onClick={() => setStep('form')}>← Retour au hub</button>
             : changeMode
-              ? <div className="row" style={{ gap: 10, width: '100%', maxWidth: 460 }}>
-                  <button className="btn" style={{ flex: 1 }} onClick={() => setChanging(false)}>Annuler</button>
-                  <button className="btn warm big" style={{ flex: 2 }} onClick={changeChar} disabled={!avatarId || takenIds.has(avatarId)}>{takenIds.has(avatarId) ? 'Déjà pris' : `Passer sur ${sel.name}`}</button>
-                </div>
+              ? <button className="btn warm big" style={{ width: '100%', maxWidth: 460 }} onClick={changeChar} disabled={!avatarId || takenIds.has(avatarId)}>{takenIds.has(avatarId) ? 'Déjà pris' : 'Valider ce rappeur'}</button>
               : <button className="btn warm big" onClick={join} disabled={!avatarId || joining || takenIds.has(avatarId)}>{joining ? 'Connexion…' : takenIds.has(avatarId) ? 'Déjà pris — choisis un autre' : `Entrer avec ${sel.name}`}</button>}
         </div>
       </div>
@@ -444,7 +434,7 @@ export default function Player() {
         <div className="center" style={{ gap: 16 }}>
           <span className="dot" style={{ width: 12, height: 12 }} />
           <h2 className="title-xl">Partie en cours</h2>
-          <p className="muted" style={{ maxWidth: 380 }}>Tu es dans la place, {name}. Une partie tourne déjà — tu entres <b style={{ color: 'var(--txt)' }}>dès la prochaine</b>. Reste chaud.</p>
+          <p className="muted" style={{ maxWidth: 380 }}>Tu es dans le cercle, {name}. Une partie tourne déjà — tu entres <b style={{ color: 'var(--txt)' }}>dès la prochaine</b>. Reste chaud.</p>
           {av && <p className="muted">Ton perso : <b style={{ color: 'var(--txt)' }}>{av.name}</b> · pouvoir <b style={{ color: 'var(--ember)' }}>{av.power.name}</b></p>}
         </div>
       </div>
@@ -518,15 +508,24 @@ export default function Player() {
     <div className="wrap">
       <div className="topbar">
         <span className="row" style={{ gap: 9 }}>{av && <RMed id={av.id} size={34} />}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17 }}>{name}</span></span>
-        {me && <span className="gpill" style={{ color: 'var(--ember)' }}>{(round?.suspense || reveal?.hideBoard) ? '??? aud.' : `${fmtAud(me.score)} aud.`}</span>}
+        {me && <span className="gpill" style={{ color: 'var(--ember)' }}>{fmtAud(me.score)} aud.</span>}{/* on montre TOUJOURS ses propres auditeurs ; le suspense porte sur le RANG, masqué ailleurs */}
       </div>
       {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
 
       {phase === 'lobby' && (
-        <div className="center"><span className="dot" style={{ width: 12, height: 12 }} /><h2 className="title-xl">Tu es dans la place</h2>
-          <p className="muted">Ton perso : <b style={{ color: 'var(--txt)' }}>{av?.name}</b> · pouvoir <b style={{ color: 'var(--ember)' }}>{av?.power.name}</b></p>
+        <div className="center" style={{ gap: 16 }}><span className="dot" style={{ width: 12, height: 12 }} /><h2 className="title-xl">Tu es dans le cercle</h2>
+          {av && (
+            <div className="glass pad" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, maxWidth: 340, width: '100%' }}>
+              {av.img
+                ? <img src={`/avatars/${av.id}.png`} alt="" onError={hideOnErr} style={{ width: 122, height: 122, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--fluo)', boxShadow: '0 0 26px -8px var(--fluo)', ...(av.crop?.y != null ? { objectPosition: `50% ${av.crop.y}%` } : {}) }} />
+                : <RMed id={av.id} size={122} />}
+              <div style={{ fontFamily: 'var(--disp)', fontSize: 26, fontWeight: 700, textTransform: 'uppercase', lineHeight: 1 }}>{av.name}</div>
+              <div className="eyebrow" style={{ color: 'var(--ember)' }}>Pouvoir · {av.power.name}</div>
+              <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.45 }}>{av.power.effect}</div>
+            </div>
+          )}
           <p className="muted">En attente… l'hôte va lancer la partie.</p>
-          <button className="btn" style={{ marginTop: 4 }} onClick={() => setChanging(true)}>Changer de rappeur</button></div>
+          <button className="btn" style={{ marginTop: 2 }} onClick={() => setChanging(true)}>Changer de rappeur</button></div>
       )}
 
       {phase === 'countdown' && (
@@ -587,6 +586,8 @@ export default function Player() {
                 : (<><h2 className="title-xl">Reconnais le son</h2><button className="buzzer" onClick={doBuzz}>BUZZ</button></>)
           ) : jamMs > 0 ? (
             <><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti — tu peux répondre dans un instant.</p></>
+          ) : submitted ? (
+            <><h2 className="title-xl">Réponse envoyée ✓</h2><p className="muted">Le résultat tombe à la révélation… reste chaud.</p></>
           ) : (
             <><h2 className="title-xl">À toi de jouer</h2><form onSubmit={submitAnswer} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}><input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre et/ou artiste…" autoFocus /><div className="bar"><i style={{ width: `${frac * 100}%` }} /></div><button className="btn warm big send" type="submit">Valider</button></form></>
           )}
@@ -610,13 +611,13 @@ export default function Player() {
               <h2 className="title-xl">{reveal.track.title}</h2><p className="reveal-artist" style={{ fontFamily: 'var(--disp)', fontSize: 22, margin: 0 }}>{reveal.track.artist}</p>
             </>
           )}
-          <div className="gpill" style={{ fontSize: 16, padding: '12px 20px' }}>{myResult?.points ? `+${fmtAud(myResult.points)} auditeurs` : 'Zéro cette fois'}</div>
+          <div className="gpill" style={{ fontSize: 18, padding: '14px 24px', fontWeight: 800, color: myResult?.points ? 'var(--green)' : 'var(--muted)', borderColor: myResult?.points ? 'rgba(166,255,0,.5)' : 'var(--line)' }}>{myResult?.points ? `🎧 +${fmtAud(myResult.points)} auditeurs` : 'Zéro auditeur cette fois'}</div>
           {reveal.hideBoard
-            ? <p className="feedback" style={{ color: 'var(--fluo)' }}>Position masquée — suspense jusqu'au bout !</p>
+            ? <p className="muted">Ton total : <b style={{ color: 'var(--txt)' }}>{fmtAud(me?.score ?? 0)}</b> auditeurs · <b style={{ color: 'var(--fluo)' }}>position secrète 🔒</b></p>
             : <p className="muted">Ton total : <b style={{ color: 'var(--txt)' }}>{fmtAud(me?.score ?? 0)}</b> auditeurs · {myRank}<sup>{myRank === 1 ? 'er' : 'e'}</sup></p>}
           {/* réactions/taunts — s'affichent sur l'écran hôte ; le joueur reste actif entre les manches */}
           <div className="reactbar">{REACTIONS.map((r, i) => <button key={i} type="button" className="reactbtn" onClick={() => sendReaction(i)}><span className="re">{r.e}</span>{r.t}</button>)}</div>
-          {av && <p className="muted" style={{ fontSize: 12, margin: '2px 0 0' }}>Rappel de ton pouvoir : <b style={{ color: 'var(--ember)' }}>{av.power.name}</b></p>}
+          {av && <p className="muted" style={{ fontSize: 12, margin: '2px 0 0', maxWidth: 400, lineHeight: 1.4 }}>Ton pouvoir — <b style={{ color: 'var(--ember)' }}>{av.power.name}</b> : {av.power.effect}</p>}
           </div>
       )}
 
