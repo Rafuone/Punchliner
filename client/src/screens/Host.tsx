@@ -288,10 +288,6 @@ export default function Host() {
           )}
 
           <button className="btn warm big" style={{ maxWidth: 360, marginTop: 14 }} onClick={() => setConfiguring(true)} disabled={poolSize < 1}>Configurer la partie →</button>
-          <div className="row" style={{ gap: 10 }}>
-            <button className="btn" onClick={() => setHubView('roster')}>Le roster</button>
-            <button className="btn" onClick={() => setHubView('trophies')}>Le palmarès</button>
-          </div>
           <a className="muted" href="/?dev" target="_blank" rel="noreferrer" style={{ fontSize: 12, textDecoration: 'none' }}>+ ajouter un joueur test</a>
         </div>
       )}
@@ -304,6 +300,7 @@ export default function Host() {
           playerList={players}
           onStart={startWizard}
           onBack={() => setConfiguring(false)}
+          onOpenHub={setHubView}
           music={{ nowPlaying, musicOn, onToggle: toggleMusic, onNext: nextTrack, onPrev: prevTrack, bassRef, barsRef, tracks: MENU_TRACKS }}
         />
       )}

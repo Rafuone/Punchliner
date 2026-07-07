@@ -6,7 +6,7 @@ import '../wizard.css';
 export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; mjId?: string; rebalance: string };
 type Music = { nowPlaying: number; musicOn: boolean; onToggle: () => void; onNext: () => void; onPrev: () => void; bassRef: { current: number }; barsRef: { current: number[] }; tracks: { title: string; artist: string }[] };
 type Player = { id: string; name: string; avatar?: string };
-type Props = { poolSize: number; roomCode: string; players: number; playerList?: Player[]; onStart: (s: WizSettings) => void; onBack: () => void; music: Music };
+type Props = { poolSize: number; roomCode: string; players: number; playerList?: Player[]; onStart: (s: WizSettings) => void; onBack: () => void; music: Music; onOpenHub?: (mode: 'roster' | 'trophies') => void };
 
 /* ====== données (architecture 5 étapes) ====== */
 const GAMES = [
@@ -93,7 +93,7 @@ const DIFF_ILLU = [
 ];
 const H = (s: string) => ({ dangerouslySetInnerHTML: { __html: s } });
 
-export default function ConfigWizard({ poolSize, roomCode, players, playerList = [], onStart, onBack, music }: Props) {
+export default function ConfigWizard({ poolSize, roomCode, players, playerList = [], onStart, onBack, music, onOpenHub }: Props) {
   const [step, setStep] = useState(0);
   const [game, setGame] = useState('blind');
   const [era, setEra] = useState('all');
@@ -239,6 +239,8 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
           <div className="sess-right">
             <span className="gpill onair"><span className="dot live" />ON&nbsp;AIR</span>
             <span className="gpill"><span className="dot" />Salon&nbsp;<span className="roomcode">{roomCode}</span></span>
+            <button className="gpill hubnav" onClick={() => onOpenHub?.('roster')}>Roster</button>
+            <button className="gpill hubnav" onClick={() => onOpenHub?.('trophies')}>Palmarès</button>
             <div className="players-wrap">
               <button className="gpill players-btn" onClick={() => setShowPlayers((v) => !v)} aria-expanded={showPlayers}>
                 {players}&nbsp;joueur{players > 1 ? 's' : ''} <span {...H(chevron)} />
