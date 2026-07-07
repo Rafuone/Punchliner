@@ -95,6 +95,19 @@ export const AVATARS: Avatar[] = [
 
 export const avatarById = (id?: string | null): Avatar | undefined => AVATARS.find((a) => a.id === id);
 
+// Persos VERROUILLÉS (démo) : silhouette, ni nom ni stats — on ne voit QUE l'objectif à accomplir.
+// Le vrai déblocage (persistance + alerte « nouveau challenger » en fin de partie) viendra après.
+export type LockedSlot = { id: string; objective: string };
+export const LOCKED_SLOTS: LockedSlot[] = [
+  { id: 'lock1', objective: 'Décroche le Disque de Diamant sur une seule manche, en difficulté Puriste.' },
+  { id: 'lock2', objective: 'Termine une partie avec moins de 1 000 auditeurs. Le vrai fond du sac.' },
+  { id: 'lock3', objective: 'Gagne 3 parties d’affilée dans la même série.' },
+  { id: 'lock4', objective: 'Sois le premier à trouver sur 5 manches d’une même partie.' },
+  { id: 'lock5', objective: 'Remporte une partie sans activer un seul pouvoir.' },
+  { id: 'lock6', objective: 'Gagne une partie après avoir été bon dernier au classement (comeback).' },
+];
+export const isLockedSlot = (id: string) => LOCKED_SLOTS.some((s) => s.id === id);
+
 // Surnoms affichés sous le nom dans le showcase (character select + roster du hub)
 export const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 76', kortex: 'Le Clasheur', bouss: 'La Voix', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème' };
 

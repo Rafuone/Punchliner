@@ -1,26 +1,28 @@
-// Vue de consultation AFFICHÉE SUR LA TV (Host/Hub, depuis l'assistant) : le roster façon borne de jeu
-// de combat (Tekken/SF) et le palmarès des trophées. Layout PAYSAGE pensé grand écran — pas de notion
-// P1/P2 : un seul perso « en avant » (portrait à gauche, stats + pouvoir à droite), roster en bas
-// rangé par catégorie, avec des slots grisés « ? » à débloquer.
+// Vue de consultation AFFICHÉE SUR LA TV (Hub / assistant) : roster façon borne de jeu de combat et
+// palmarès. Pensée GRAND ÉCRAN — tout tient sur la page, PAS de scroll : portrait en fond qui fond dans
+// une grille compacte de tuiles biseautées, rangée par catégorie. Slots verrouillés cliquables → on ne
+// voit que l'OBJECTIF à accomplir (ni nom ni stats). Pas de P1/P2.
 import { useState, useRef, useEffect } from 'react';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, EPITHETS, AWARDS_INFO, awardIcon } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, EPITHETS, AWARDS_INFO, awardIcon, LOCKED_SLOTS, isLockedSlot } from '../data';
 
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
-const locked = (_id: string) => false; // pas encore de système de déblocage — la mécanique de grisé est prête (voir slots « À débloquer »)
+const cats = [...CATEGORY_ORDER, ...Array.from(new Set(AVATARS.map((a) => a.cat))).filter((c) => !CATEGORY_ORDER.includes(c))];
+const ROSTER = cats.flatMap((cat) => AVATARS.filter((a) => a.cat === cat)); // à plat, rangé par catégorie
 
 export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophies'; onClose: () => void }) {
   const [selId, setSelId] = useState(AVATARS[0].id);
   const heroRef = useRef<HTMLDivElement>(null);
   const sel = avatarById(selId) || AVATARS[0];
+  const lockedSel = LOCKED_SLOTS.find((s) => s.id === selId) || null;
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
   }, []);
 
-  // glitch VHS (déchirures de tracking) sur le portrait en grand — comme le character select
+  // glitch VHS (déchirures de tracking) sur le portrait — comme le character select
   useEffect(() => {
-    if (mode !== 'roster') return;
+    if (mode !== 'roster' || lockedSel) return;
     const hero = heroRef.current; if (!hero) return;
     let timer: any;
     const fire = () => {
@@ -36,9 +38,8 @@ export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophie
     };
     timer = window.setTimeout(fire, 500 + Math.random() * 1500);
     return () => { window.clearTimeout(timer); hero.classList.remove('glx', 'glx-strong'); };
-  }, [mode, selId]);
+  }, [mode, selId, lockedSel]);
 
-  // filtres VHS (aberration chromatique) réutilisés par le portrait + les déchirures
   const defs = (
     <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true"><defs>
       <g id="bust"><path d="M22,240 C22,168 58,146 100,146 C142,146 178,168 178,240 Z" fill="#0d0917" /><ellipse cx="100" cy="96" rx="40" ry="44" fill="#0d0917" /><path d="M60,70 Q100,22 140,70 Q140,44 100,42 Q60,44 60,70 Z" fill="#0d0917" /><path d="M138,80 C150,120 150,180 150,240 L178,240 C178,168 160,146 138,80 Z" fill="rgba(255,255,255,.10)" /></g>
@@ -91,82 +92,88 @@ export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophie
     );
   }
 
-  // ---- roster : layout paysage façon borne de jeu de combat ----
+  // ---- roster ----
   const nmU = sel.name.toUpperCase();
-  const nameFs = nmU.length > 12 ? 'clamp(30px,4.2vw,58px)' : nmU.length > 8 ? 'clamp(38px,5.2vw,72px)' : 'clamp(44px,6.2vw,86px)';
-  const cats = [...CATEGORY_ORDER, ...Array.from(new Set(AVATARS.map((a) => a.cat))).filter((c) => !CATEGORY_ORDER.includes(c))];
+  const nameFs = nmU.length > 12 ? 'clamp(34px,4.6vw,64px)' : nmU.length > 8 ? 'clamp(42px,5.6vw,78px)' : 'clamp(50px,6.6vw,92px)';
   const SL = sel.statLabels || ['Flow', 'Punch', 'Tech', 'Aura'];
   const statRows: [string, number][] = [[SL[0], sel.stats.flow], [SL[1], sel.stats.punch], [SL[2], sel.stats.tech], [SL[3], sel.stats.aura]];
+  const idx = lockedSel ? LOCKED_SLOTS.indexOf(lockedSel) + 1 : 0;
 
   return (
-    <div className="hub-overlay tvros">
+    <div className={`hub-overlay tvros${isLegend(sel.cat) && !lockedSel ? ' irid' : ''}`} style={{ ['--c' as any]: lockedSel ? '#20222a' : sel.color, ['--cc' as any]: lockedSel ? '#7d8590' : CATEGORY_COLORS[sel.cat] }}>
       {defs}
       <div className="tvros-head">
         <button className="btn" style={{ padding: '8px 16px', fontSize: 13 }} onClick={onClose}>← Retour au hub</button>
         <h1 className="wm" style={{ fontSize: 22, margin: 0 }}>LE&nbsp;<span style={{ color: 'var(--fluo)' }}>ROSTER</span></h1>
-        <span className="gpill">{AVATARS.length} rappeurs</span>
+        <span className="gpill">{ROSTER.length} rappeurs · {LOCKED_SLOTS.length} à débloquer</span>
       </div>
 
-      <div className={`tvros-stage${isLegend(sel.cat) ? ' irid' : ''}`} style={{ ['--c' as any]: sel.color, ['--cc' as any]: CATEGORY_COLORS[sel.cat] }}>
-        <div className="tvros-hero" ref={heroRef}>
-          <div className="tvros-heroglow" />
-          <svg className="tvros-bust" viewBox="0 0 200 240"><use href="#bust" /></svg>
-          {sel.img && <img className="tvros-portrait" src={`/avatars/${sel.id}.png`} alt="" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
-          {sel.img && <img className="tvros-portrait tear" src={`/avatars/${sel.id}.png`} alt="" aria-hidden="true" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
-          <div className="cs-vhs tvros-vhs" aria-hidden="true"><i className="lines" /><i className="tint" /><i className="noise" /><i className="band" /></div>
-          <div className="tvros-nameplate">
-            <div className="tvros-catchip"><span>{sel.cat}</span></div>
-            <div className="tvros-name" style={{ fontSize: nameFs }}>{nmU}</div>
-            <div className="tvros-epi">« {EPITHETS[sel.id] || sel.power.name} »</div>
-          </div>
+      {/* SCÈNE : portrait plein cadre en fond, qui fond dans la grille */}
+      <div className="tvros-scene" ref={heroRef}>
+        <div className="tvros-heroglow" />
+        {lockedSel ? (
+          <svg className="tvros-silhouette" viewBox="0 0 200 240"><use href="#bust" /></svg>
+        ) : (
+          <>
+            <svg className="tvros-bust" viewBox="0 0 200 240"><use href="#bust" /></svg>
+            {sel.img && <img className="tvros-portrait" src={`/avatars/${sel.id}.png`} alt="" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
+            {sel.img && <img className="tvros-portrait tear" src={`/avatars/${sel.id}.png`} alt="" aria-hidden="true" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
+            <div className="cs-vhs tvros-vhs" aria-hidden="true"><i className="lines" /><i className="tint" /><i className="noise" /><i className="band" /></div>
+          </>
+        )}
+        <div className="tvros-fade" />
+
+        {/* nom / catégorie en bas à gauche */}
+        <div className="tvros-caption">
+          <div className="tvros-catchip"><span>{lockedSel ? 'Verrouillé' : sel.cat}</span></div>
+          <div className="tvros-name" style={{ fontSize: lockedSel ? 'clamp(46px,6vw,86px)' : nameFs }}>{lockedSel ? '???' : nmU}</div>
+          <div className="tvros-epi">{lockedSel ? `Challenger mystère n°${idx}` : `« ${EPITHETS[sel.id] || sel.power.name} »`}</div>
         </div>
 
-        <div className="tvros-info">
-          <div className="tvros-statblock">
-            <div className="tvros-blabel">Statistiques</div>
-            {statRows.map(([lab, v]) => (
-              <div className="tvros-srow" key={lab}>
-                <span className="tvros-slab">{lab}</span>
-                <span className="tvros-sbar">{[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= v ? 'on' : ''} />)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="tvros-power">
-            <div className="tvros-blabel">Pouvoir signature</div>
-            <div className="tvros-pname">{sel.power.name}</div>
-            <div className="tvros-pfx">{sel.power.effect}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="tvros-roster">
-        {cats.map((cat) => {
-          const members = AVATARS.filter((a) => a.cat === cat);
-          if (!members.length) return null;
-          return (
-            <div className="tvros-catgroup" key={cat}>
-              <div className={`tvros-catlabel${isLegend(cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[cat] }}>{cat}<span>{members.length}</span></div>
-              <div className="tvros-cells">
-                {members.map((a) => {
-                  const lk = locked(a.id);
-                  return (
-                    <button key={a.id} className={`tvros-cell ${selId === a.id ? 'sel' : ''} ${lk ? 'lock' : ''}`} style={{ ['--c' as any]: a.color }}
-                      onMouseEnter={() => !lk && setSelId(a.id)} onClick={() => !lk && setSelId(a.id)} title={lk ? 'À débloquer' : a.name}>
-                      {lk ? <span className="q">?</span> : (a.img ? <img src={`/avatars/${a.id}.png`} alt={a.name} onError={hideOnErr} /> : <span className="ini">{initials(a.name)}</span>)}
-                      <span className="tvros-cn">{lk ? '???' : a.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
+        {/* panneau stats + pouvoir (ou objectif si verrouillé) à droite */}
+        <div className="tvros-panel">
+          {lockedSel ? (
+            <div className="tvros-obj">
+              <div className="tvros-blabel">Objectif à accomplir</div>
+              <div className="tvros-objtxt">{lockedSel.objective}</div>
+              <div className="tvros-objnote">Réussis-le en partie pour révéler ce rappeur.</div>
             </div>
-          );
-        })}
-        <div className="tvros-catgroup">
-          <div className="tvros-catlabel" style={{ ['--cc' as any]: '#7d8590' }}>À débloquer<span>?</span></div>
-          <div className="tvros-cells">
-            {[0, 1, 2, 3, 4, 5].map((i) => <div className="tvros-cell lock mystery" key={i} title="Secret — à débloquer"><span className="q">?</span></div>)}
-          </div>
+          ) : (
+            <>
+              <div className="tvros-block">
+                <div className="tvros-blabel">Statistiques</div>
+                {statRows.map(([lab, v]) => (
+                  <div className="tvros-srow" key={lab}>
+                    <span className="tvros-slab">{lab}</span>
+                    <span className="tvros-sbar">{[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= v ? 'on' : ''} />)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="tvros-block">
+                <div className="tvros-blabel">Pouvoir signature</div>
+                <div className="tvros-pname">{sel.power.name}</div>
+                <div className="tvros-pfx">{sel.power.effect}</div>
+              </div>
+            </>
+          )}
         </div>
+      </div>
+
+      {/* GRILLE compacte : tout le roster, collé, biseauté, rangé par catégorie */}
+      <div className="tvros-grid">
+        {ROSTER.map((a) => (
+          <button key={a.id} className={`tvcell ${selId === a.id ? 'sel' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[a.cat], ['--c' as any]: a.color }}
+            onMouseEnter={() => setSelId(a.id)} onClick={() => setSelId(a.id)} title={a.name}>
+            {a.img ? <img src={`/avatars/${a.id}.png`} alt={a.name} onError={hideOnErr} /> : <span className="ini">{initials(a.name)}</span>}
+            <span className="tvcell-nm">{a.name}</span>
+          </button>
+        ))}
+        {LOCKED_SLOTS.map((s) => (
+          <button key={s.id} className={`tvcell lock ${selId === s.id ? 'sel' : ''}`} style={{ ['--cc' as any]: '#7d8590' }}
+            onMouseEnter={() => setSelId(s.id)} onClick={() => setSelId(s.id)} title="À débloquer">
+            <span className="q">?</span>
+          </button>
+        ))}
       </div>
     </div>
   );

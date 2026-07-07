@@ -514,72 +514,80 @@ button, input { font-family: inherit; }
 .hub-overlay { position: fixed; inset: 0; z-index: 60; overflow-y: auto; background: #0a0b0c; }
 .hub-overlay .wrap { min-height: 100%; }
 
-/* ===== roster TV : layout paysage façon borne de jeu de combat (Tekken / SF) ===== */
-.tvros { display: flex; flex-direction: column; overflow: hidden; color: var(--txt);
-  background: radial-gradient(120% 90% at 50% 0%, #1a1120, #0a0b0e 62%, #060608); }
-.tvros-head { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px clamp(16px, 3vw, 40px); }
-.tvros-head .wm { font-family: var(--disp); font-weight: 700; letter-spacing: -.01em; }
+/* ===== roster TV : écran de jeu (portrait en fond fondu + grille compacte biseautée, ZÉRO scroll) ===== */
+.tvros { position: fixed; inset: 0; display: flex; flex-direction: column; overflow: hidden; color: var(--txt);
+  background: radial-gradient(120% 100% at 50% 0%, #171019, #0a0b0e 60%, #060608); }
+.tvros-head { flex: 0 0 auto; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px clamp(16px, 3vw, 40px); }
+.tvros-head .wm { font-family: var(--disp); font-weight: 700; }
 
-.tvros-stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; gap: clamp(16px, 3vw, 48px); padding: 0 clamp(16px, 3vw, 48px) clamp(10px, 2vh, 20px); }
-/* hero : le perso sélectionné en grand, à gauche */
-.tvros-hero { position: relative; flex: 0 0 42%; max-width: 560px; min-width: 260px; overflow: hidden; border-radius: 8px; border: 1px solid var(--line2);
-  background: radial-gradient(100% 80% at 50% 12%, var(--c, #26282c), #101014 66%, #0a0b0e); }
+/* SCÈNE : prend l'espace restant, le portrait est en FOND plein cadre et fond vers la grille */
+.tvros-scene { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .tvros-heroglow { position: absolute; inset: 0; z-index: 0; mix-blend-mode: screen;
-  background: radial-gradient(60% 52% at 50% 30%, color-mix(in srgb, var(--cc, #a6ff00) 24%, transparent), transparent 70%); }
-.tvros-bust { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); height: 96%; z-index: 0; opacity: .5; }
-.tvros-portrait { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 14%; z-index: 1; filter: url(#vhs); transform: scale(1.04); }
+  background: radial-gradient(46% 62% at 30% 42%, color-mix(in srgb, var(--cc, #a6ff00) 26%, transparent), transparent 72%); }
+.tvros-bust, .tvros-silhouette { position: absolute; left: 30%; bottom: 0; transform: translateX(-50%); height: 100%; z-index: 0; }
+.tvros-bust { opacity: .4; }
+.tvros-silhouette { opacity: .85; color: #14161c; filter: drop-shadow(0 0 40px rgba(0,0,0,.6)); }
+.tvros-portrait { position: absolute; left: 0; top: 0; width: min(58%, 780px); height: 100%; object-fit: cover; object-position: 50% 12%; z-index: 1; filter: url(#vhs); transform: scale(1.03);
+  -webkit-mask-image: linear-gradient(90deg, #000 60%, transparent); mask-image: linear-gradient(90deg, #000 60%, transparent); }
 .tvros-portrait.tear { z-index: 2; opacity: 0; pointer-events: none; }
-.tvros-hero.glx .tvros-portrait.tear, .tvros-hero.glx-strong .tvros-portrait.tear { opacity: .95;
-  clip-path: inset(var(--gy, 40%) 0 calc(100% - var(--gy, 40%) - var(--gh, 6%)) 0); transform: translateX(var(--gx, 0)) scale(1.04); }
-.tvros-hero.glx-strong .tvros-portrait { filter: url(#vhs-strong); }
-.tvros-hero.glx-strong .tvros-portrait.tear { filter: url(#vhs-strong) saturate(1.4) contrast(1.1); }
-.tvros-vhs { z-index: 3; }
-.tvros-nameplate { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; padding: 20px 22px 18px;
-  background: linear-gradient(180deg, transparent, rgba(6,7,9,.72) 55%, rgba(6,7,9,.96)); }
-.tvros-catchip { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--cc, #a6ff00);
-  border: 1px solid color-mix(in srgb, var(--cc, #a6ff00) 55%, transparent); border-radius: 3px; padding: 3px 9px; margin-bottom: 8px; }
-.tvros-stage.irid .tvros-catchip { color: #ffd76b; border-color: rgba(255,215,107,.5); }
-.tvros-name { font-family: var(--disp); font-weight: 700; line-height: .9; letter-spacing: -.02em; color: #fff; text-shadow: 0 3px 24px rgba(0,0,0,.6); }
-.tvros-epi { margin-top: 7px; font-family: var(--disp); font-style: italic; color: var(--cc, #a6ff00); font-size: clamp(13px, 1.4vw, 18px); }
-.tvros-stage.irid .tvros-epi { color: #ffd76b; }
+.tvros-scene.glx .tvros-portrait.tear, .tvros-scene.glx-strong .tvros-portrait.tear { opacity: .95;
+  clip-path: inset(var(--gy, 40%) 0 calc(100% - var(--gy, 40%) - var(--gh, 6%)) 0); transform: translateX(var(--gx, 0)) scale(1.03); }
+.tvros-scene.glx-strong .tvros-portrait { filter: url(#vhs-strong); }
+.tvros-vhs { position: absolute; left: 0; top: 0; width: min(58%, 780px); height: 100%; z-index: 3;
+  -webkit-mask-image: linear-gradient(90deg, #000 60%, transparent); mask-image: linear-gradient(90deg, #000 60%, transparent); }
+.tvros-fade { position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: linear-gradient(180deg, transparent 50%, rgba(8,9,12,.5) 74%, #08090c 100%); }
 
-/* panneau : stats + pouvoir, à droite */
-.tvros-info { flex: 1 1 auto; align-self: center; max-width: 620px; display: flex; flex-direction: column; gap: 14px; }
-.tvros-blabel { font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; color: var(--muted2); margin-bottom: 10px; }
-.tvros-statblock, .tvros-power { background: rgba(255,255,255,.03); border: 1px solid var(--line2); border-radius: 6px; padding: 16px 18px; }
-.tvros-srow { display: flex; align-items: center; gap: 14px; margin-bottom: 9px; }
+.tvros-caption { position: absolute; left: clamp(16px,3vw,44px); bottom: 16px; z-index: 4; max-width: 60%; }
+.tvros-catchip { display: inline-block; margin-bottom: 10px; padding: 4px 11px; border-radius: 2px; background: rgba(0,0,0,.5);
+  border: 1px solid color-mix(in srgb, var(--cc, #a6ff00) 45%, rgba(255,255,255,.14));
+  font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--cc, #a6ff00); }
+.tvros.irid .tvros-catchip { color: #ffd76b; border-color: rgba(255,215,107,.5); }
+.tvros-name { font-family: var(--disp); font-weight: 700; line-height: .86; letter-spacing: -.02em; color: #fff; text-shadow: 0 4px 30px rgba(0,0,0,.7); }
+.tvros-epi { margin-top: 8px; font-family: var(--disp); font-style: italic; font-size: clamp(14px,1.5vw,20px); color: var(--cc, #a6ff00); text-shadow: 0 1px 10px rgba(0,0,0,.85); }
+.tvros.irid .tvros-epi { color: #ffd76b; }
+
+/* panneau info à droite (translucide, posé sur le fond) */
+.tvros-panel { position: absolute; right: clamp(16px,3vw,44px); top: 50%; transform: translateY(-50%); z-index: 4; width: min(38%, 430px); display: flex; flex-direction: column; gap: 12px; }
+.tvros-block, .tvros-obj { background: rgba(8,9,12,.6); backdrop-filter: blur(5px); border: 1px solid var(--line2); border-radius: 7px; padding: 15px 17px; }
+.tvros-blabel { font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; color: var(--muted2); margin-bottom: 11px; }
+.tvros-srow { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
 .tvros-srow:last-child { margin-bottom: 0; }
-.tvros-slab { flex: 0 0 96px; font-family: var(--disp); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .02em; color: var(--txt); }
+.tvros-slab { flex: 0 0 88px; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .tvros-sbar { display: flex; gap: 5px; flex: 1; }
-.tvros-sbar i { flex: 1; height: 12px; border-radius: 2px; background: rgba(255,255,255,.08); }
-.tvros-sbar i.on { background: linear-gradient(90deg, #a6ff00, #e4ff1a); box-shadow: 0 0 8px rgba(166,255,0,.35); }
-.tvros-power .tvros-pname { font-family: var(--disp); font-weight: 700; font-size: clamp(18px, 2vw, 26px); color: var(--fluo); line-height: 1; margin-bottom: 8px; }
-.tvros-power .tvros-pfx { font-size: 14px; line-height: 1.5; color: var(--txt); }
+.tvros-sbar i { flex: 1; height: 13px; background: rgba(255,255,255,.14); transform: skewX(-16deg); }  /* pips BISEAUTÉS = même style que le character select */
+.tvros-sbar i.on { background: var(--cc, var(--fluo)); box-shadow: 0 0 8px color-mix(in srgb, var(--cc, #e4ff1a) 40%, transparent); }
+.tvros-pname { font-family: var(--disp); font-weight: 700; font-size: clamp(17px,1.9vw,24px); line-height: 1.02; color: var(--cc, var(--fluo)); text-transform: uppercase; margin-bottom: 7px; }
+.tvros.irid .tvros-pname { color: #ffd76b; }
+.tvros-pfx { font-size: 13px; line-height: 1.45; color: var(--txt); }
+.tvros-objtxt { font-family: var(--disp); font-weight: 700; font-size: clamp(15px,1.7vw,20px); line-height: 1.28; color: #fff; }
+.tvros-objnote { margin-top: 9px; font-size: 12px; color: var(--muted); }
 
-/* roster en bas, rangé par catégorie (scroll horizontal), grille dense 2 rangées */
-.tvros-roster { flex: 0 0 auto; display: flex; gap: clamp(12px, 1.6vw, 26px); overflow-x: auto; padding: 14px clamp(16px, 3vw, 40px) 20px; border-top: 1px solid var(--line); background: rgba(0,0,0,.28); }
-.tvros-catgroup { flex: 0 0 auto; }
-.tvros-catlabel { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--cc, #fff); }
-.tvros-catlabel span { color: var(--muted2); font-size: 9px; border: 1px solid var(--line2); border-radius: 8px; padding: 0 5px; }
-.tvros-cells { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); gap: 7px; }
-.tvros-cell { position: relative; width: clamp(52px, 4.4vw, 70px); height: clamp(52px, 4.4vw, 70px); border-radius: 5px; overflow: hidden; cursor: pointer; padding: 0;
-  background: linear-gradient(160deg, color-mix(in srgb, var(--c, #333) 55%, #15161a), #101115); border: 1.5px solid var(--line2); }
-.tvros-cell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
-.tvros-cell .ini { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; font-size: 13px; color: #fff; }
-.tvros-cell .tvros-cn { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 2px 2px; font-size: 7.5px; font-weight: 700; letter-spacing: .02em; text-align: center; text-transform: uppercase; color: #fff;
-  background: linear-gradient(180deg, transparent, rgba(0,0,0,.88)); opacity: 0; transition: opacity .12s ease; }
-.tvros-cell:hover .tvros-cn, .tvros-cell.sel .tvros-cn { opacity: 1; }
-.tvros-cell:hover { border-color: var(--line3); }
-.tvros-cell.sel { border-color: var(--fluo); box-shadow: 0 0 0 1.5px var(--fluo), 0 0 16px rgba(228,255,26,.35); }
-.tvros-cell.lock { cursor: default; }
-.tvros-cell.lock img { filter: grayscale(1) brightness(.4); }
-.tvros-cell .q { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; font-size: 26px; color: var(--muted2); }
-.tvros-cell.mystery { background: repeating-linear-gradient(45deg, #141519 0 6px, #101115 6px 12px); border-style: dashed; }
+/* GRILLE : tout le roster visible, tuiles BISEAUTÉES collées, rangées par catégorie (liseré de couleur) */
+.tvros-grid { flex: 0 0 auto; z-index: 4; display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; padding: 10px clamp(12px,2.4vw,32px) 14px; background: #08090c; border-top: 1px solid var(--line); }
+.tvcell { position: relative; aspect-ratio: 1; overflow: hidden; cursor: pointer; padding: 0; border: 0;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--c,#333) 50%, #15161a), #0d0e12);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px)); transition: transform .08s ease; }
+.tvcell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 10%; }
+.tvcell .ini { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; font-size: 12px; color: #fff; }
+.tvcell::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--cc, transparent); opacity: .85; }
+.tvcell-nm { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 1px 2px; font-size: 7px; font-weight: 800; letter-spacing: .01em; text-align: center; text-transform: uppercase; color: #fff; background: linear-gradient(180deg, transparent, rgba(0,0,0,.9)); opacity: 0; transition: opacity .1s ease; }
+.tvcell:hover .tvcell-nm, .tvcell.sel .tvcell-nm { opacity: 1; }
+.tvcell:hover { transform: translateY(-2px); z-index: 2; }
+.tvcell.sel { box-shadow: inset 0 0 0 2.5px var(--fluo); z-index: 3; }
+.tvcell.sel::after { background: var(--fluo); opacity: 1; }
+.tvcell.lock { background: repeating-linear-gradient(45deg, #131419 0 5px, #0e0f13 5px 10px); }
+.tvcell.lock .q { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; font-size: clamp(16px,1.7vw,24px); color: var(--muted2); }
+.tvcell.lock::after { background: #4a4f57; }
 
-@media (max-width: 900px) {
-  .tvros-stage { flex-direction: column; align-items: stretch; gap: 12px; padding-top: 12px; }
-  .tvros-hero { flex: 0 0 auto; height: min(36vh, 300px); max-width: none; }
-  .tvros-info { max-width: none; }
+@media (max-width: 1100px) { .tvros-grid { grid-template-columns: repeat(11, 1fr); } }
+@media (max-width: 760px) {
+  .tvros-grid { grid-template-columns: repeat(8, 1fr); }
+  .tvros-scene { display: flex; flex-direction: column; }
+  .tvros-portrait, .tvros-vhs { position: relative; width: 100%; height: min(34vh,260px); -webkit-mask-image: none; mask-image: none; }
+  .tvros-caption { position: static; max-width: none; padding: 8px clamp(12px,3vw,20px) 0; }
+  .tvros-panel { position: static; transform: none; width: auto; margin: 8px clamp(12px,3vw,20px) 10px; }
+  .tvros-fade { display: none; }
 }
 
 /* ===== page Palmarès (galerie de trophées) ===== */
