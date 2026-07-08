@@ -194,16 +194,42 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, []);
-  // navigation clavier (flèches + Entrée)
+  // navigation clavier SPATIALE : la flèche va vers l'élément visuellement le plus proche dans CETTE direction
+  // (cartes de jeu, rail des étapes, boutons). Entrée = valider l'élément focus (comportement natif du bouton).
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') setStep((s) => Math.min(4, s + 1));
-      else if (e.key === 'ArrowLeft') setStep((s) => { if (s > 0) return s - 1; onBack(); return s; });
-      else if (e.key === 'Enter') setStep((s) => { if (s === 4) { launchRef.current(); return s; } return Math.min(4, s + 1); });
+      const dir = ({ ArrowRight: 'r', ArrowLeft: 'l', ArrowUp: 'u', ArrowDown: 'd' } as Record<string, string>)[e.key];
+      if (!dir) return;
+      const ae = document.activeElement as HTMLElement | null;
+      if (ae && ['INPUT', 'TEXTAREA', 'SELECT'].includes(ae.tagName)) return;
+      const items = (Array.from(document.querySelectorAll('.wz button:not([disabled])')) as HTMLElement[])
+        .filter((el) => el.offsetParent !== null && el.getClientRects().length > 0);
+      if (!items.length) return;
+      e.preventDefault();
+      if (!ae || !items.includes(ae)) { ((document.querySelector('.wz .keycard.sel') as HTMLElement) || (document.querySelector('.wz .stagecol button:not([disabled])') as HTMLElement) || items[0]).focus(); return; }
+      const cr = ae.getBoundingClientRect(); const cx = cr.left + cr.width / 2, cy = cr.top + cr.height / 2;
+      let best: HTMLElement | null = null, bestScore = Infinity;
+      for (const el of items) {
+        if (el === ae) continue;
+        const r = el.getBoundingClientRect(); const dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
+        const inDir = dir === 'r' ? dx > 6 : dir === 'l' ? dx < -6 : dir === 'd' ? dy > 6 : dy < -6;
+        if (!inDir) continue;
+        const along = (dir === 'r' || dir === 'l') ? Math.abs(dx) : Math.abs(dy);
+        const perp = (dir === 'r' || dir === 'l') ? Math.abs(dy) : Math.abs(dx);
+        const score = along + perp * 2.4; // privilégie l'axe de la direction, pénalise l'écart perpendiculaire
+        if (score < bestScore) { bestScore = score; best = el; }
+      }
+      if (best) best.focus();
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, []);
+  // à l'entrée sur l'étape « jeu », on pose le focus clavier sur le jeu sélectionné (Blind Test par défaut)
+  useEffect(() => {
+    if (step !== 0) return;
+    const id = requestAnimationFrame(() => (document.querySelector('.wz .keycard.sel') as HTMLElement)?.focus?.());
+    return () => cancelAnimationFrame(id);
+  }, [step]);
 
   return (
     <div className="wz" ref={wzRef}>
@@ -269,7 +295,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
       </div>
 
       <div className="scene">
-        <div className="stagecol">
+        <div className={`stagecol ${step === 0 ? 'games' : ''}`}>
           <div className="act-inner" key={step}>
             <div className="act-head">
               <div className="act-title-wrap">
@@ -281,7 +307,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
 
             {step === 0 && (() => {
               const gameCard = (g: any) => (
-                <button key={g.id} ref={g.id === 'blind' ? blindCardRef : undefined} className={`keycard pick g-${g.id} ${game === g.id ? 'sel on' : ''} ${g.soon ? 'locked' : ''}`} onClick={() => !g.soon && setGame(g.id)}>
+                <button key={g.id} ref={g.id === 'blind' ? blindCardRef : undefined} className={`keycard pick g-${g.id} ${game === g.id ? 'sel on' : ''} ${g.soon ? 'locked' : ''}`} onClick={() => !g.soon && setGame(g.id)} onFocus={() => !g.soon && setGame(g.id)}>
                   <span {...H(bracketsSvg)} />
                   <div className="kclip">
                     <div className="keyart" {...H(KEYART[g.id] || '')} />
@@ -302,11 +328,11 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
               );
               return (
                 <div className="games-groups">
-                  <div className="games-group">
+                  <div className="games-group multi">
                     <div className="games-glabel">Multijoueur <span>· la soirée à plusieurs</span></div>
                     <div className="games-stage">{GAMES.filter((g) => g.family === 'multi').map(gameCard)}</div>
                   </div>
-                  <div className="games-group">
+                  <div className="games-group solo">
                     <div className="games-glabel">Solo <span>· records &amp; campagne</span></div>
                     <div className="games-stage">{GAMES.filter((g) => g.family === 'solo').map(gameCard)}</div>
                   </div>
@@ -428,7 +454,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
 
       <div className="hud-bot">
         <button className="btn ghost" onClick={() => (step === 0 ? onBack() : setStep(step - 1))}><span {...H(arrowL)} /> Retour</button>
-        <div className="hint"><kbd>← →</kbd> naviguer · <kbd>Entrée</kbd> valider</div>
+        <div className="hint"><kbd>↑ ↓ ← →</kbd> se déplacer · <kbd>Entrée</kbd> valider</div>
         <div className="spacer" />
         <button className="btn hublink" onClick={() => onOpenHub?.('roster')}><span {...H(rosterIco)} /> Roster</button>
         <button className="btn hublink" onClick={() => onOpenHub?.('trophies')}><span {...H(trophyIco)} /> Palmarès</button>
