@@ -11,8 +11,9 @@ const URLS: Record<string, string> = {
   countdown: 'https://cdn.freesound.org/previews/849/849886_17559721-lq.mp3', // UI TextBlip 08 (tick 3-2-1)
   launch: 'https://cdn.freesound.org/previews/542/542043_6856600-lq.mp3',   // GASP UI Notification 1 (lancer la partie)
   recap: 'https://cdn.freesound.org/previews/484/484632_10392137-lq.mp3',   // LCHZ 140 Bass 06 (boucle sur le récap)
+  airhorn: 'https://cdn.freesound.org/previews/414/414208_6938106-lq.mp3',  // "Airhorn" (sélection d'Alexandre) — cheat code
 };
-const VOL: Record<string, number> = { hover: 0.22, click: 0.35, confirm: 0.5, error: 0.5, scratch: 0.55, horn: 0.6, countdown: 0.4, launch: 0.5, recap: 0.4 };
+const VOL: Record<string, number> = { hover: 0.22, click: 0.35, confirm: 0.5, error: 0.5, scratch: 0.55, horn: 0.6, countdown: 0.4, launch: 0.5, recap: 0.4, airhorn: 0.65 };
 const cache: Record<string, HTMLAudioElement> = {};
 const off = () => { try { return localStorage.getItem('pl_sfx_off') === '1'; } catch { return false; } };
 
@@ -27,34 +28,18 @@ export function sfx(key: keyof typeof URLS) {
   } catch { /* no-op */ }
 }
 
-// AIRHORN "façon DJ" (la sirène ragga/dancehall/rap 90s qu'on matraque) — SYNTHÉTISÉ (Web Audio, zéro dépendance
-// externe → marche à coup sûr), joué en RAFALE "bap-bap-bap-baaaap". Utilisé pour le cheat code.
+// AIRHORN "façon DJ" (le vrai son "Airhorn" de la sélection d'Alexandre), joué en RAFALE qui se chevauche
+// ("bap-bap-bap-baaaap") : 3 coups courts coupés + le dernier entier. Utilisé pour le cheat code.
 export function playAirhorns() {
   try {
     if (typeof window === 'undefined' || off()) return;
-    const AC = (window as any).AudioContext || (window as any).webkitAudioContext; if (!AC) return;
-    const ctx = new AC();
-    const master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination);
-    const blast = (t0: number, dur: number) => {
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t0);
-      g.gain.exponentialRampToValueAtTime(1, t0 + 0.014);
-      g.gain.setValueAtTime(1, t0 + dur - 0.06);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      g.connect(master);
-      [0, 7, 12, -5].forEach((semi, i) => {              // accord = corne riche (façon air horn)
-        const o = ctx.createOscillator();
-        o.type = i === 3 ? 'square' : 'sawtooth';
-        const base = 340 * Math.pow(2, semi / 12);
-        o.frequency.setValueAtTime(base * 0.93, t0);
-        o.frequency.linearRampToValueAtTime(base, t0 + 0.05); // léger bend vers le haut = le "MMBAP"
-        const og = ctx.createGain(); og.gain.value = i === 3 ? 0.14 : 0.3;
-        o.connect(og).connect(g); o.start(t0); o.stop(t0 + dur + 0.02);
-      });
-    };
-    let t = ctx.currentTime + 0.03;
-    for (const dur of [0.16, 0.16, 0.16, 0.52]) { blast(t, dur); t += dur + 0.085; } // 3 courts + 1 long
-    setTimeout(() => { try { ctx.close(); } catch {} }, (t - ctx.currentTime + 0.6) * 1000);
+    const url = URLS.airhorn; if (!url) return;
+    const vol = VOL.airhorn ?? 0.6;
+    const starts = [0, 235, 470, 760]; // ms — départ de chaque coup (se chevauchent)
+    starts.forEach((ms, i) => setTimeout(() => {
+      const a = new Audio(url); a.volume = vol; a.play().catch(() => {});
+      if (i < starts.length - 1) setTimeout(() => { try { a.pause(); } catch {} }, 250); // coupe les coups courts, garde le dernier entier
+    }, ms));
   } catch { /* no-op */ }
 }
 

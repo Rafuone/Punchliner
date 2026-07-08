@@ -158,15 +158,20 @@ type NowPlaying = { paused: boolean; name: string; artist: string; image: string
 const stateSubs: Array<(s: NowPlaying) => void> = [];
 export function onPlayerState(cb: (s: NowPlaying) => void) { stateSubs.push(cb); return () => { const i = stateSubs.indexOf(cb); if (i >= 0) stateSubs.splice(i, 1); }; }
 
-// Recherche des playlists (pour les stations radio + la recherche libre). Pas de refonte de Spotify : on liste juste.
-export async function searchPlaylists(query: string, limit = 12): Promise<Array<{ name: string; uri: string; image: string; owner: string }>> {
-  const token = await getToken(); if (!token) return [];
+// Recherche des playlists (stations + recherche libre). Renvoie les résultats ET un code d'info (pour AFFICHER la
+// vraie cause quand c'est vide : token mort, 401, bug "items null" de Spotify…). limit haute = on dépasse les
+// playlists éditoriales que Spotify renvoie en `null` (bug connu) pour atteindre des playlists lisibles.
+export type PlaylistItem = { name: string; uri: string; image: string; owner: string };
+export async function searchPlaylists(query: string, limit = 40): Promise<{ items: PlaylistItem[]; info: string }> {
+  const token = await getToken(); if (!token) return { items: [], info: 'no-token' };
   try {
     const r = await fetch('https://api.spotify.com/v1/search?type=playlist&market=FR&limit=' + limit + '&q=' + encodeURIComponent(query), { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) return [];
-    const items = (await r.json())?.playlists?.items || [];
-    return items.filter(Boolean).map((p: any) => ({ name: p.name, uri: p.uri, image: p.images?.[0]?.url || '', owner: p.owner?.display_name || 'Spotify' }));
-  } catch { return []; }
+    if (!r.ok) return { items: [], info: 'http-' + r.status };
+    const raw = (await r.json())?.playlists?.items || [];
+    const items = raw.filter(Boolean).map((p: any) => ({ name: p.name || 'Playlist', uri: p.uri, image: p.images?.[0]?.url || '', owner: p.owner?.display_name || 'Spotify' }));
+    if (!items.length) return { items: [], info: raw.length ? 'all-null' : 'empty' };
+    return { items, info: '' };
+  } catch { return { items: [], info: 'network' }; }
 }
 
 // Lance une playlist (context_uri) sur notre device, en aléatoire (ambiance radio). Renvoie false si non jouable.

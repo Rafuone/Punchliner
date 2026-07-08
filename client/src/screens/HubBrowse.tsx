@@ -35,6 +35,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay }: { mode: 'roste
   const [radioQuery, setRadioQuery] = useState('');
   const [radioLoading, setRadioLoading] = useState(false);
   const [radioActiveUri, setRadioActiveUri] = useState<string>(''); // playlist en cours (surlignée)
+  const [radioInfo, setRadioInfo] = useState<string>(''); // code d'info quand la recherche est vide (diagnostic)
   const [nowPlaying, setNowPlaying] = useState<any>(null); // {paused,name,artist,image}
   const [spReady, setSpReady] = useState(false);
 
@@ -56,10 +57,11 @@ export default function HubBrowse({ mode, onClose, onRadioPlay }: { mode: 'roste
   }, [mode]);
   async function runSearch(q: string) {
     if (!q.trim()) return;
-    setRadioLoading(true); setRadioQuery(q);
-    const res = await searchPlaylists(q, 12);
-    setRadioResults(res); setRadioLoading(false);
+    setRadioLoading(true); setRadioQuery(q); setRadioInfo('');
+    const res = await searchPlaylists(q, 40);
+    setRadioResults(res.items); setRadioInfo(res.info); setRadioLoading(false);
   }
+  const radioMsg = (i: string) => (({ 'no-token': 'Spotify déconnecté — reconnecte-toi.', 'http-401': 'Session Spotify expirée — reconnecte-toi.', 'http-403': 'Accès refusé par Spotify (403).', 'all-null': 'Spotify n’a renvoyé que des playlists non lisibles pour cette recherche (bug connu). Essaie une autre station.', 'empty': 'Aucune playlist trouvée.', 'network': 'Spotify injoignable (réseau).' } as any)[i] || (i.startsWith('http-') ? `Erreur Spotify (${i.slice(5)}).` : 'Choisis une station ci-dessus.'));
   function runStation(st: { label: string; q: string }) { runSearch(st.q); }
   async function playPlaylist(p: { uri: string }) {
     const ok = await spotifyPlayContext(p.uri);
@@ -201,7 +203,10 @@ export default function HubBrowse({ mode, onClose, onRadioPlay }: { mode: 'roste
               {radioLoading ? (
                 <p className="muted" style={{ textAlign: 'center', marginTop: 36 }}>Recherche…</p>
               ) : radioResults.length === 0 ? (
-                <p className="muted" style={{ textAlign: 'center', marginTop: 36 }}>Choisis une station ci-dessus.</p>
+                <div className="center" style={{ marginTop: 40, gap: 14 }}>
+                  <p className="muted" style={{ textAlign: 'center', maxWidth: 460, fontSize: 15 }}>{radioMsg(radioInfo)}</p>
+                  {(radioInfo === 'no-token' || radioInfo === 'http-401') && <button className="btn warm" onClick={() => spotifyLogin()}>Reconnecter Spotify</button>}
+                </div>
               ) : (
                 <div className="radio-grid">
                   {radioResults.map((p: any) => (
