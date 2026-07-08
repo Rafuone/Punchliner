@@ -58,6 +58,7 @@ export default function Player() {
   const [now, setNow] = useState(Date.now());
   const [buzz, setBuzz] = useState<'idle' | 'mine' | 'locked'>('idle');
   const [buzzMsg, setBuzzMsg] = useState('');
+  const [buzzEndsAt, setBuzzEndsAt] = useState(0); // échéance de réponse quand c'est à moi (décompte)
   const [powerMsg, setPowerMsg] = useState('');
   const [hint, setHint] = useState<any>(null);
   const [charge, setCharge] = useState(0);
@@ -89,7 +90,7 @@ export default function Player() {
   }
   function applyBuzz(b: any) {
     if (!b) return setBuzz('idle');
-    if (b.winnerId === meId.current) setBuzz('mine');
+    if (b.winnerId === meId.current) { setBuzz('mine'); setBuzzEndsAt(b.endsAt || 0); setNow(Date.now()); }
     else if (b.winnerId) { setBuzz('locked'); setBuzzMsg(`${b.winnerName} a buzzé`); }
     else if ((b.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — attends la prochaine'); }
     else setBuzz('idle');
@@ -134,7 +135,7 @@ export default function Player() {
     socket.on('lobby', (d: any) => { setPlayers(d.players); if (d.phase === 'lobby') { setWaiting(false); setPhase('lobby'); setNewChars([]); } });
     socket.on('round:prep', (d: any) => { setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setSubmitted(false); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setNow(Date.now()); setPhase('prep'); });
     socket.on('round:countdown', (d: any) => { setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setCountdown(d.seconds || 5); setPhase('countdown'); });
-    socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setSubmitted(false); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); } });
+    socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setSubmitted(false); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); setBuzzEndsAt(0); } });
     // Mode Cypher : chaque nouveau morceau (trackNo change) → on remet l'input à zéro
     socket.on('rush:state', (d: any) => { setRound((r: any) => ({ ...r, ...d })); if (rushTrackRef.current !== d.trackNo) { rushTrackRef.current = d.trackNo; setGuess(''); setFeedback(null); } setPhase('playing'); });
     socket.on('rush:end', (d: any) => { setRushEnd(d); setPhase('rushend'); });
@@ -147,8 +148,8 @@ export default function Player() {
       // Déblocage des CHALLENGERS désactivé pour l'instant (Alexandre : conditions à refondre + affichage à repenser).
     });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
-    socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) setBuzz('mine'); else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
-    socket.on('buzz:open', (d: any) => { if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — attends la prochaine'); } else setBuzz('idle'); });
+    socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) { setBuzz('mine'); setBuzzEndsAt(d.endsAt || 0); setNow(Date.now()); } else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
+    socket.on('buzz:open', (d: any) => { setBuzzEndsAt(0); if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — attends la prochaine'); } else setBuzz('idle'); });
     socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); setJoined(false); localStorage.removeItem(SKEY); });
     return () => ['connect', 'lobby', 'round:prep', 'round:countdown', 'round:go', 'rush:state', 'rush:end', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed'].forEach((e) => socket.off(e as any));
   }, []);
@@ -235,7 +236,7 @@ export default function Player() {
     meId.current = '';
     setJoined(false); setChanging(false); setAvatarId(''); setStep('form'); setError(''); setGuess('');
   }
-  function doBuzz() { socket.emit('player:buzz', {}, (res: any) => { if (res?.winner) setBuzz('mine'); }); }
+  function doBuzz() { socket.emit('player:buzz', {}, (res: any) => { if (res?.winner) { setBuzz('mine'); setBuzzEndsAt(res.endsAt || 0); setNow(Date.now()); } }); }
   function submitQuiz(i: number) {
     if (quizPick !== null || phase !== 'playing') return;
     setQuizPick(i);
@@ -282,6 +283,7 @@ export default function Player() {
   const remaining = Math.max(0, round.endsAt - now);
   const frac = round.durationMs ? remaining / round.durationMs : 0;
   const jamMs = round.jam && round.jam.by !== meId.current ? Math.max(0, (round.endsAt - round.durationMs + round.jam.ms) - now) : 0; // brouillé par un adversaire ?
+  const buzzLeft = buzzEndsAt ? Math.max(0, Math.ceil((buzzEndsAt - now) / 1000)) : 0; // secondes restantes pour répondre après avoir buzzé
   const me = players.find((p) => p.id === meId.current);
   const myRank = players.findIndex((p) => p.id === meId.current) + 1;
   const myResult = reveal?.results?.find((r: any) => r.id === meId.current);
@@ -665,10 +667,14 @@ export default function Player() {
           ) : round.mj ? (
             <><h2 className="title-xl">Crie ta réponse !</h2><p className="muted" style={{ maxWidth: 380 }}>Le Maître du jeu écoute et distribue les points. Sois le plus rapide à balancer le bon titre / artiste à voix haute.</p></>
           ) : round.mode === 'buzzer' ? (
-            buzz === 'mine' ? (<><h2 className="title-xl">À toi ! Réponds vite</h2><form onSubmit={submitBuzzerAnswer} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}><input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre et/ou artiste…" autoFocus /><button className="btn warm big send" type="submit">Valider</button></form></>)
+            buzz === 'mine' ? (<>
+                <h2 className="title-xl" style={{ margin: 0 }}>À toi ! Réponds vite</h2>
+                {buzzEndsAt > 0 && <div className="big-num" style={{ color: buzzLeft <= 3 ? 'var(--ember)' : 'var(--fluo)', lineHeight: 1 }}>{buzzLeft}</div>}
+                <form onSubmit={submitBuzzerAnswer} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}><input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre et/ou artiste…" autoFocus /><button className="btn warm big send" type="submit">Valider</button></form>
+              </>)
               : buzz === 'locked' ? (<><svg width="46" height="46" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--muted)' }}><rect x="5" y="10.5" width="14" height="9.5" rx="2" stroke="currentColor" strokeWidth="1.7" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.7" /></svg><p className="muted">{buzzMsg}</p></>)
                 : jamMs > 0 ? (<><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti — tu pourras buzzer dans un instant.</p></>)
-                : (<><h2 className="title-xl">Reconnais le son</h2><button className="buzzer" onClick={doBuzz}>BUZZ</button></>)
+                : (<><h2 className="title-xl" style={{ marginBottom: 4 }}>Reconnais le son</h2><button className="buzzer" onClick={doBuzz}>BUZZ</button><p className="muted" style={{ marginTop: 4 }}>Le 1ᵉʳ qui buzze prend la main</p></>)
           ) : jamMs > 0 ? (
             <><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti — tu peux répondre dans un instant.</p></>
           ) : submitted ? (

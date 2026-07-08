@@ -54,6 +54,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.SERVER_PORT || 3001;
 const FAST = !!process.env.PL_FAST; // TEST uniquement (test-games.mjs) : manches ultra-courtes. JAMAIS en prod.
 const W = (ms) => (FAST ? 1500 : ms); // durée d'écoute par manche (raccourcie en mode test)
+const BUZZ_ANSWER_MS = FAST ? 2500 : 8000; // fenêtre pour répondre après avoir buzzé (sinon lockout + réouverture)
 
 const PREVIEW_MS = 30000; // durée d'un extrait Deezer
 const QUIZ_MS = FAST ? 1500 : 22000; // durée d'une question de quiz (QCM)
@@ -315,7 +316,7 @@ function snapshot(room, isHost) {
       s.round.quiz = isHost ? room.quiz : { id: room.quiz.id, cat: room.quiz.cat, q: room.quiz.q, choices: room.quiz.choices };
     } else {
       if (isHost) Object.assign(s.round, { preview: room.current.preview, startAt: room.startAt });
-      if (room.settings.mode === 'buzzer') s.buzz = { winnerId: room.buzz.winnerId, winnerName: room.buzz.winnerName, open: room.buzz.open, lockedOut: [...room.buzz.lockedOut] };
+      if (room.settings.mode === 'buzzer') s.buzz = { winnerId: room.buzz.winnerId, winnerName: room.buzz.winnerName, winnerAvatar: room.buzz.winnerId ? (room.players.get(room.buzz.winnerId)?.avatar || null) : null, open: room.buzz.open, lockedOut: [...room.buzz.lockedOut], endsAt: room.buzz.endsAt || 0, answerMs: BUZZ_ANSWER_MS };
     }
   } else if (room.phase === 'prep') {
     s.round = { index: room.roundIndex, roundIndex: room.roundIndex, total: room.totalRounds, endsAt: room.prepEndsAt, mode: room.settings.mode, difficulty: (DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal).label, prep: true };
@@ -376,7 +377,7 @@ function startRound(room) {
   room.suspense = suspenseActive(room); // manche de fin serrée → on masquera le score en direct + à la révélation
   room.current = room.playlist[room.roundIndex];
   room.answers = new Map();
-  room.buzz = { winnerId: null, winnerName: null, open: true, lockedOut: new Set() };
+  room.buzz = { winnerId: null, winnerName: null, open: true, lockedOut: new Set(), endsAt: 0 };
   clearTimeout(room.buzzTimer);
   room.mjDouble = false; room.mjPlus = false;
   room.mjRoundPoints = new Map(); // points donnés par le MJ sur cette manche (pour l'affichage à la révélation)
@@ -900,11 +901,12 @@ io.on('connection', (socket) => {
     if (room.jam && p.id !== room.jam.by && Date.now() < (room.roundEndsAt - room.windowMs) + room.jam.ms) return cb?.({ error: 'Brouillé — patiente…', jammed: true });
     if (!room.buzz.open || room.buzz.winnerId || room.buzz.lockedOut.has(p.id)) return cb?.({ error: 'Buzzer indisponible.' });
     room.buzz.winnerId = p.id; room.buzz.winnerName = p.name; room.buzz.open = false;
-    cb?.({ ok: true, winner: true });
-    io.to(room.code).emit('buzz:winner', { id: p.id, name: p.name });
+    room.buzz.endsAt = Date.now() + BUZZ_ANSWER_MS; // échéance de réponse (décompte affiché TV + tel)
+    cb?.({ ok: true, winner: true, endsAt: room.buzz.endsAt, answerMs: BUZZ_ANSWER_MS });
+    io.to(room.code).emit('buzz:winner', { id: p.id, name: p.name, avatar: p.avatar, endsAt: room.buzz.endsAt, answerMs: BUZZ_ANSWER_MS });
     // le gagnant a 8 s pour répondre, sinon il est verrouillé et le buzzer rouvre
     clearTimeout(room.buzzTimer);
-    room.buzzTimer = setTimeout(() => buzzerFail(room, p.id), FAST ? 2500 : 8000);
+    room.buzzTimer = setTimeout(() => buzzerFail(room, p.id), BUZZ_ANSWER_MS);
   });
 
   socket.on('buzzer:answer', ({ text }, cb) => {
@@ -939,7 +941,7 @@ io.on('connection', (socket) => {
   function buzzerFail(room, pid) {
     if (room.phase !== 'playing' || room.buzz.winnerId !== pid) return;
     room.buzz.lockedOut.add(pid);
-    room.buzz.winnerId = null; room.buzz.winnerName = null; room.buzz.open = true;
+    room.buzz.winnerId = null; room.buzz.winnerName = null; room.buzz.open = true; room.buzz.endsAt = 0;
     io.to(room.code).emit('buzz:open', { lockedOut: [...room.buzz.lockedOut] });
     // tout le monde a raté → fin de manche (hors MJ / en attente)
     const active = [...room.players.values()].filter((p) => p.connected && !p.isMJ && !p.waiting && !room.buzz.lockedOut.has(p.id));

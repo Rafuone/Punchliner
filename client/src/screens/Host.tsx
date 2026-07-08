@@ -89,7 +89,7 @@ export default function Host() {
   const powerKeyRef = useRef(0);
   const [round, setRound] = useState<any>({ index: 0, total: 0, endsAt: 0, durationMs: 25000, mode: 'multi', difficulty: '' });
   const [answered, setAnswered] = useState<string[]>([]);
-  const [buzzWinner, setBuzzWinner] = useState<string | null>(null);
+  const [buzzWinner, setBuzzWinner] = useState<{ name: string; avatar?: string | null; endsAt?: number; answerMs?: number } | null>(null);
   const [reveal, setReveal] = useState<any>(null);
   const [revealStep, setRevealStep] = useState(0); // 0 = réponses seules · 1 = + classement (on affiche l'un PUIS l'autre)
   const [finalScores, setFinalScores] = useState<any[]>([]);
@@ -170,7 +170,7 @@ export default function Host() {
     setPlayers(state.players || []);
     setSettings((s) => ({ ...s, difficulty: state.settings?.difficulty || s.difficulty, mode: state.settings?.mode || s.mode }));
     if (state.phase === 'playing' && state.round) {
-      setRound(state.round); setBuzzWinner(state.buzz?.winnerName || null); setPhase('playing');
+      setRound(state.round); setBuzzWinner(state.buzz?.winnerName ? { name: state.buzz.winnerName, avatar: state.buzz.winnerAvatar, endsAt: state.buzz.endsAt || 0, answerMs: state.buzz.answerMs || 8000 } : null); setNow(Date.now()); setPhase('playing');
       if (state.round.mode === 'rush' && state.round.scores) setPlayers(state.round.scores);
       playRound(state.round);
     } else if (state.phase === 'rushend') {
@@ -210,7 +210,7 @@ export default function Host() {
     socket.on('rush:state', (d: any) => { setRound(d); if (d.scores) setPlayers(d.scores); });
     socket.on('rush:end', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); clearTimeout(audioRetryRef.current); setRushEnd(d); setPhase('rushend'); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
-    socket.on('buzz:winner', (d: any) => setBuzzWinner(d.name));
+    socket.on('buzz:winner', (d: any) => { setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 8000 }); setNow(Date.now()); });
     socket.on('buzz:open', () => setBuzzWinner(null));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // le son continue de tourner ; plus de "scratch" (jugé désagréable)
     socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(computeUnlock(d)); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées
@@ -444,6 +444,9 @@ export default function Host() {
   const remaining = Math.max(0, round.endsAt - now);
   const seconds = Math.ceil(remaining / 1000);
   const frac = round.durationMs ? remaining / round.durationMs : 0;
+  const buzzRemain = buzzWinner?.endsAt ? Math.max(0, buzzWinner.endsAt - now) : 0;
+  const buzzSec = Math.ceil(buzzRemain / 1000);
+  const buzzFrac = buzzWinner?.answerMs ? Math.max(0, Math.min(1, buzzRemain / buzzWinner.answerMs)) : 0;
   const rushFrac = round.rushMax ? Math.max(0, Math.min(1, remaining / round.rushMax)) : 0; // jauge de temps Cypher
 
   return (
@@ -624,6 +627,29 @@ export default function Host() {
               </div>
               {answered.length > 0 && <div className="answered">{answered.map((n) => <span className="abadge" key={n}>{n}</span>)}</div>}
             </div>
+          ) : round.mode === 'buzzer' ? (
+            buzzWinner ? (
+              /* QUELQU'UN A BUZZÉ — spotlight géant + décompte de réponse */
+              <div className="buzzstage">
+                <div className={`ring big buzzring${buzzSec <= 3 ? ' hot' : ''}`}>
+                  <svg viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="54" stroke="rgba(255,255,255,.10)" strokeWidth="9" fill="none" />
+                    <circle cx="60" cy="60" r="54" stroke={buzzSec <= 3 ? '#ff5a4d' : '#ffb02e'} strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - buzzFrac)} style={{ transition: 'stroke-dashoffset .18s linear' }} />
+                  </svg>
+                  <div className="buzzav"><Med avatarId={buzzWinner.avatar || undefined} size={128} /></div>
+                </div>
+                <h2 className="title-xl" style={{ margin: 0 }}>À <span style={{ color: 'var(--ember)' }}>{buzzWinner.name}</span> !</h2>
+                <p className="buzzmeta" style={{ color: buzzSec <= 3 ? '#ff5a4d' : 'var(--muted)' }}>répond au micro · <b style={{ color: buzzSec <= 3 ? '#ff5a4d' : 'var(--fluo)' }}>{buzzSec}s</b></p>
+              </div>
+            ) : (
+              /* BUZZER OUVERT — invitation géante */
+              <div className="buzzstage">
+                <div className="buzzdisc"><span>BUZZ</span></div>
+                <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
+                <span className="playmeta">Mode buzzer · {round.difficulty}</span>
+                <p className="buzzmeta" style={{ color: 'var(--fluo)' }}>Le premier qui buzze prend la main</p>
+              </div>
+            )
           ) : (
             <>
               <div className="playstage">
@@ -641,12 +667,8 @@ export default function Host() {
                 </div>
               </div>
               <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
-              <span className="playmeta">{round.mode === 'buzzer' ? 'Mode buzzer' : 'Extrait en cours'} · {round.difficulty}</span>
-              {round.mode === 'buzzer' ? (
-                <p className="feedback" style={{ color: buzzWinner ? 'var(--ember)' : 'var(--muted)' }}>{buzzWinner ? `${buzzWinner} a buzzé — à lui de répondre !` : 'Le premier qui buzze prend la main…'}</p>
-              ) : (
-                answered.length > 0 && <div className="answered">{answered.map((n) => <span className="abadge" key={n}>{n}</span>)}</div>
-              )}
+              <span className="playmeta">Extrait en cours · {round.difficulty}</span>
+              {answered.length > 0 && <div className="answered">{answered.map((n) => <span className="abadge" key={n}>{n}</span>)}</div>}
             </>
           )}
           {powerFeed.length > 0 && (

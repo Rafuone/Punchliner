@@ -544,6 +544,24 @@ button, input { font-family: inherit; }
   background: var(--fluo); box-shadow: 4px 4px 0 rgba(0, 0, 0, .5); transition: transform .08s ease; }
 .buzzer:active { transform: scale(.94); }
 
+/* buzzer — scène TV (host) */
+.buzzstage { display: flex; flex-direction: column; align-items: center; gap: clamp(14px, 3vh, 30px); }
+.buzzring { filter: drop-shadow(0 0 26px rgba(255,176,46,.4)); }
+.buzzring.hot { filter: drop-shadow(0 0 30px rgba(255,90,77,.55)); animation: buzzshake .5s ease-in-out infinite; }
+.buzzring .buzzav { position: absolute; inset: 0; display: grid; place-items: center; }
+.buzzring .buzzav .med { border: 3px solid rgba(255,255,255,.14); }
+.buzzmeta { font-family: var(--disp); font-weight: 700; font-size: clamp(20px, 3.2vw, 34px); letter-spacing: .02em; margin: 0; text-align: center; }
+.buzzdisc { width: clamp(190px, 32vw, 320px); height: clamp(190px, 32vw, 320px); border-radius: 50%; display: grid; place-items: center;
+  background: var(--fluo); color: var(--ink); border: 3px solid var(--ink);
+  font-family: var(--disp); font-weight: 700; font-size: clamp(46px, 9vw, 104px); letter-spacing: .06em;
+  box-shadow: 6px 6px 0 rgba(0,0,0,.5), 0 0 54px rgba(166,255,0,.4); animation: buzzpulse 1.15s ease-in-out infinite; }
+@keyframes buzzpulse {
+  0%, 100% { transform: scale(1); box-shadow: 6px 6px 0 rgba(0,0,0,.5), 0 0 44px rgba(166,255,0,.34); }
+  50% { transform: scale(1.045); box-shadow: 6px 6px 0 rgba(0,0,0,.5), 0 0 84px rgba(166,255,0,.62); }
+}
+@keyframes buzzshake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@media (prefers-reduced-motion: reduce) { .buzzdisc, .buzzring.hot { animation: none; } }
+
 /* réglages (segments) — tuiles mates, sélection fluo */
 .seg { display: flex; flex-wrap: wrap; gap: 8px; }
 .segbtn { flex: 1; min-width: 90px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 12px; border-radius: 3px; cursor: pointer;
