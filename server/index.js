@@ -55,6 +55,15 @@ const PORT = process.env.SERVER_PORT || 3001;
 const FAST = !!process.env.PL_FAST; // TEST uniquement (test-games.mjs) : manches ultra-courtes. JAMAIS en prod.
 const W = (ms) => (FAST ? 1500 : ms); // durée d'écoute par manche (raccourcie en mode test)
 const BUZZ_ANSWER_MS = FAST ? 2500 : 8000; // fenêtre pour répondre après avoir buzzé (sinon lockout + réouverture)
+// Manche BATTLE (clash 1v1 généré par le jeu, façon battle hip-hop) — événement BONUS, PAS un pouvoir.
+// 2 joueurs s'affrontent ; les autres PARIENT sur le vainqueur. Le 1er des deux qui trouve gagne.
+const BATTLE_WIN = 20000;              // auditeurs pour le vainqueur du clash
+const BATTLE_DRAW = 6000;              // consolation aux 2 si personne ne trouve
+const BATTLE_BET_BONUS = 4000;         // bonus pour un spectateur qui a parié sur le bon (pas de perte si raté)
+const BATTLE_AUTO = false;             // ⚠️ déclenchement AUTO du clash : OFF tant que les écrans client ne le gèrent pas (à passer true une fois l'UI hôte+joueur prête). Le forçage dev (host:forceBattle) marche indépendamment.
+const BATTLE_INTRO_MS = FAST ? 700 : 4500;
+const BATTLE_BET_MS = FAST ? 1200 : 10000;
+const BATTLE_PLAY_MS = FAST ? 2500 : 22000;
 
 const PREVIEW_MS = 30000; // durée d'un extrait Deezer
 const QUIZ_MS = FAST ? 1500 : 22000; // durée d'une question de quiz (QCM)
@@ -566,9 +575,106 @@ function endRound(room) {
   io.to(room.code).emit('round:reveal', room.lastReveal);
 }
 
-function nextRound(room) {
+function advanceRound(room) { // avance RÉELLEMENT à la manche suivante (ou fin)
   if (room.roundIndex + 1 < room.totalRounds) { room.roundIndex += 1; beginRound(room); }
   else finishGame(room);
+}
+function nextRound(room) {
+  const duel = pickBattleDuelists(room);          // parfois : un CLASH bonus s'intercale (pas de manche consommée)
+  if (duel) { startBattle(room, duel.a, duel.b, duel.flavor); return; }
+  advanceRound(room);
+}
+
+/* ------------------------------------------------------------------ */
+/* Manche BATTLE — clash 1v1 généré par le jeu, avec paris des autres  */
+/* ------------------------------------------------------------------ */
+// Choisit 2 duellistes à un BON moment (récompense imprévisible) — ou null si pas de clash cette fois.
+// force=true (dev/test) : ignore le hasard/timing, prend le top 2.
+function pickBattleDuelists(room, force = false) {
+  if (room.settings.mode !== 'multi' && room.settings.mode !== 'buzzer') return null; // modes audio only
+  if (room.settings.mj) return null;                                                  // pas d'événement auto en MJ
+  const act = [...room.players.values()].filter((p) => p.connected && !p.isMJ && !p.waiting).sort((a, b) => b.score - a.score);
+  if (act.length < (force ? 2 : 4)) return null;                                       // brille à ≥4 joueurs
+  if (force) return { a: act[0].id, b: act[1].id, flavor: 'sommet' };
+  if (!BATTLE_AUTO) return null;                                                       // auto désactivé tant que l'UI n'est pas prête
+  const total = room.totalRounds || 16;
+  if ((room.battlesThisGame || 0) >= 2) return null;                                   // max 2/partie
+  if (room.roundIndex < Math.max(3, Math.ceil(total * 0.4))) return null;             // jamais dans le 1er tiers
+  if (room.roundIndex >= total - 1) return null;                                       // pas juste avant la fin
+  if (room.roundIndex - (room.lastBattleRound ?? -99) < 3) return null;                // cooldown entre 2 clashs
+  const gapTop = act[0].score - act[1].score;
+  const dramatic = gapTop <= 45000;                                                    // top serré = « duel au sommet »
+  if (Math.random() > (dramatic ? 0.32 : 0.16)) return null;                           // imprévisible
+  if (dramatic) return { a: act[0].id, b: act[1].id, flavor: 'sommet' };
+  return { a: act[act.length - 2].id, b: act[act.length - 1].id, flavor: 'rattrapage' }; // sinon : bas du classement
+}
+
+function startBattle(room, aId, bId, flavor) {
+  clearTimeout(room.timer); clearTimeout(room.buzzTimer); clearTimeout(room.cdTimer);
+  const A = room.players.get(aId), B = room.players.get(bId);
+  if (!A || !B) { advanceRound(room); return; }
+  room.battlesThisGame = (room.battlesThisGame || 0) + 1;
+  room.lastBattleRound = room.roundIndex;
+  room.battle = { a: aId, b: bId, flavor, bets: new Map(), winnerId: null, points: 0, track: null, endsAt: 0 };
+  room.phase = 'battle-intro';
+  const pinfo = (p) => ({ id: p.id, name: p.name, avatar: p.avatar, score: p.score });
+  io.to(room.code).emit('battle:intro', { a: pinfo(A), b: pinfo(B), flavor });
+  room.cdTimer = setTimeout(() => startBattleBets(room), BATTLE_INTRO_MS);
+}
+
+function startBattleBets(room) {
+  if (room.phase !== 'battle-intro' || !room.battle) return;
+  room.phase = 'battle-bet';
+  room.battle.endsAt = Date.now() + BATTLE_BET_MS;
+  io.to(room.code).emit('battle:bets', { a: room.battle.a, b: room.battle.b, endsAt: room.battle.endsAt, betMs: BATTLE_BET_MS });
+  room.cdTimer = setTimeout(() => startBattlePlay(room), BATTLE_BET_MS);
+}
+
+function startBattlePlay(room) {
+  if (room.phase !== 'battle-bet' || !room.battle) return;
+  const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
+  const t = (pickPlaylist(1, diff.tier, room.settings.era, room.settings.theme) || [])[0];
+  if (!t) { endBattle(room, null); return; }
+  cacheTrack(t);
+  room.battle.track = t;
+  room.mult = diff.mult;
+  room.phase = 'battle-play';
+  const maxOffset = Math.max(0, PREVIEW_MS - BATTLE_PLAY_MS - 1000);
+  const startAt = diff.offset ? Math.floor(Math.random() * Math.min(14000, maxOffset)) : 0;
+  room.battle.endsAt = Date.now() + BATTLE_PLAY_MS;
+  const base = { a: room.battle.a, b: room.battle.b, endsAt: room.battle.endsAt, durationMs: BATTLE_PLAY_MS };
+  io.to(room.hostId).emit('battle:go', { ...base, preview: t.preview, startAt, sp: { title: t.title, artist: t.artist } });
+  io.to(room.code).emit('battle:go', base);
+  clearTimeout(room.timer);
+  room.timer = setTimeout(() => endBattle(room, null), BATTLE_PLAY_MS);
+}
+
+function endBattle(room, winnerId) {
+  if (!room.battle || !room.phase?.startsWith('battle')) return;
+  clearTimeout(room.timer); clearTimeout(room.cdTimer);
+  const b = room.battle;
+  b.winnerId = winnerId; b.points = winnerId ? BATTLE_WIN : 0;
+  const betResults = [];
+  if (winnerId) {
+    const w = room.players.get(winnerId);
+    if (w) w.score = Math.max(0, w.score + BATTLE_WIN);
+    const winSide = winnerId === b.a ? 'a' : 'b';
+    for (const [sid, pick] of b.bets) {
+      const sp = room.players.get(sid); const won = pick === winSide;
+      if (sp && won) sp.score += BATTLE_BET_BONUS;
+      betResults.push({ id: sid, won });
+    }
+  } else {
+    for (const id of [b.a, b.b]) { const p = room.players.get(id); if (p) p.score += BATTLE_DRAW; } // nul → consolation, paris annulés
+  }
+  room.phase = 'battle-reveal';
+  const nm = (id) => room.players.get(id)?.name || '';
+  io.to(room.code).emit('battle:reveal', {
+    winnerId, winnerName: winnerId ? nm(winnerId) : null, points: b.points, draw: !winnerId,
+    a: b.a, b: b.b, betBonus: BATTLE_BET_BONUS, bets: betResults,
+    track: b.track ? { title: b.track.title, artist: b.track.artist, cover: b.track.cover } : null,
+    scores: publicPlayers(room),
+  });
 }
 
 // Fin d'une partie : on fige le classement, on cumule dans la SÉRIE (total d'auditeurs + parties gagnées)
@@ -836,6 +942,7 @@ io.on('connection', (socket) => {
     if (!room.totalRounds) return cb?.({ error: isQuiz ? 'Banque de quiz indisponible.' : 'Aucun morceau disponible.' });
     room.roundIndex = 0;
     room.prevRanks = null;
+    room.battle = null; room.battlesThisGame = 0; room.lastBattleRound = -99; // clash : reset par partie
     cb?.({ ok: true });
     beginRound(room);
   });
@@ -1164,9 +1271,42 @@ io.on('connection', (socket) => {
 
   socket.on('host:next', (_p, cb) => {
     const room = rooms.get(socket.data.roomCode);
+    if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
+    if (room.phase === 'reveal') { cb?.({ ok: true }); nextRound(room); }        // manche normale → suivante (ou clash)
+    else if (room.phase === 'battle-reveal') { cb?.({ ok: true }); room.battle = null; advanceRound(room); } // fin de clash → vraie manche suivante
+    else return cb?.({ error: 'Pas au bon moment.' });
+  });
+
+  // Clash : un spectateur PARIE sur un des deux duellistes
+  socket.on('battle:bet', ({ pick } = {}, cb) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || room.phase !== 'battle-bet' || !room.battle) return cb?.({ error: 'Pas de pari en cours.' });
+    const p = room.players.get(socket.data.playerId);
+    if (!p || p.id === room.battle.a || p.id === room.battle.b || p.isMJ || p.waiting) return cb?.({ error: 'Tu ne peux pas parier.' });
+    if (pick !== 'a' && pick !== 'b') return cb?.({ error: 'Choix invalide.' });
+    room.battle.bets.set(p.id, pick);
+    cb?.({ ok: true, pick });
+  });
+
+  // Clash : un duelliste répond — le 1er correct des deux GAGNE
+  socket.on('battle:answer', ({ text } = {}, cb) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || room.phase !== 'battle-play' || !room.battle) return cb?.({ error: 'Pas de clash.' });
+    const p = room.players.get(socket.data.playerId);
+    if (!p || (p.id !== room.battle.a && p.id !== room.battle.b)) return cb?.({ error: 'Tu n\'es pas dans le clash.' });
+    const g = gradeAnswer(text, room.battle.track, false);
+    if (g.base > 0) { cb?.({ ok: true, correct: true }); endBattle(room, p.id); }
+    else cb?.({ ok: true, correct: false });
+  });
+
+  // Dev/test : forcer un clash depuis une révélation (le lien « + clash test » côté hôte, et test-games)
+  socket.on('host:forceBattle', (_p, cb) => {
+    const room = rooms.get(socket.data.roomCode);
     if (!room || room.hostId !== socket.id || room.phase !== 'reveal') return cb?.({ error: 'Pas au bon moment.' });
+    const d = pickBattleDuelists(room, true);
+    if (!d) return cb?.({ error: 'Pas assez de joueurs (≥2).' });
     cb?.({ ok: true });
-    nextRound(room);
+    startBattle(room, d.a, d.b, d.flavor);
   });
 
   // Retour au salon (bouton « ← Salon » en jeu, ou « Rejouer / Relancer » depuis le podium).
@@ -1176,6 +1316,7 @@ io.on('connection', (socket) => {
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
     clearTimeout(room.timer); clearTimeout(room.buzzTimer); clearTimeout(room.cdTimer); clearTimeout(room.rushTimer);
     room.phase = 'lobby'; room.roundIndex = 0; room.prevRanks = null; room.current = null; room.lastReveal = null;
+    room.battle = null; room.battlesThisGame = 0; room.lastBattleRound = -99;
     for (const p of room.players.values()) {
       p.score = 0; p.waiting = false; p.stat = newStat(); // les « en attente » rejoignent la prochaine partie
       p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; p.isMJ = false;
@@ -1260,6 +1401,7 @@ app.get('/api/pool', (_req, res) => res.json(POOL.map((t) => ({ id: t.id, artist
 // Test uniquement : révèle la réponse de la manche en cours (pour scripter des réponses correctes dans test-games.mjs).
 app.get('/api/dev/answer', (req, res) => {
   const room = rooms.get(String(req.query.code || '').toUpperCase().trim());
+  if (room && room.phase === 'battle-play' && room.battle?.track) return res.json({ title: room.battle.track.title, artist: room.battle.track.artist }); // réponse du clash
   if (!room || !room.current) return res.json({ title: null, artist: null });
   res.json({ title: room.current.title, artist: room.current.artist, quizAnswer: room.quiz ? room.quiz.answer : null });
 });
