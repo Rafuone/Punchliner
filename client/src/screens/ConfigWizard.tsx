@@ -4,9 +4,10 @@ import '../wizard.css';
 
 /* ====== réglages envoyés au serveur (mappés depuis le wizard) ====== */
 export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; mjId?: string; rebalance: string };
-type Music = { nowPlaying: number; musicOn: boolean; onToggle: () => void; onNext: () => void; onPrev: () => void; bassRef: { current: number }; barsRef: { current: number[] }; tracks: { title: string; artist: string }[] };
+type Music = { nowPlaying: number; musicOn: boolean; onToggle: () => void; onNext: () => void; onPrev: () => void; bassRef: { current: number }; barsRef: { current: number[] }; waveRef?: { current: Uint8Array }; tracks: { title: string; artist: string }[] };
 type Player = { id: string; name: string; avatar?: string };
-type Props = { poolSize: number; roomCode: string; players: number; playerList?: Player[]; onStart: (s: WizSettings) => void; onBack: () => void; music: Music; onOpenHub?: (mode: 'roster' | 'trophies') => void };
+type SpotifyCtl = { state: string; spotifyOn: boolean; deezerOn: boolean; onToggleSpotify: () => void; onToggleDeezer: () => void };
+type Props = { poolSize: number; roomCode: string; players: number; playerList?: Player[]; onStart: (s: WizSettings) => void; onBack: () => void; music: Music; onOpenHub?: (mode: 'roster' | 'trophies' | 'leaderboard' | 'radio') => void; spotify?: SpotifyCtl };
 
 /* ====== données (architecture 5 étapes) ====== */
 const GAMES = [
@@ -75,7 +76,11 @@ const play = '<svg width="19" height="19" viewBox="0 0 18 18" fill="none"><path 
 const chevron = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const rosterIco = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.2"/><rect x="9" y="1" width="6" height="6" rx="1.2"/><rect x="1" y="9" width="6" height="6" rx="1.2"/><rect x="9" y="9" width="6" height="6" rx="1.2"/></svg>';
 const trophyIco = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4v1.5A3.4 3.4 0 0 0 7.3 10M17 5h3v1.5A3.4 3.4 0 0 1 16.7 10"/><path d="M9.6 13v3.2h4.8V13M8.2 20.5h7.6"/></svg>';
+const leaderIco = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="8" width="4" height="7" rx="1"/><rect x="6" y="3" width="4" height="12" rx="1"/><rect x="11" y="10" width="4" height="5" rx="1"/></svg>';
+const radioIco = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="9" r="2.2"/><path d="M8 6.8V3l4-1.4" stroke-linecap="round"/><path d="M3.5 5a6 6 0 0 0 0 8M12.5 5a6 6 0 0 1 0 8" stroke-linecap="round"/></svg>';
 const bracketsSvg = '<span class="p1tag">P1</span><span class="brackets"><b class="tl"></b><b class="tr"></b><b class="bl"></b><b class="br"></b></span>';
+// Logo Spotify officiel (reste vert quelle que soit l'activation → "en couleur"). Deezer = wordmark actuel (voir JSX).
+const spotifyIco = '<svg width="15" height="15" viewBox="0 0 168 168" aria-hidden="true"><path fill="#1ed760" d="M83.996.277C37.747.277.253 37.77.253 84.019c0 46.251 37.494 83.741 83.743 83.741 46.254 0 83.744-37.49 83.744-83.741 0-46.246-37.49-83.738-83.745-83.738l.001-.004zm38.404 120.78a5.217 5.217 0 01-7.18 1.73c-19.662-12.01-44.414-14.73-73.564-8.07a5.222 5.222 0 01-6.249-3.93 5.213 5.213 0 013.926-6.25c31.9-7.291 59.263-4.15 81.337 9.34 2.46 1.51 3.24 4.72 1.73 7.18zm10.25-22.805c-1.89 3.075-5.91 4.045-8.98 2.155-22.51-13.839-56.823-17.846-83.448-9.764-3.453 1.043-7.1-.903-8.148-4.35a6.538 6.538 0 014.354-8.143c30.413-9.228 68.222-4.758 94.072 11.127 3.07 1.89 4.04 5.91 2.15 8.976v-.001zm.88-23.744c-26.99-16.031-71.52-17.505-97.289-9.684-4.138 1.255-8.514-1.081-9.768-5.219a7.835 7.835 0 015.221-9.771c29.581-8.98 78.756-7.245 109.83 11.202a7.823 7.823 0 012.74 10.733c-2.2 3.722-7.02 4.949-10.73 2.739z"/></svg>';
 const KEYART: Record<string, string> = {
   blind: `<svg viewBox="0 0 400 560" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><rect width="400" height="560" fill="#141517"/><g transform="translate(200 250)"><circle r="118" fill="rgba(0,0,0,.4)"/><circle r="112" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2.5"/><circle r="86" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1"/><circle r="64" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="1"/><circle r="40" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.5)" stroke-width="2"/><circle r="8" fill="#fff"/><g stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".85"><line x1="-172" y1="34" x2="-172" y2="-34"/><line x1="-150" y1="52" x2="-150" y2="-52"/><line x1="-128" y1="26" x2="-128" y2="-26"/><line x1="172" y1="34" x2="172" y2="-34"/><line x1="150" y1="52" x2="150" y2="-52"/><line x1="128" y1="26" x2="128" y2="-26"/></g><g stroke="rgba(255,255,255,.28)" stroke-width="2" fill="none"><circle r="140"/><circle r="164"/></g></g></svg>`,
   buzz: `<svg viewBox="0 0 400 560" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><rect width="400" height="560" fill="#111214"/><g transform="translate(200 300)"><ellipse cx="0" cy="118" rx="120" ry="34" fill="rgba(0,0,0,.5)"/><ellipse cx="0" cy="66" rx="118" ry="46" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.45)" stroke-width="2.5"/><path d="M-118 66v-18a118 46 0 0 1 236 0v18" fill="rgba(0,0,0,.4)" stroke="rgba(255,255,255,.35)" stroke-width="2"/><ellipse cx="0" cy="34" rx="96" ry="40" fill="rgba(255,255,255,.1)" stroke="#fff" stroke-width="3"/><ellipse cx="0" cy="26" rx="70" ry="30" fill="rgba(255,255,255,.16)" stroke="rgba(255,255,255,.6)" stroke-width="2"/><ellipse cx="-22" cy="16" rx="26" ry="12" fill="rgba(255,255,255,.3)"/><g stroke="#fff" stroke-width="3.5" stroke-linecap="round" opacity=".8"><line x1="130" y1="-30" x2="168" y2="-46"/><line x1="140" y1="6" x2="182" y2="4"/><line x1="130" y1="42" x2="168" y2="56"/><line x1="-130" y1="-30" x2="-168" y2="-46"/><line x1="-140" y1="6" x2="-182" y2="4"/><line x1="-130" y1="42" x2="-168" y2="56"/></g></g></svg>`,
@@ -99,7 +104,57 @@ const DIFF_ILLU = [
 ];
 const H = (s: string) => ({ dangerouslySetInnerHTML: { __html: s } });
 
-export default function ConfigWizard({ poolSize, roomCode, players, playerList = [], onStart, onBack, music, onOpenHub }: Props) {
+// OSCILLOSCOPE : trace la forme d'onde LE LONG du VRAI contour ARRONDI de la carte (canvas débordant → la vague
+// oscille de part et d'autre de la bordure). Forme d'onde LISSÉE (K points moyennés) → grosses vagues qui réagissent
+// à la musique, pas du grésillement. Amplitude ∝ volume (le time-domain gonfle quand ça joue fort, sans saturer).
+function drawScope(canvas: HTMLCanvasElement, wave: Uint8Array) {
+  const W = canvas.clientWidth, H2 = canvas.clientHeight, len = wave?.length || 0;
+  const ctx = canvas.getContext('2d'); if (!ctx) return;
+  if (!W || !H2 || !len) { ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const cw = Math.round(W * dpr), ch = Math.round(H2 * dpr);
+  if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H2);
+  const PAD = 30;   // = |inset| du canvas : le bord de la carte est ici (le tracé suit CE contour, pas un rectangle inséré)
+  const R = 4;      // rayon des coins ≈ radius des cartes
+  const x0 = PAD, y0 = PAD, x1 = W - PAD, y1 = H2 - PAD;
+  const w = x1 - x0, h = y1 - y0; if (w <= 4 * R || h <= 4 * R) return;
+  const sw = w - 2 * R, sh = h - 2 * R, arc = (Math.PI / 2) * R, perim = 2 * sw + 2 * sh + 4 * arc;
+  const cx0 = x0 + R, cy0 = y0 + R, cx1 = x1 - R, cy1 = y1 - R;
+  type P = { px: number; py: number; nx: number; ny: number };
+  const segs: Array<{ l: number; at: (u: number) => P }> = [
+    { l: sw, at: (u) => ({ px: cx0 + u * sw, py: y0, nx: 0, ny: -1 }) },
+    { l: arc, at: (u) => { const a = -Math.PI / 2 + u * Math.PI / 2; return { px: cx1 + R * Math.cos(a), py: cy0 + R * Math.sin(a), nx: Math.cos(a), ny: Math.sin(a) }; } },
+    { l: sh, at: (u) => ({ px: x1, py: cy0 + u * sh, nx: 1, ny: 0 }) },
+    { l: arc, at: (u) => { const a = u * Math.PI / 2; return { px: cx1 + R * Math.cos(a), py: cy1 + R * Math.sin(a), nx: Math.cos(a), ny: Math.sin(a) }; } },
+    { l: sw, at: (u) => ({ px: cx1 - u * sw, py: y1, nx: 0, ny: 1 }) },
+    { l: arc, at: (u) => { const a = Math.PI / 2 + u * Math.PI / 2; return { px: cx0 + R * Math.cos(a), py: cy1 + R * Math.sin(a), nx: Math.cos(a), ny: Math.sin(a) }; } },
+    { l: sh, at: (u) => ({ px: x0, py: cy1 - u * sh, nx: -1, ny: 0 }) },
+    { l: arc, at: (u) => { const a = Math.PI + u * Math.PI / 2; return { px: cx0 + R * Math.cos(a), py: cy0 + R * Math.sin(a), nx: Math.cos(a), ny: Math.sin(a) }; } },
+  ];
+  const pointAt = (s: number): P => { s = ((s % perim) + perim) % perim; for (const seg of segs) { if (s <= seg.l) return seg.at(seg.l ? s / seg.l : 0); s -= seg.l; } return segs[0].at(0); };
+  // forme d'onde LISSÉE en K points de contrôle (moyennés) → grosses vagues au lieu du grésillement
+  const K = 22, ctrl = new Array<number>(K), chunk = len / K;
+  for (let k = 0; k < K; k++) { let s = 0, c = 0; const a = Math.floor(k * chunk), b = Math.floor((k + 1) * chunk); for (let i = a; i < b; i++) { s += wave[i]; c++; } ctrl[k] = ((c ? s / c : 128) - 128) / 128 * 1.6; } // ×1.6 = gain (le menu joue doux) → oscille + fort
+  const AMP = 22, N = 240;
+  const roll = (performance.now() / 1000) * 0.32; // défilement → la vague "coule" nettement autour de la carte
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const p = pointAt(t * perim);
+    const cf = (t + roll) * K, k0 = ((Math.floor(cf) % K) + K) % K, k1 = (k0 + 1) % K, fr = cf - Math.floor(cf);
+    let a = (ctrl[k0] * (1 - fr) + ctrl[k1] * fr) * AMP;
+    const lim = PAD - 3; if (a > lim) a = lim; else if (a < -lim) a = -lim; // reste dans le canvas
+    const X = p.px + p.nx * a, Y = p.py + p.ny * a;
+    if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
+  }
+  ctx.closePath();
+  ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(228,255,26,.55)'; ctx.shadowBlur = 8;
+  ctx.strokeStyle = 'rgba(228,255,26,.95)'; ctx.stroke();
+}
+
+export default function ConfigWizard({ poolSize, roomCode, players, playerList = [], onStart, onBack, music, onOpenHub, spotify }: Props) {
   const [step, setStep] = useState(0);
   const [game, setGame] = useState('blind');
   const [era, setEra] = useState('all');
@@ -182,6 +237,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   // audio-réactif : le glow du sélectionné suit le beat (basses) + l'égaliseur suit le spectre réel.
   const wzRef = useRef<HTMLDivElement | null>(null);
   const npEqRef = useRef<HTMLDivElement | null>(null);
+  const scopeRef = useRef<HTMLCanvasElement | null>(null); // oscilloscope de la carte sélectionnée
   useEffect(() => {
     let raf = 0, cur = 0;
     const loop = () => {
@@ -189,6 +245,8 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
       wzRef.current?.style.setProperty('--pulse', cur.toFixed(3));
       const eq = npEqRef.current, bands = music.barsRef?.current;
       if (eq && bands) { const k = eq.children, n = k.length; for (let i = 0; i < n; i++) (k[i] as HTMLElement).style.height = (12 + (bands[Math.floor((i / n) * bands.length)] || 0) * 88) + '%'; }
+      const cv = scopeRef.current, wave = music.waveRef?.current;
+      if (cv && wave) drawScope(cv, wave); // oscilloscope sur la bordure de la carte choisie
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -290,6 +348,25 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 </div>
               )}
             </div>
+            {spotify && (
+              <div className="srcgroup" role="group" aria-label="Source audio">
+                <button
+                  className={`gpill srcpill sp ${spotify.state === 'ready' && spotify.spotifyOn ? 'on' : 'off'}`}
+                  onClick={spotify.onToggleSpotify}
+                  title={spotify.state === 'ready'
+                    ? (spotify.spotifyOn ? 'Spotify actif (prioritaire) — cliquer pour couper' : 'Spotify en veille — cliquer pour activer')
+                    : spotify.state === 'premium_required' ? 'Spotify : compte Premium requis'
+                    : spotify.state === 'connecting' ? 'Connexion à Spotify…' : 'Connecter Spotify'}>
+                  <span className="srclogo" {...H(spotifyIco)} />Spotify
+                </button>
+                <button
+                  className={`gpill srcpill dz ${spotify.deezerOn ? 'on' : 'off'}`}
+                  onClick={spotify.onToggleDeezer}
+                  title={spotify.deezerOn ? 'Deezer actif — cliquer pour couper' : 'Deezer coupé — cliquer pour activer'}>
+                  <img className="dzimg" src="/deezer.svg" alt="" aria-hidden="true" /><span className="dzword">deezer</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -308,7 +385,6 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
             {step === 0 && (() => {
               const gameCard = (g: any) => (
                 <button key={g.id} ref={g.id === 'blind' ? blindCardRef : undefined} className={`keycard pick g-${g.id} ${game === g.id ? 'sel on' : ''} ${g.soon ? 'locked' : ''}`} onClick={() => !g.soon && setGame(g.id)} onFocus={() => !g.soon && setGame(g.id)}>
-                  <span {...H(bracketsSvg)} />
                   <div className="kclip">
                     <div className="keyart" {...H(KEYART[g.id] || '')} />
                     {g.id === 'blind' && (
@@ -322,8 +398,16 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                     <div className="kshade" />
                   </div>
                   <div className="reccue"><i />REC</div>
-                  {g.soon ? <span className="badge-soon"><span>Bientôt</span></span> : <span className="badge-live"><span><span className="dot" style={{ width: 6, height: 6 }} />Jouable</span></span>}
+                  {g.soon ? <span className="badge-soon"><span><span className="dot" style={{ width: 6, height: 6 }} />Bientôt</span></span> : <span className="badge-live"><span><span className="dot" style={{ width: 6, height: 6 }} />Jouable</span></span>}
                   <div className="kbody"><div className="kcat">{g.cat}</div><div className="kname">{g.name}</div><div className="kdesc">{g.desc}</div><span className="kfam">{g.family === 'solo' ? '1 joueur · record' : '2 à 8 · soirée'}</span></div>
+                  {g.id === 'rush' && onOpenHub && (
+                    <span className="kclass" role="button" tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); onOpenHub('leaderboard'); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); onOpenHub('leaderboard'); } }}>
+                      <span {...H(leaderIco)} /> Classement
+                    </span>
+                  )}
+                  {game === g.id && <canvas className="scope" ref={scopeRef} aria-hidden="true" />}
                 </button>
               );
               return (
@@ -420,7 +504,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
         </div>
 
         <aside className="hud-side">
-          <div className="mc-head"><div className="mc-title"><span className="lbl">Carte de match</span></div><span className="mc-brand">PUNCHLIN<span className="d">R</span></span></div>
+          <div className="mc-head"><div className="mc-title"><span className="lbl">Carte de match</span></div></div>
           <div className="mc-rows">
             {rows.map((r, i) => (
               <button key={r.i} className={`mc-row ${i === step ? 'active' : ''}`} onClick={() => setStep(i)}>
@@ -458,6 +542,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
         <div className="spacer" />
         <button className="btn hublink" onClick={() => onOpenHub?.('roster')}><span {...H(rosterIco)} /> Roster</button>
         <button className="btn hublink" onClick={() => onOpenHub?.('trophies')}><span {...H(trophyIco)} /> Palmarès</button>
+        <button className="btn hublink" onClick={() => onOpenHub?.('radio')}><span {...H(radioIco)} /> Radio</button>
         {/* Ni « Suivant » ni « Lancer » ici : un SEUL CTA primaire = « Lancer la partie » dans la carte de match (à droite).
             Navigation des étapes au clavier (← → · Entrée) — voir le hint ci-dessus. */}
       </div>

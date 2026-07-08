@@ -5,6 +5,8 @@ dist/
 .env
 # leaderboard du mode Cypher = donnée runtime (généré au 1er score), pas versionné
 server/leaderboard.json
+# cache disque du pool musical (métadonnées Deezer, régénéré au boot) — pas versionné
+server/.pool-cache.json
 
 # Originaux bruts (réserve perso) — pas versionnés, restent en local.
 # La musique servie par l'app (client/public/music/*.mp3) est versionnée via Git LFS.

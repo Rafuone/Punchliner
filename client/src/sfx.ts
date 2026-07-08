@@ -27,6 +27,37 @@ export function sfx(key: keyof typeof URLS) {
   } catch { /* no-op */ }
 }
 
+// AIRHORN "façon DJ" (la sirène ragga/dancehall/rap 90s qu'on matraque) — SYNTHÉTISÉ (Web Audio, zéro dépendance
+// externe → marche à coup sûr), joué en RAFALE "bap-bap-bap-baaaap". Utilisé pour le cheat code.
+export function playAirhorns() {
+  try {
+    if (typeof window === 'undefined' || off()) return;
+    const AC = (window as any).AudioContext || (window as any).webkitAudioContext; if (!AC) return;
+    const ctx = new AC();
+    const master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination);
+    const blast = (t0: number, dur: number) => {
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(1, t0 + 0.014);
+      g.gain.setValueAtTime(1, t0 + dur - 0.06);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      g.connect(master);
+      [0, 7, 12, -5].forEach((semi, i) => {              // accord = corne riche (façon air horn)
+        const o = ctx.createOscillator();
+        o.type = i === 3 ? 'square' : 'sawtooth';
+        const base = 340 * Math.pow(2, semi / 12);
+        o.frequency.setValueAtTime(base * 0.93, t0);
+        o.frequency.linearRampToValueAtTime(base, t0 + 0.05); // léger bend vers le haut = le "MMBAP"
+        const og = ctx.createGain(); og.gain.value = i === 3 ? 0.14 : 0.3;
+        o.connect(og).connect(g); o.start(t0); o.stop(t0 + dur + 0.02);
+      });
+    };
+    let t = ctx.currentTime + 0.03;
+    for (const dur of [0.16, 0.16, 0.16, 0.52]) { blast(t, dur); t += dur + 0.085; } // 3 courts + 1 long
+    setTimeout(() => { try { ctx.close(); } catch {} }, (t - ctx.currentTime + 0.6) * 1000);
+  } catch { /* no-op */ }
+}
+
 // Boucle (musique de fond, ex. récap). Un seul loop à la fois.
 let loopEl: HTMLAudioElement | null = null;
 let loopKey = '';

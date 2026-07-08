@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { Server } from 'socket.io';
-import { SEED_TRACKS } from './tracks.js';
+import { SEED_TRACKS, SEED_ARTISTS } from './tracks.js';
 import { gradeAnswer, speedMult, normalize, extractFeats } from './match.js';
 import { POWERS, firstLetters } from './powers.js';
 import { pickQuiz, buildQuizRound } from './quiz.js';
@@ -58,11 +58,13 @@ const QUIZ_MS = FAST ? 1500 : 22000; // durée d'une question de quiz (QCM)
 const HOST_GRACE_MS = 120000; // délai avant de fermer un salon dont l'hôte a disparu
 
 // Mode Cypher (contre-la-montre) — jauge de temps PARTAGÉE (bonne réponse = +temps, "passer" = -temps)
-const RUSH_START_MS = FAST ? 8000 : 45000; // budget de départ
+const RUSH_START_MS = FAST ? 8000 : 60000; // budget de départ (≥ 1 min : 45 s était trop court au lancement)
 const RUSH_BONUS_MS = FAST ? 3000 : 6000;  // +temps par bonne réponse
 const RUSH_PASS_MS  = FAST ? 3000 : 8000;  // -temps sur "passer"
 const RUSH_MAX_MS   = 90000;               // plafond de la jauge (anti-inflation)
 const RUSH_REF_MS   = 10000;               // fenêtre de référence pour la prime de vitesse
+const RUSH_TRACK_MAX_MS = FAST ? 3000 : 30000; // durée MAX d'un morceau : si ni trouvé ni passé, on enchaîne
+                                           // tout seul (jamais bloqué sur un son). = durée du clip Deezer.
 
 // Difficulté = QUELS morceaux tombent (popularité via le rank Deezer), PAS la durée.
 // Le son joue toujours généreusement ; offset = on démarre en plein milieu sur les niveaux durs.
@@ -82,61 +84,114 @@ const io = new Server(httpServer, { cors: { origin: '*' } });
 /* Pool de morceaux (Deezer)                                           */
 /* ------------------------------------------------------------------ */
 let POOL = [];
-const previewCache = new Map(); // id -> Buffer mp3 (extrait Deezer rapatrié chez NOUS → URL stable, jamais expirée)
-// Rapatrie chaque extrait pendant que l'URL Deezer est valide, met en cache, et NE GARDE que les
-// morceaux dont l'extrait est réellement téléchargeable (fini les URL mortes/expirées en pleine partie).
-async function cachePreviews() {
-  const original = [...POOL]; // repli si le cache échoue en masse (ex. Deezer bloque le fetch serveur)
-  const keep = [];
-  for (let i = 0; i < POOL.length; i += 6) {
-    await Promise.allSettled(POOL.slice(i, i + 6).map(async (t) => {
-      try {
-        const r = await fetch(t.preview, { headers: { 'User-Agent': 'punchline-party-game' } });
-        if (!r.ok) throw new Error('http ' + r.status);
-        const buf = Buffer.from(await r.arrayBuffer());
-        if (buf.length < 2000) throw new Error('extrait vide');
-        previewCache.set(String(t.id), buf); // clé en STRING (l'URL /api/preview/:id arrive en string)
-        t.deezer = t.preview;                  // on garde l'URL d'origine (repli/debug)
-        t.preview = `/api/preview/${t.id}`;    // le client jouera l'extrait SERVI PAR NOUS
-        keep.push(t);
-      } catch { /* extrait injouable → on retire ce morceau du pool */ }
-    }));
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  // Sécurité : si (presque) rien n'a pu être mis en cache, on repart sur les URL Deezer d'origine
-  // (comportement précédent) plutôt que de se retrouver avec un pool vide et un jeu injouable.
-  POOL = keep.length >= Math.min(6, Math.ceil(original.length * 0.5)) ? keep : original;
-  console.log(`[preview] ${previewCache.size} extraits en cache · ${POOL.length} morceaux jouables${POOL === keep ? ' (URL stables)' : ' (REPLI URL Deezer — cache indisponible)'}.`);
-}
-async function resolveTrack(seed) {
-  const tryFetch = async (q) => {
-    const r = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=4`, { headers: { 'User-Agent': 'punchline-party-game' } });
-    if (!r.ok) return [];
-    return (await r.json())?.data || [];
+let poolIndex = new Map();       // id(string) -> track (lookup O(1) pour /api/preview)
+const previewCache = new Map();  // id -> Buffer mp3 (rapatrié À LA VOLÉE quand le morceau tombe → URL stable)
+const UA = { headers: { 'User-Agent': 'punchline-party-game' } };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const SKIT_RE = /\b(intro|outro|interlude|skit)\b/i; // on écarte les pistes non-jouables en blind-test
+const DZ = 'https://api.deezer.com';
+const POOL_CACHE = path.join(__dirname, '.pool-cache.json');
+const seedHash = () => crypto.createHash('md5').update(JSON.stringify(SEED_ARTISTS) + '|' + JSON.stringify(SEED_TRACKS)).digest('hex');
+
+// Un « hit » Deezer (search track / artist top) → notre forme de morceau. On garde l'URL Deezer d'origine
+// dans .deezer et on expose .preview = notre route stable (l'extrait sera rapatrié à la volée, cf cacheTrack).
+function trackFromDeezer(h, fallbackArtist = '') {
+  const feats = extractFeats({ title: h.title, artist: h.artist?.name });
+  return {
+    id: h.id, title: h.title_short || h.title, artist: h.artist?.name || fallbackArtist,
+    cover: h.album?.cover_medium || h.album?.cover || '', deezer: h.preview,
+    preview: `/api/preview/${h.id}`, rank: h.rank || 0, feats,
   };
+}
+function buildPoolIndex() { poolIndex = new Map(POOL.map((t) => [String(t.id), t])); }
+function refreshHosts() { for (const room of rooms.values()) { if (room.hostConnected) emitLobby(room); } }
+
+// Cache disque du POOL (métadonnées uniquement, PAS les extraits audio) : boot instantané tant que la
+// liste de graines ne change pas (< 3 j). Les extraits, eux, sont rapatriés à la volée quand ils tombent.
+function readPoolCache() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(POOL_CACHE, 'utf8'));
+    const fresh = Date.now() - (raw.builtAt || 0) < 3 * 24 * 3600 * 1000;
+    if (raw.hash === seedHash() && fresh && Array.isArray(raw.tracks) && raw.tracks.length > 50) return raw.tracks;
+  } catch { /* pas de cache / illisible → on reconstruit */ }
+  return null;
+}
+function writePoolCache() {
+  try { fs.writeFileSync(POOL_CACHE, JSON.stringify({ builtAt: Date.now(), hash: seedHash(), tracks: POOL })); } catch { /* disque RO → tant pis */ }
+}
+
+// Rapatrie l'extrait d'UN morceau (à la demande). Si l'URL Deezer a expiré, on redemande un extrait frais
+// via /track/{id}. Renvoie true si l'extrait est en cache (donc jouable via /api/preview/:id).
+async function cacheTrack(t) {
+  if (!t) return false;
+  const id = String(t.id);
+  if (previewCache.has(id)) return true;
+  const dl = async (url) => {
+    if (!url) return null;
+    try { const r = await fetch(url, UA); if (!r.ok) return null; const b = Buffer.from(await r.arrayBuffer()); return b.length >= 2000 ? b : null; } catch { return null; }
+  };
+  let buf = await dl(t.deezer);
+  if (!buf) { // URL périmée → on redemande un extrait frais à Deezer
+    try { const jr = await fetch(`${DZ}/track/${id}`, UA); const fresh = (await jr.json())?.preview; if (fresh) { t.deezer = fresh; buf = await dl(fresh); } } catch { /* injouable */ }
+  }
+  if (buf) { previewCache.set(id, buf); return true; }
+  return false;
+}
+// Rapatrie une liste (une playlist de partie) par petits paquets — best-effort, non bloquant pour le jeu
+// (au pire /api/preview rapatriera le morceau au moment où il tombe).
+async function cacheTracks(list) {
+  for (let i = 0; i < list.length; i += 6) await Promise.allSettled(list.slice(i, i + 6).map(cacheTrack));
+}
+
+// Tout le catalogue populaire d'un artiste (top ~50 Deezer) → nos morceaux, filtrés (extrait dispo, durée
+// ≥ 60 s pour éviter skits/intros, pas de titre "intro/outro/interlude/skit").
+async function loadArtistCatalog(name) {
+  try {
+    const sr = await fetch(`${DZ}/search/artist?q=${encodeURIComponent(name)}&limit=1`, UA);
+    const artist = (await sr.json())?.data?.[0];
+    if (!artist?.id) return [];
+    const want = normalize(name), got = normalize(artist.name || '');
+    if (!got || !(got.includes(want) || want.includes(got))) return []; // garde-fou : le bon artiste
+    const tr = await fetch(`${DZ}/artist/${artist.id}/top?limit=50`, UA);
+    const list = (await tr.json())?.data || [];
+    return list
+      .filter((h) => h.preview && (h.duration || 0) >= 60 && !SKIT_RE.test(h.title || ''))
+      .map((h) => trackFromDeezer(h, name));
+  } catch { return []; }
+}
+// Résout un SEED_TRACKS précis (classique qu'on veut garantir) → notre forme.
+async function resolveTrack(seed) {
+  const tryFetch = async (q) => { try { const r = await fetch(`${DZ}/search?q=${encodeURIComponent(q)}&limit=4`, UA); return r.ok ? (await r.json())?.data || [] : []; } catch { return []; } };
   const want = normalize(seed.artist);
-  // garde-fou : on n'accepte que si l'artiste renvoyé correspond au seed (évite les mauvais matchs / titres non-FR)
   const pick = (list) => list.find((h) => h.preview && (() => { const a = normalize(h.artist?.name || ''); return a && (a.includes(want) || want.includes(a)); })());
   let hit = pick(await tryFetch(`artist:"${seed.artist}" track:"${seed.title}"`));
   if (!hit) hit = pick(await tryFetch(`artist:"${seed.artist}" ${seed.title}`));
-  if (!hit) return null;
-  // feats extraits du titre COMPLET (title_short l'enlève) → une réponse "Booba" en feat sera acceptée
-  const feats = extractFeats({ title: hit.title, artist: hit.artist?.name });
-  return { id: hit.id, title: hit.title_short || hit.title, artist: hit.artist?.name || seed.artist, cover: hit.album?.cover_medium || hit.album?.cover || '', preview: hit.preview, rank: hit.rank || 0, feats };
+  return hit ? trackFromDeezer(hit, seed.artist) : null;
 }
+
 async function loadPool() {
-  console.log(`[deezer] résolution de ${SEED_TRACKS.length} morceaux…`);
-  const out = [];
+  // 1) Cache disque → boot instantané tant que la liste de graines ne bouge pas
+  const cached = readPoolCache();
+  if (cached) { POOL = cached; buildPoolIndex(); console.log(`[pool] ${POOL.length} morceaux (cache disque, extraits à la volée).`); refreshHosts(); return; }
+  // 2) Construction : catalogues d'artistes (le gros du pool) + quelques classiques garantis
+  console.log(`[deezer] construction du pool : ${SEED_ARTISTS.length} artistes + ${SEED_TRACKS.length} classiques…`);
+  const byId = new Map();
+  for (let i = 0; i < SEED_ARTISTS.length; i += 4) {
+    const res = await Promise.allSettled(SEED_ARTISTS.slice(i, i + 4).map(loadArtistCatalog));
+    for (const r of res) if (r.status === 'fulfilled') for (const t of r.value) if (!byId.has(t.id)) byId.set(t.id, t);
+    await sleep(250);
+  }
+  const gotArtists = byId.size;
   for (let i = 0; i < SEED_TRACKS.length; i += 6) {
     const res = await Promise.allSettled(SEED_TRACKS.slice(i, i + 6).map(resolveTrack));
-    for (const r of res) if (r.status === 'fulfilled' && r.value) out.push(r.value);
-    await new Promise((r) => setTimeout(r, 350));
+    for (const r of res) if (r.status === 'fulfilled' && r.value && !byId.has(r.value.id)) byId.set(r.value.id, r.value);
+    await sleep(300);
   }
-  POOL = out;
-  console.log(`[deezer] ${POOL.length}/${SEED_TRACKS.length} morceaux résolus.`);
-  await cachePreviews(); // rapatrie les extraits chez nous (URL stables) + retire les morts
-  // pool prêt → on rafraîchit les hôtes déjà connectés (sinon leur bouton "Configurer" reste grisé)
-  for (const room of rooms.values()) { if (room.hostConnected) emitLobby(room); }
+  POOL = [...byId.values()];
+  buildPoolIndex();
+  if (POOL.length > 50) writePoolCache(); // on ne fige pas un pool anémique (réseau KO)
+  console.log(`[pool] ${POOL.length} morceaux prêts (${gotArtists} via artistes + ${POOL.length - gotArtists} classiques). Extraits rapatriés à la volée.`);
+  refreshHosts();
 }
 // Sous-ensemble du pool selon la popularité voulue (rank Deezer trié décroissant)
 function poolForTier(tier) {
@@ -196,7 +251,7 @@ function emitLobby(room) {
 function snapshot(room, isHost) {
   const s = { code: room.code, phase: room.phase, roundIndex: room.roundIndex, totalRounds: room.totalRounds, settings: room.settings, players: publicPlayers(room) };
   if (room.phase === 'playing' && room.settings.mode === 'rush') {
-    s.round = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: RUSH_MAX_MS, difficulty: room.diffLabel, scores: rushBoard(room) };
+    s.round = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: RUSH_MAX_MS, passMs: RUSH_PASS_MS, bonusMs: RUSH_BONUS_MS, difficulty: room.diffLabel, scores: rushBoard(room) };
     if (isHost && room.current) Object.assign(s.round, { preview: room.current.preview, startAt: 0 });
   } else if (room.phase === 'playing' && room.current) {
     s.round = { index: room.roundIndex, roundIndex: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: room.windowMs, mode: room.settings.mode, difficulty: room.diffLabel, mj: room.settings.mj };
@@ -224,6 +279,7 @@ function snapshot(room, isHost) {
 function beginRound(room) {
   // le morceau est choisi MAINTENANT (avant la fenêtre pouvoirs → le hint peut révéler ses lettres)
   room.current = room.playlist[room.roundIndex];
+  if (room.settings.mode !== 'quiz') { cacheTrack(room.current); cacheTrack(room.playlist[room.roundIndex + 1]); } // extrait de la manche + la suivante, prêts avant la lecture
   room.muted = new Set();
   room.ready = new Set();
   room.firstScorerId = null; // 1er à trouver cette manche (pour firstblood)
@@ -294,7 +350,9 @@ function startRound(room) {
   room.roundEndsAt = Date.now() + diff.windowMs;
 
   const base = { index: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: diff.windowMs, mode: room.settings.mode, difficulty: diff.label, mj: room.settings.mj, suspense: room.suspense, jam: room.jam ? { by: room.jam.by, ms: room.jam.ms } : null };
-  io.to(room.hostId).emit('round:host', { ...base, preview: room.current.preview, startAt: room.startAt });
+  // sp = titre/artiste envoyés À L'HÔTE SEUL (jamais aux joueurs) pour résoudre le morceau sur Spotify.
+  // L'hôte joue déjà le son (= la réponse) → aucune fuite ; les joueurs ne reçoivent que round:go.
+  io.to(room.hostId).emit('round:host', { ...base, preview: room.current.preview, startAt: room.startAt, sp: { title: room.current.title, artist: room.current.artist } });
   io.to(room.code).emit('round:go', base);
   // le Maître du jeu voit la réponse (lui seul) pour arbitrer à la voix
   if (room.mjId) { const a = room.players.get(room.mjId); if (a?.socketId) io.to(a.socketId).emit('mj:track', { title: room.current.title, artist: room.current.artist, cover: room.current.cover }); }
@@ -449,8 +507,13 @@ function rushEmitTrack(room, evt = {}) {
   const cur = room.rushPlaylist[room.rushIndex];
   room.current = cur; // pour /api/dev/answer + le grade
   room.rushTrackStartAt = Date.now();
-  const common = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: RUSH_MAX_MS, difficulty: room.diffLabel, scores: rushBoard(room), event: evt };
-  io.to(room.hostId).emit('rush:host', { ...common, preview: cur.preview, startAt: 0 }); // l'hôte joue le son
+  // Auto-enchaînement : si ce morceau n'est ni trouvé ni passé au bout de RUSH_TRACK_MAX_MS, on passe au suivant
+  // tout seul (jamais bloqué à écouter un son qu'on ne reconnaît pas). Reset à chaque nouveau morceau.
+  clearTimeout(room.rushTrackTimer);
+  const idxAtSet = room.rushIndex;
+  room.rushTrackTimer = setTimeout(() => { if (room.phase === 'playing' && room.settings.mode === 'rush' && room.rushIndex === idxAtSet) rushAdvance(room, { reason: 'timeout' }); }, RUSH_TRACK_MAX_MS);
+  const common = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: RUSH_MAX_MS, passMs: RUSH_PASS_MS, bonusMs: RUSH_BONUS_MS, difficulty: room.diffLabel, scores: rushBoard(room), event: evt };
+  io.to(room.hostId).emit('rush:host', { ...common, preview: cur.preview, startAt: 0, sp: { title: cur.title, artist: cur.artist } }); // l'hôte joue le son (sp = résolution Spotify, hôte only)
   io.to(room.code).emit('rush:state', common); // les joueurs : chrono + score, pas d'audio
 }
 function rushAdvance(room, evt) {
@@ -461,6 +524,7 @@ function rushAdvance(room, evt) {
     const next = pickPlaylist(POOL.length, tier);
     if (next[0] && last && next[0].id === last.id && next.length > 1) [next[0], next[1]] = [next[1], next[0]]; // pas de doublon immédiat
     room.rushPlaylist = next; room.rushIndex = 0;
+    cacheTracks(next.slice(0, 12)); // rapatrie le prochain paquet en fond
   }
   room.rushResolving = false;
   rushEmitTrack(room, evt);
@@ -477,6 +541,7 @@ function startRush(room) {
   room.phase = 'playing';
   room.mult = diff.mult; room.diffLabel = diff.label;
   room.rushPlaylist = pickPlaylist(POOL.length, diff.tier);
+  cacheTracks(room.rushPlaylist.slice(0, 12)); // Cypher enchaîne vite → on rapatrie le 1er paquet en fond
   room.rushIndex = 0;
   room.rushEndsAt = Date.now() + RUSH_START_MS;
   room.rushResolving = false;
@@ -487,6 +552,7 @@ function startRush(room) {
 }
 function endRush(room) {
   clearTimeout(room.rushTimer);
+  clearTimeout(room.rushTrackTimer);
   if (room.phase !== 'playing') return;
   room.phase = 'rushend';
   const players = [...room.players.values()].filter((p) => !p.waiting);
@@ -562,6 +628,19 @@ io.on('connection', (socket) => {
     if (p.socketId) io.to(p.socketId).emit('room:closed', { reason: "Tu as été retiré du salon par l'hôte." });
     room.players.delete(playerId);
     emitLobby(room);
+  });
+
+  // Un joueur quitte le salon de lui-même → on le retire (libère son rappeur) et on rafraîchit le lobby.
+  socket.on('player:leave', (_p, cb) => {
+    const room = rooms.get(socket.data?.roomCode);
+    const pid = socket.data?.playerId;
+    if (room && pid) {
+      room.players.delete(pid);
+      socket.leave(room.code);
+      emitLobby(room);
+    }
+    socket.data = { roomCode: null, role: null, playerId: null };
+    cb?.({ ok: true });
   });
 
   socket.on('player:join', ({ code, name, avatar, playerId }, cb) => {
@@ -650,6 +729,7 @@ io.on('connection', (socket) => {
     } else {
       const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
       room.playlist = pickPlaylist(rounds || 8, diff.tier);
+      cacheTracks(room.playlist); // rapatrie les extraits de la partie en fond (le décompte couvre la manche 1)
     }
     room.totalRounds = room.playlist.length;
     if (!room.totalRounds) return cb?.({ error: isQuiz ? 'Banque de quiz indisponible.' : 'Aucun morceau disponible.' });
@@ -732,7 +812,7 @@ io.on('connection', (socket) => {
     rushApplyDelta(room, -RUSH_PASS_MS); // -temps (peut finir le run)
     if (room.phase === 'playing') rushAdvance(room, { reason: 'pass', by: p.id, name: p.name, removedMs: RUSH_PASS_MS });
   });
-  socket.on('leaderboard:get', (_p, cb) => cb?.({ ok: true, top: getTop(10) }));
+  socket.on('leaderboard:get', ({ n } = {}, cb) => cb?.({ ok: true, top: getTop(Math.min(50, Math.max(1, n || 10))) }));
 
   // Mode quiz : QCM, une seule réponse par joueur, note = justesse × vitesse
   socket.on('quiz:answer', ({ choice } = {}, cb) => {
@@ -1035,8 +1115,10 @@ io.on('connection', (socket) => {
 /* ------------------------------------------------------------------ */
 app.get('/api/health', (_req, res) => res.json({ ok: true, pool: POOL.length, rooms: rooms.size, previews: previewCache.size }));
 // Extraits servis PAR NOUS (mp3 en cache) → URL stables, jamais expirées. Range-request pour le seek.
-app.get('/api/preview/:id', (req, res) => {
-  const buf = previewCache.get(req.params.id);
+app.get('/api/preview/:id', async (req, res) => {
+  const id = String(req.params.id);
+  let buf = previewCache.get(id);
+  if (!buf) { const t = poolIndex.get(id); if (t) { await cacheTrack(t); buf = previewCache.get(id); } } // pas encore rapatrié → on le fait maintenant
   if (!buf) return res.status(404).end();
   res.set('Content-Type', 'audio/mpeg');
   res.set('Accept-Ranges', 'bytes');

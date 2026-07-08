@@ -81,6 +81,12 @@ button, input { font-family: inherit; }
 .btn:hover { background: var(--surf3); border-color: var(--line3); }
 .btn:active { transform: scale(.98); }
 .btn:disabled { opacity: .4; cursor: not-allowed; }
+/* Action secondaire "de sortie" (déconnexion) : volontairement discrète, en dessous d'un vrai bouton.
+   Muted par défaut, vire au rouge (--bad) au survol pour signaler que ça quitte / déconnecte. */
+.exit-link { background: none; border: 0; box-shadow: none; cursor: pointer; padding: 6px 10px;
+  font-family: var(--ui); font-weight: 700; font-size: 12.5px; letter-spacing: .02em; color: var(--muted);
+  transition: color .14s ease; }
+.exit-link:hover { color: var(--bad); text-decoration: underline; }
 .btn.warm {
   background: var(--fluo); border-color: var(--fluo); color: var(--ink); font-weight: 800; letter-spacing: .01em;
   box-shadow: 2px 2px 0 rgba(0, 0, 0, .5);
@@ -490,10 +496,17 @@ button, input { font-family: inherit; }
 .cs-taken { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; font-size: 11px; letter-spacing: .08em; color: #fff; background: rgba(0, 0, 0, .5); }
 .cs-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; background: none; border: 0; padding: 0; }
 .cs-thumb { position: relative; width: 100%; aspect-ratio: 4/5; border-radius: 3px; overflow: hidden; border: 1px solid rgba(255,255,255,.14); background: radial-gradient(90% 75% at 50% 16%, var(--c, #26282c), #121316 78%); }
-.cs-thumb svg { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); height: 90%; }
 /* on zoome sur le visage : on grossit l'image et on ancre le zoom sur la tête */
 .cs-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%; transform: scale(var(--z, 1.6)); transform-origin: 50% 28%; z-index: 1; }
 .cs-thumb .tg { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 42%, rgba(0,0,0,.5)); }
+/* Skeleton de chargement des portraits — shimmer façon UI moderne (remplace les silhouettes SVG dessinées,
+   jugées moches). Masqué dès que le vrai portrait (PNG des assets) est chargé (classe .imgok via onLoad). */
+@keyframes pl-shimmer { 0% { background-position: 220% 0; } 100% { background-position: -120% 0; } }
+.cs-skel, .cs-tskel { position: absolute; inset: 0; z-index: 0;
+  background: linear-gradient(100deg, #15161a 26%, #24262c 50%, #15161a 74%);
+  background-size: 220% 100%; animation: pl-shimmer 1.3s ease-in-out infinite; }
+.cs-stage.imgok .cs-skel, .cs-thumb.imgok .cs-tskel { display: none; }
+@media (prefers-reduced-motion: reduce) { .cs-skel, .cs-tskel { animation: none; } }
 .cs-cn { font-size: 10px; font-weight: 700; color: var(--muted); text-align: center; line-height: 1; text-transform: uppercase; }
 /* cadre de sélection : couleur RACCORD avec le genre (--cc). Plus de crochets dans les angles. */
 .cs-cell.sel .cs-thumb { border-color: var(--cc, var(--fluo)); box-shadow: 0 0 0 2px var(--cc, var(--fluo)); }
@@ -588,6 +601,46 @@ button, input { font-family: inherit; }
 /* ===== hub sur la TV : overlay de consultation (roster / palmarès) ===== */
 .hub-overlay { position: fixed; inset: 0; z-index: 60; overflow-y: auto; background: #0a0b0c; }
 .hub-overlay .wrap { min-height: 100%; }
+/* Radio (mode radio de HubBrowse) — stations + recherche + grille de playlists + barre de lecture. Formes anguleuses. */
+.radio-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; max-width: 1040px; margin: 0 auto 22px; }
+.radio-chip { font-family: var(--ui); font-weight: 700; font-size: 13px; padding: 9px 15px; border-radius: 3px; cursor: pointer; color: var(--txt); background: var(--surf2); border: 1px solid var(--line2); transition: background .14s, border-color .14s; }
+.radio-chip:hover { background: var(--surf3); border-color: var(--line3); }
+.radio-chip.on { border-color: var(--fluo); color: var(--fluo); background: rgba(228,255,26,.06); }
+.radio-search { flex: 1 1 220px; min-width: 200px; max-width: 340px; }
+.radio-search .field { width: 100%; }
+.radio-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 14px; max-width: 1040px; margin: 0 auto; padding-bottom: 20px; }
+.radio-card { text-align: left; background: var(--surf); border: 1px solid var(--line2); border-radius: 5px; padding: 10px; cursor: pointer; transition: background .14s, border-color .14s; }
+.radio-card:hover { background: var(--surf2); border-color: var(--line3); }
+.radio-card.on { border-color: var(--fluo); box-shadow: 0 0 0 1px var(--fluo); }
+.radio-cover { position: relative; aspect-ratio: 1; border-radius: 3px; overflow: hidden; background: #15161a; display: grid; place-items: center; }
+.radio-cover img { width: 100%; height: 100%; object-fit: cover; }
+.radio-cover > span { font-size: 30px; color: var(--muted2); }
+.radio-play { position: absolute; right: 8px; bottom: 8px; width: 34px; height: 34px; border-radius: 3px; background: var(--fluo); color: var(--ink); display: grid; place-items: center; font-size: 13px; opacity: 0; transform: translateY(6px); transition: opacity .15s, transform .15s; box-shadow: 2px 2px 0 rgba(0,0,0,.4); }
+.radio-card:hover .radio-play { opacity: 1; transform: none; }
+.radio-name { margin-top: 8px; font-weight: 800; font-size: 13px; color: var(--txt); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.radio-owner { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.radio-player { position: fixed; left: 0; right: 0; bottom: 0; z-index: 62; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px clamp(16px, 4vw, 40px); background: rgba(8,9,12,.94); border-top: 1px solid var(--line2); backdrop-filter: blur(10px); }
+.rp-track { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.rp-track img { width: 50px; height: 50px; border-radius: 3px; object-fit: cover; flex: 0 0 auto; }
+.rp-meta { min-width: 0; }
+.rp-name { font-weight: 800; color: var(--txt); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-artist { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-controls { display: flex; gap: 10px; flex: 0 0 auto; }
+.rp-btn { width: 44px; height: 44px; border-radius: 3px; display: grid; place-items: center; cursor: pointer; font-size: 14px; color: var(--txt); background: var(--surf2); border: 1px solid var(--line2); transition: background .14s; }
+.rp-btn:hover { background: var(--surf3); }
+/* Easter egg Konami : pluie des portraits + flash "CHEAT" (visuel pur, sur la TV). */
+.cheat-fx { position: fixed; inset: 0; z-index: 9999; pointer-events: none; overflow: hidden; animation: cheatScrim 4.3s ease both; }
+/* voile sombre le temps du cheat → le texte + les portraits ressortent (avant : illisible sur le lobby) */
+@keyframes cheatScrim { 0% { background: rgba(6,7,10,0); } 7% { background: rgba(6,7,10,.62); } 86% { background: rgba(6,7,10,.62); } 100% { background: rgba(6,7,10,0); } }
+.cheat-flash { position: absolute; inset: 0; background: radial-gradient(circle at 50% 42%, rgba(228,255,26,.5), rgba(228,255,26,.06) 46%, transparent 72%); animation: cheatFlash .7s ease-out forwards; }
+.cheat-p { position: absolute; top: -20vh; border-radius: 8px; object-fit: cover; object-position: 50% 22%; box-shadow: 0 12px 30px rgba(0,0,0,.55), 0 0 0 2px rgba(228,255,26,.55); animation-name: cheatFall; animation-timing-function: cubic-bezier(.35,0,.65,1); animation-fill-mode: both; }
+@keyframes cheatFall { 0% { transform: translateY(0) rotate(0); opacity: 0; } 6% { opacity: 1; } 86% { opacity: 1; } 100% { transform: translateY(132vh) rotate(var(--rot, 360deg)); opacity: 0; } }
+@keyframes cheatFlash { from { opacity: 1; } to { opacity: 0; } }
+.cheat-title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.ct-big { font-family: var(--disp); font-weight: 800; font-size: clamp(72px, 15vw, 210px); letter-spacing: .04em; color: var(--fluo); line-height: .9; text-shadow: 0 0 44px var(--fluo), 7px 7px 0 rgba(0,0,0,.5); animation: cheatPop .55s cubic-bezier(.2,1.5,.4,1) both, cheatOut .5s ease-in 3.6s both; }
+.ct-sub { font-family: var(--disp); font-weight: 700; font-size: clamp(15px, 2.3vw, 30px); color: #fff; text-transform: uppercase; letter-spacing: .12em; text-shadow: 0 2px 14px rgba(0,0,0,.85); animation: cheatPop .55s cubic-bezier(.2,1.5,.4,1) .08s both, cheatOut .5s ease-in 3.6s both; }
+@keyframes cheatPop { from { transform: scale(.3) rotate(-6deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+@keyframes cheatOut { to { opacity: 0; transform: scale(1.12); } }
 
 /* ===== roster TV : écran de jeu (portrait fondu tous bords + fiche + grille alignée à gauche, ZÉRO scroll) ===== */
 .tvros { --lp: clamp(24px, 4vw, 64px); position: fixed; inset: 0; display: flex; flex-direction: column; overflow: hidden; color: var(--txt);
@@ -1001,7 +1054,9 @@ button, input { font-family: inherit; }
 
 /* ---- barre de nav EN JEU : pleine largeur (full-bleed) + hiérarchie lisible ---- */
 .topbar.gamebar { width: 100vw; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); margin-bottom: clamp(10px, 3vh, 26px);
-  padding: 13px clamp(18px, 4vw, 48px); background: linear-gradient(180deg, rgba(0,0,0,.34), rgba(0,0,0,.1)); border-bottom: 1px solid var(--line2); position: relative; z-index: 2; }
+  margin-top: calc(-1 * clamp(18px, 4vw, 36px)); /* remonte au bord haut : le dégradé va jusqu'en HAUT (avant : gap = padding du .wrap) */
+  padding: calc(13px + clamp(18px, 4vw, 36px)) clamp(18px, 4vw, 48px) 13px; /* +padding-top compense la remontée → le contenu ne bouge pas */
+  background: linear-gradient(180deg, rgba(0,0,0,.34), rgba(0,0,0,.1)); border-bottom: 1px solid var(--line2); position: relative; z-index: 2; }
 .gmeta { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .gmeta-round { display: inline-flex; align-items: baseline; gap: 8px; }
 .gmeta-round .gl { font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--muted2); }

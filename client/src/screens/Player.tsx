@@ -228,6 +228,13 @@ export default function Player() {
     });
   }
   function rushPass() { socket.emit('rush:pass', {}, (res: any) => { if (res?.ok) setFeedback({ removed: res.removedMs }); }); }
+  // Quitter le salon : on se retire côté serveur (libère le rappeur), on oublie la session, retour à l'accueil.
+  function leaveRoom() {
+    socket.emit('player:leave', {}, () => {});
+    localStorage.removeItem(SKEY);
+    meId.current = '';
+    setJoined(false); setChanging(false); setAvatarId(''); setStep('form'); setError(''); setGuess('');
+  }
   function doBuzz() { socket.emit('player:buzz', {}, (res: any) => { if (res?.winner) setBuzz('mine'); }); }
   function submitQuiz(i: number) {
     if (quizPick !== null || phase !== 'playing') return;
@@ -379,9 +386,9 @@ export default function Player() {
         <div className="cs-top">
           <div className="cs-stage" ref={stageRef} style={{ ['--c' as any]: sel.color }}>
             <div className="cs-pbg" />
+            <div className="cs-skel" aria-hidden="true" />
             <div className="cs-wm">{initials(sel.name)[0]}</div>
-            <svg className="cs-bust" viewBox="0 0 200 240"><use href="#bust" /></svg>
-            {sel.img && <img className="cs-pimg" src={`/avatars/${sel.id}.png`} alt="" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
+            {sel.img && <img className="cs-pimg" src={`/avatars/${sel.id}.png`} alt="" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onLoad={(e) => e.currentTarget.parentElement?.classList.add('imgok')} onError={hideOnErr} />}
             {sel.img && <img className="cs-tear" src={`/avatars/${sel.id}.png`} alt="" aria-hidden="true" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
             <div className="cs-pvig" />
             <div className="cs-vhs" aria-hidden="true"><i className="lines" /><i className="tint" /><i className="noise" /><i className="band" /></div>
@@ -415,8 +422,8 @@ export default function Player() {
                     return (
                     <button type="button" key={a.id} className={`cs-cell ${avatarId === a.id ? 'sel' : ''} ${taken ? 'lock' : ''}`} disabled={taken} onClick={() => !taken && setAvatarId(a.id)}>
                       <div className="cs-thumb" style={{ ['--c' as any]: a.color, ...(a.crop?.z ? { ['--z' as any]: a.crop.z } : {}) }}>
-                        <svg viewBox="0 0 200 240"><use href="#bust" /></svg>
-                        {a.img && <img src={`/avatars/${a.id}.png`} alt="" onError={hideOnErr} />}
+                        <div className="cs-tskel" aria-hidden="true" />
+                        {a.img && <img src={`/avatars/${a.id}.png`} alt="" onLoad={(e) => e.currentTarget.parentElement?.classList.add('imgok')} onError={hideOnErr} />}
                         <div className="tg" />
                         {taken && <span className="cs-taken">PRIS</span>}
                       </div>
@@ -441,8 +448,8 @@ export default function Player() {
                     return (
                       <button type="button" key={a.id} className={`cs-cell ${avatarId === a.id ? 'sel' : ''} ${taken ? 'lock' : ''}`} disabled={taken} onClick={() => !taken && setAvatarId(a.id)}>
                         <div className="cs-thumb" style={{ ['--c' as any]: a.color, ...(a.crop?.z ? { ['--z' as any]: a.crop.z } : {}) }}>
-                          <svg viewBox="0 0 200 240"><use href="#bust" /></svg>
-                          {a.img && <img src={`/avatars/${a.id}.png`} alt="" onError={hideOnErr} />}
+                          <div className="cs-tskel" aria-hidden="true" />
+                          {a.img && <img src={`/avatars/${a.id}.png`} alt="" onLoad={(e) => e.currentTarget.parentElement?.classList.add('imgok')} onError={hideOnErr} />}
                           <div className="tg" />
                           {taken && <span className="cs-taken">PRIS</span>}
                         </div>
@@ -559,6 +566,7 @@ export default function Player() {
       <div className="topbar">
         <span className="row" style={{ gap: 9, minWidth: 0, flex: 1 }}>{av && <RMed id={av.id} size={34} />}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{name}</span></span>
         {/* auditeurs retirés du bandeau (blazes longs → ça débordait) ; les charges suffisent ici */}
+        {phase === 'lobby' && code && <span className="gpill" style={{ flex: '0 0 auto' }}><span className="dot" />Salon&nbsp;<b style={{ fontFamily: 'var(--disp)', letterSpacing: '.14em', color: 'var(--txt)' }}>{code}</b></span>}
         {powerMode && phase !== 'lobby' && phase !== 'countdown' && <span style={{ flex: '0 0 auto' }}><Charges n={charges} charge={charge} /></span>}
       </div>
       {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
@@ -579,7 +587,10 @@ export default function Player() {
             </div>
           )}
           <p className="muted">En attente… l'hôte va lancer la partie<span className="waitdots inline" aria-hidden="true"><i /><i /><i /></span></p>
-          <button className="btn" style={{ marginTop: 2 }} onClick={() => setChanging(true)}>Changer de rappeur</button></div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <button className="btn" onClick={() => setChanging(true)}>Changer de rappeur</button>
+            <button className="exit-link" onClick={leaveRoom}>Quitter le salon</button>
+          </div></div>
       )}
 
       {phase === 'countdown' && (
@@ -633,7 +644,7 @@ export default function Player() {
                 <form onSubmit={submitRush} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre + artiste, vite !" autoFocus />
                   <button className="btn warm big send" type="submit">Envoyer</button>
-                  <button className="btn" type="button" onClick={rushPass}>Passer · −temps</button>
+                  <button className="btn" type="button" onClick={rushPass}>Passer · −{Math.round((round.passMs || 8000) / 1000)} s</button>
                 </form>
                 {feedback && (feedback.added ? <p className="feedback good">Trouvé ! +{fmtAud(feedback.points || 0)} · +{Math.round(feedback.added / 1000)} s</p> : feedback.removed ? <p className="feedback bad">Passé · −{Math.round(feedback.removed / 1000)} s</p> : feedback.wrong ? <p className="feedback bad">Pas ça… réessaie</p> : null)}
               </>
@@ -715,12 +726,11 @@ export default function Player() {
           <h2 className="title-xl" style={{ margin: 0 }}>{mine ? `${mine.tracks} morceaux trouvés` : 'Fini'}</h2>
           {mine && <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 14, padding: '10px 16px' }}>Record #{mine.rank} au classement mondial</div>}
           <span className="eyebrow" style={{ marginTop: 8 }}>Top 10 mondial</span>
-          <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <div className="board" style={{ width: '100%', maxWidth: 420 }}>
             {top.map((t: any, i: number) => (
-              <div key={i} className="row" style={{ gap: 10, alignItems: 'center', padding: '6px 12px', borderRadius: 8, border: '1px solid ' + (i === 0 ? 'rgba(255,215,107,.5)' : 'var(--line)') }}>
-                <b style={{ fontFamily: 'var(--disp)', color: i === 0 ? '#ffd76b' : 'var(--muted2)', width: 22 }}>{i + 1}</b>
-                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
-                <b style={{ fontFamily: 'var(--disp)', color: i === 0 ? '#ffd76b' : 'var(--txt)' }}>{fmtAud(t.score)}</b>
+              <div className={`prow ${i === 0 ? 'lead' : ''}`} key={i}>
+                <span className="who" style={{ minWidth: 0 }}><span className="rk">{i + 1}</span>{t.avatar && <RMed id={t.avatar} size={26} />}<span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span></span>
+                <span className="pts">{fmtAud(t.score)}</span>
               </div>
             ))}
           </div>

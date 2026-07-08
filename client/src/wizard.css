@@ -64,6 +64,17 @@
 .wz .gpill.onair .dot {background:var(--green); box-shadow:0 0 9px 1px var(--green);}
 .wz .dot.live {animation:pulse 1.6s steps(2,end) infinite;}
 @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.25;}}
+/* Sélecteur de source audio (Spotify / Deezer) — même langage que .gpill (anguleux, 3px) */
+.wz .srcgroup {display:inline-flex; align-items:center; gap:6px;}
+.wz .srcpill {cursor:pointer; gap:7px; padding:7px 11px; text-transform:none; transition:border-color .14s, background .14s, opacity .14s, color .14s;}
+.wz .srcpill .srclogo {display:inline-flex; line-height:0;}
+.wz .srcpill .srclogo svg {opacity:1;}                 /* logo Spotify TOUJOURS en couleur (contre .gpill svg{opacity:.7}) */
+.wz .srcpill .dzimg {width:15px; height:15px; display:block;}   /* icône Deezer officiel (assets → public) */
+.wz .srcpill .dzword {font-weight:800; font-size:13px; letter-spacing:.004em;}
+.wz .srcpill.off {opacity:.5;}                          /* coupé : atténué (pas grisé) */
+.wz .srcpill.off:hover {opacity:.8;}
+.wz .srcpill.sp.on {border-color:rgba(30,215,96,.6); background:rgba(30,215,96,.10); color:#1ed760;}
+.wz .srcpill.dz.on {border-color:rgba(163,53,255,.62); background:rgba(163,53,255,.13); color:#b571ff;}
 /* liste des joueurs (clic sur le compteur) */
 .wz .players-wrap {position:relative;}
 .wz .players-btn {cursor:pointer;}
@@ -220,13 +231,29 @@
 .wz .keycard .kname {font-family:var(--disp); font-weight:700; font-size:clamp(28px,2.8vw,40px); letter-spacing:-.015em; line-height:.92; text-transform:uppercase;}
 /* sous-texte : plus de troncature (le sous-titre restait coupé quand la carte était étroite) */
 .wz .keycard .kdesc {font-size:13px; line-height:1.45; color:var(--muted); margin-top:10px; text-wrap:pretty; max-width:34ch;}
+/* Badge "Bientôt" : point ROUGE + texte légèrement gris (lisible). */
 .wz .badge-soon {position:absolute; z-index:5; top:12px; right:12px;
   background:rgba(0,0,0,.72); border:1px solid var(--line3); border-radius:2px; padding:5px 10px;}
-.wz .badge-soon>span {display:block; font-size:9.5px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; color:var(--muted);}
+.wz .badge-soon>span {display:flex; align-items:center; gap:6px; font-size:9.5px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:rgba(255,255,255,.6);}
+.wz .badge-soon .dot {width:5px; height:5px; background:#ff4b4b; box-shadow:0 0 5px rgba(255,75,75,.6);}
+/* Badge "Jouable" DISCRET : point VERT + texte BLANC (plus le bloc fluo qui criait). */
 .wz .badge-live {position:absolute; z-index:5; top:12px; right:12px;
-  background:var(--green); border-radius:2px; padding:5px 10px; box-shadow:2px 2px 0 rgba(0,0,0,.45);}
-.wz .badge-live>span {display:flex; align-items:center; gap:6px; font-size:9.5px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:var(--ink);}
-.wz .badge-live .dot {background:var(--ink);}
+  background:rgba(10,11,13,.55); border:1px solid rgba(166,255,0,.3); border-radius:2px; padding:4px 9px; backdrop-filter:blur(3px);}
+.wz .badge-live>span {display:flex; align-items:center; gap:6px; font-size:9px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:rgba(255,255,255,.92);}
+.wz .badge-live .dot {width:5px; height:5px; background:var(--green); box-shadow:0 0 5px rgba(166,255,0,.6);}
+/* Oscilloscope de la carte choisie : canvas qui DÉBORDE (inset négatif) → la forme d'onde oscille de part et d'autre
+   du vrai contour arrondi de la carte (pas un rectangle inséré). */
+.wz .keycard .scope {position:absolute; inset:-30px; z-index:4; width:calc(100% + 60px); height:calc(100% + 60px); pointer-events:none;}
+.wz .keycard.sel {overflow:visible;} /* laisse la vague sortir du cadre de la carte sélectionnée */
+/* Accès au classement mondial — SPÉCIFIQUE à la carte Cypher (bas-droite). Clic isolé (stopPropagation) : n'ouvre
+   pas la sélection de la carte, juste la page classement. S'allume en fluo au survol. */
+.wz .kclass {position:absolute; z-index:6; bottom:12px; right:12px; display:inline-flex; align-items:center; gap:6px;
+  padding:8px 12px; border-radius:3px; font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--txt); background:rgba(10,11,13,.74); border:1px solid var(--line2); backdrop-filter:blur(4px);
+  cursor:pointer; transition:color .14s ease, background .14s ease, border-color .14s ease;}
+.wz .kclass:hover {color:var(--ink); background:var(--fluo); border-color:var(--fluo);}
+.wz .kclass svg {opacity:.85;}
+.wz .kclass:hover svg {opacity:1;}
 .wz .axis {margin-bottom:24px;}
 .wz .axis:last-child {margin-bottom:0;}
 .wz .axis-head {display:flex; align-items:center; gap:12px; margin-bottom:13px;}
@@ -431,9 +458,9 @@
 /* VHS : interférences non-linéaires (moins plat) */
 .wz .vhs .flick { animation: wzflick .55s steps(2) infinite; }
 @keyframes wzflick { 0% { opacity: .5; } 20% { opacity: .12; } 38% { opacity: .72; } 55% { opacity: .28; } 74% { opacity: .6; } 90% { opacity: .08; } 100% { opacity: .45; } }
-/* audio-réactif : le glow vert de la sélection suit le beat (--pulse 0..1, basses) */
-.wz .keycard.sel, .wz .pad.sel, .wz .diff-tile.sel, .wz .fmt-tile.sel, .wz .opt.sel, .wz .knob.sel {
+/* audio-réactif des tuiles (hors carte de jeu) : glow léger qui suit le beat (--pulse). ATTÉNUÉ (il saturait).
+   La CARTE DE JEU, elle, n'a plus de glow pulsé ni de scale : c'est l'OSCILLOSCOPE (.scope) qui fait la réaction. */
+.wz .pad.sel, .wz .diff-tile.sel, .wz .fmt-tile.sel, .wz .opt.sel, .wz .knob.sel {
   box-shadow: 0 0 0 1px var(--fluo),
-    0 0 calc(6px + var(--pulse, 0) * 40px) rgba(166, 255, 0, calc(.12 + var(--pulse, 0) * .7));
+    0 0 calc(5px + var(--pulse, 0) * 22px) rgba(166, 255, 0, calc(.1 + var(--pulse, 0) * .32));
 }
-.wz .keycard.sel { transform: scale(calc(1 + var(--pulse, 0) * 0.02)); }

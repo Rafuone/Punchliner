@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
-import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon, REACTIONS, END_REACTIONS, CERTIF_TIER, UNLOCKS } from '../data';
+import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon, REACTIONS, END_REACTIONS, CERTIF_TIER, UNLOCKS, AVATARS } from '../data';
 import ConfigWizard from './ConfigWizard';
 import HubBrowse from './HubBrowse';
 import ChallengerReveal from './ChallengerReveal';
 import GrungeBg from '../GrungeBg';
-import { sfx, sfxLoopStop } from '../sfx';
+import { sfx, sfxLoopStop, playAirhorns } from '../sfx';
+import { handleSpotifyRedirect, hasSpotifySession, initSpotifyPlayer, spotifyPlay, spotifyPause, spotifyLogin, spotifyLogout } from '../spotify';
 
 // Fond du lobby (écran du code) : instru d'Alpha Wann. Crossfade vers la playlist (Bishok) à l'entrée du ConfigWizard.
 const LOBBY_TRACK = '/music/alphawann-philly-flingo.mp3';
@@ -68,7 +69,22 @@ export default function Host() {
   const [players, setPlayers] = useState<any[]>([]);
   const [settings, setSettings] = useState({ difficulty: 'normal', mode: 'multi', rounds: 8, mj: false, rebalance: 'comeback' });
   const [configuring, setConfiguring] = useState(false);
-  const [hubView, setHubView] = useState<null | 'roster' | 'trophies'>(null); // consultation roster / palmarès sur la TV
+  const [hubView, setHubView] = useState<null | 'roster' | 'trophies' | 'leaderboard' | 'radio'>(null); // consultation roster / palmarès / classement / radio sur la TV
+  // Easter egg : code Konami (↑↑↓↓←→←→ B A) → pluie des portraits + flash « CHEAT » sur la TV (visuel pur pour l'instant).
+  const [cheat, setCheat] = useState<any[] | null>(null);
+  const cheatTimer = useRef<any>(null);
+  function triggerCheat() {
+    const pool = AVATARS.filter((a) => a.img);
+    const drops = Array.from({ length: 56 }, () => { const a = pool[Math.floor(Math.random() * pool.length)]; return { id: a.id, x: Math.random() * 100, s: Math.round(46 + Math.random() * 74), d: +(Math.random() * 1.3).toFixed(2), dur: +(2 + Math.random() * 1.7).toFixed(2), rot: Math.round((Math.random() * 2 - 1) * 540) }; });
+    setCheat(drops); playAirhorns();
+    clearTimeout(cheatTimer.current); cheatTimer.current = setTimeout(() => setCheat(null), 4300);
+  }
+  useEffect(() => {
+    const seq = ['arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'b', 'a'];
+    let idx = 0;
+    const h = (e: KeyboardEvent) => { const k = e.key.toLowerCase(); if (k === seq[idx]) { idx++; if (idx === seq.length) { idx = 0; triggerCheat(); } } else idx = (k === seq[0] ? 1 : 0); };
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
+  }, []);
   const [powerFeed, setPowerFeed] = useState<any[]>([]); // pouvoirs activés (qui + quoi + effet) → mis en avant sur la TV
   const powerKeyRef = useRef(0);
   const [round, setRound] = useState<any>({ index: 0, total: 0, endsAt: 0, durationMs: 25000, mode: 'multi', difficulty: '' });
@@ -112,6 +128,43 @@ export default function Host() {
   const curRef = useRef(-1);
   const lobbyAudioRef = useRef<HTMLAudioElement | null>(null); // instru du lobby (Alpha Wann), en boucle
   const configuringRef = useRef(false);
+  const [spState, setSpState] = useState<string>('idle'); // Spotify : idle | connecting | ready | offline | premium_required | auth_error | error | no_token
+  const spReadyRef = useRef(false);                        // true = lecteur Spotify prêt
+  const [spotifyOn, setSpotifyOn] = useState(true);        // source Spotify activée (prioritaire si prête)
+  const [deezerOn, setDeezerOn] = useState(true);          // source Deezer activée (repli)
+  const spotifyOnRef = useRef(true);
+  const deezerOnRef = useRef(true);
+
+  // Lecture d'une manche : Spotify si activé+prêt (extrait au milieu contrôlé), sinon Deezer.
+  function playRound(d: any) {
+    const useSp = spotifyOnRef.current && spReadyRef.current && d?.sp?.title;
+    if (useSp) {
+      wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} // on laisse la main à Spotify
+      spotifyPlay(d.sp.title, d.sp.artist, (d.startAt || 0) > 0).then((ok) => { if (!ok && deezerOnRef.current) playPreview(d.preview, d.startAt); }); // introuvable sur Spotify → Deezer (si activé)
+    } else playPreview(d.preview, d.startAt);
+  }
+  // Bascule d'une source (au moins UNE reste toujours active → jamais de silence).
+  function toggleSpotify() {
+    if (spState !== 'ready') { if (spState === 'auth_error' || spState === 'error') spotifyLogout(); if (spState !== 'premium_required') spotifyLogin(); return; } // pas connecté → login
+    const nv = !spotifyOn; setSpotifyOn(nv); spotifyOnRef.current = nv;
+    if (!nv && !deezerOnRef.current) { setDeezerOn(true); deezerOnRef.current = true; } // Spotify off alors que Deezer off → on rallume Deezer
+  }
+  function toggleDeezer() {
+    const nv = !deezerOn;
+    if (!nv && !(spotifyOnRef.current && spState === 'ready')) return; // ne pas éteindre Deezer si Spotify n'est pas prêt à prendre le relais
+    setDeezerOn(nv); deezerOnRef.current = nv;
+  }
+
+  // Spotify : au montage, on absorbe un éventuel retour OAuth (?code=) puis on (re)connecte le lecteur si session.
+  useEffect(() => {
+    (async () => {
+      await handleSpotifyRedirect();
+      if (hasSpotifySession()) {
+        setSpState('connecting');
+        initSpotifyPlayer((s) => { setSpState(s); spReadyRef.current = (s === 'ready'); });
+      }
+    })();
+  }, []);
 
   function applyState(state: any) {
     setPlayers(state.players || []);
@@ -119,7 +172,7 @@ export default function Host() {
     if (state.phase === 'playing' && state.round) {
       setRound(state.round); setBuzzWinner(state.buzz?.winnerName || null); setPhase('playing');
       if (state.round.mode === 'rush' && state.round.scores) setPlayers(state.round.scores);
-      playPreview(state.round.preview, state.round.startAt);
+      playRound(state.round);
     } else if (state.phase === 'rushend') {
       setRushEnd(state.rushEnd); setPhase('rushend');
     } else if (state.phase === 'prep' && state.round) {
@@ -151,16 +204,16 @@ export default function Host() {
     socket.on('round:prep', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
     socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
-    socket.on('round:host', (d: any) => { setReveal(null); setAnswered([]); setBuzzWinner(null); setRound(d); setPhase('playing'); playPreview(d.preview, d.startAt); });
+    socket.on('round:host', (d: any) => { setReveal(null); setAnswered([]); setBuzzWinner(null); setRound(d); setPhase('playing'); playRound(d); });
     // Mode Cypher (contre-la-montre) : le son s'enchaîne automatiquement à chaque nouveau morceau
-    socket.on('rush:host', (d: any) => { setError(''); setRound(d); if (d.scores) setPlayers(d.scores); setPhase('playing'); playPreview(d.preview, d.startAt); });
+    socket.on('rush:host', (d: any) => { setError(''); setRound(d); if (d.scores) setPlayers(d.scores); setPhase('playing'); playRound(d); });
     socket.on('rush:state', (d: any) => { setRound(d); if (d.scores) setPlayers(d.scores); });
-    socket.on('rush:end', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); clearTimeout(audioRetryRef.current); setRushEnd(d); setPhase('rushend'); });
+    socket.on('rush:end', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); clearTimeout(audioRetryRef.current); setRushEnd(d); setPhase('rushend'); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
     socket.on('buzz:winner', (d: any) => setBuzzWinner(d.name));
     socket.on('buzz:open', () => setBuzzWinner(null));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // le son continue de tourner ; plus de "scratch" (jugé désagréable)
-    socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(computeUnlock(d)); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées
+    socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(computeUnlock(d)); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées
     socket.on('power:used', (d: any) => { setPowerFeed((f) => [...f.slice(-4), { ...d, key: powerKeyRef.current++ }]); sfx('scratch'); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('reaction', (d: any) => {
@@ -218,6 +271,7 @@ export default function Host() {
   const posRef = useRef(-1);
   const bassRef = useRef(0);        // niveau de basses (0..1) → "beat" pour le glow
   const barsRef = useRef<number[]>([0, 0, 0, 0, 0, 0, 0]); // bandes de l'égaliseur (0..1)
+  const waveRef = useRef<Uint8Array>(new Uint8Array(0)); // forme d'onde temporelle (oscilloscope) — 128 = silence
   const acRef = useRef<any>(null);  // AudioContext + analyser
   const dockEqRef = useRef<HTMLSpanElement | null>(null);  // barres EQ du dock (peintes en RAF)
   function pickTrack(cur: number) {
@@ -232,11 +286,13 @@ export default function Host() {
       const AC = (window as any).AudioContext || (window as any).webkitAudioContext; if (!AC) return;
       const ctx = new AC(); const src = ctx.createMediaElementSource(a); const an = ctx.createAnalyser();
       an.fftSize = 256; src.connect(an); an.connect(ctx.destination);
-      acRef.current = { ctx, an, data: new Uint8Array(an.frequencyBinCount) };
+      acRef.current = { ctx, an, data: new Uint8Array(an.frequencyBinCount), wave: new Uint8Array(an.fftSize) };
+      waveRef.current = acRef.current.wave; // partagé (rempli à chaque frame) → l'oscilloscope du ConfigWizard le lit
       const NB = 7, USABLE = 96; // on ignore le très haut du spectre (souvent muet)
       const loop = () => {
         const o = acRef.current; if (!o) return;
         o.an.getByteFrequencyData(o.data);
+        o.an.getByteTimeDomainData(o.wave); // forme d'onde brute pour l'oscilloscope
         // "beat" : énergie des basses (bins 1..7)
         let s = 0; for (let i = 1; i < 8; i++) s += o.data[i];
         bassRef.current = Math.min(1, s / (7 * 205));
@@ -392,7 +448,18 @@ export default function Host() {
 
   return (
     <>
-    {hubView && <HubBrowse mode={hubView} onClose={() => setHubView(null)} />}
+    {hubView && <HubBrowse mode={hubView} onClose={() => setHubView(null)} onRadioPlay={() => { musicOnRef.current = false; menuAudioRef.current?.pause(); const la = lobbyAudioRef.current; if (la) la.pause(); }} />}
+    {cheat && (
+      <div className="cheat-fx" aria-hidden="true">
+        <div className="cheat-flash" />
+        {cheat.map((p, i) => (
+          <img key={i} className="cheat-p" src={`/avatars/${p.id}.png`}
+            style={{ left: p.x + '%', width: p.s, height: p.s, animationDelay: p.d + 's', animationDuration: p.dur + 's', ['--rot' as any]: p.rot + 'deg' }}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+        ))}
+        <div className="cheat-title"><span className="ct-big">CHEAT</span><span className="ct-sub">tous les rappeurs dans la place</span></div>
+      </div>
+    )}
     {showReveal && pendingUnlock && <ChallengerReveal charId={pendingUnlock} onClose={() => { setShowReveal(false); setPendingUnlock(null); }} />}
     {((phase === 'lobby' && !configuring) || ['prep', 'countdown', 'playing', 'reveal', 'final', 'rushend'].includes(phase)) && <GrungeBg />}
     {reactions.length > 0 && (
@@ -471,7 +538,8 @@ export default function Host() {
           onStart={startWizard}
           onBack={() => setConfiguring(false)}
           onOpenHub={setHubView}
-          music={{ nowPlaying, musicOn, onToggle: toggleMusic, onNext: nextTrack, onPrev: prevTrack, bassRef, barsRef, tracks: MENU_TRACKS }}
+          music={{ nowPlaying, musicOn, onToggle: toggleMusic, onNext: nextTrack, onPrev: prevTrack, bassRef, barsRef, waveRef, tracks: MENU_TRACKS }}
+          spotify={{ state: spState, spotifyOn, deezerOn, onToggleSpotify: toggleSpotify, onToggleDeezer: toggleDeezer }}
         />
       )}
 
@@ -692,28 +760,28 @@ export default function Host() {
             </div>
           )}
           {res.length > 1 && (
-            <div style={{ width: '100%', maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="board tvbig" style={{ maxWidth: 620 }}>
               {res.map((r: any, i: number) => (
-                <div key={r.id} className="row" style={{ gap: 12, alignItems: 'center', background: 'rgba(8,9,12,.5)', border: '1px solid var(--line2)', borderRadius: 10, padding: '8px 14px' }}>
-                  <b style={{ fontFamily: 'var(--disp)', color: 'var(--muted2)', width: 22 }}>{i + 1}</b>
-                  <Med avatarId={r.avatar} size={28} />
-                  <span style={{ fontFamily: 'var(--disp)', flex: 1 }}>{r.name}</span>
-                  <span style={{ color: 'var(--muted)', fontSize: 13 }}>#{r.rank} mond.</span>
-                  <b style={{ fontFamily: 'var(--disp)', color: 'var(--fluo)' }}>{fmtAud(r.score)}</b>
+                <div className={`prow ${i === 0 ? 'lead' : ''}`} key={r.id} style={{ animation: `rowin .32s ease ${i * 0.05}s both` }}>
+                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={r.avatar} size={46} />{r.name}</span>
+                  <span className="row" style={{ gap: 16, alignItems: 'baseline' }}>
+                    <span className="gain zero">{r.tracks} ✓</span>
+                    <span className="pts">{fmtAud(r.score)}</span>
+                  </span>
                 </div>
               ))}
             </div>
           )}
           <span className="eyebrow" style={{ marginTop: 8 }}>Classement mondial — Top 10</span>
-          <div style={{ width: '100%', maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="board" style={{ maxWidth: 560 }}>
             {top.length === 0 && <p className="feedback" style={{ color: 'var(--muted)' }}>Premier score enregistré — le classement démarre !</p>}
             {top.map((t: any, i: number) => (
-              <div key={i} className="row" style={{ gap: 12, alignItems: 'center', padding: '6px 14px', borderRadius: 8, border: '1px solid ' + (i === 0 ? 'rgba(255,215,107,.5)' : 'var(--line)') }}>
-                <b style={{ fontFamily: 'var(--disp)', color: i === 0 ? '#ffd76b' : 'var(--muted2)', width: 26 }}>{i + 1}</b>
-                <Med avatarId={t.avatar} size={26} />
-                <span style={{ fontFamily: 'var(--disp)', flex: 1 }}>{t.name}</span>
-                <span style={{ color: 'var(--muted)', fontSize: 12 }}>{t.tracks} ✓</span>
-                <b style={{ fontFamily: 'var(--disp)', color: i === 0 ? '#ffd76b' : 'var(--txt)' }}>{fmtAud(t.score)}</b>
+              <div className={`prow ${i === 0 ? 'lead' : ''}`} key={i}>
+                <span className="who"><span className="rk">{i + 1}</span><Med avatarId={t.avatar} size={30} />{t.name}</span>
+                <span className="row" style={{ gap: 12, alignItems: 'baseline' }}>
+                  <span className="gain zero">{t.tracks} ✓</span>
+                  <span className="pts">{fmtAud(t.score)}</span>
+                </span>
               </div>
             ))}
           </div>

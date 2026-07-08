@@ -3,23 +3,70 @@
 // tout le roster en grille (aligné à gauche, zéro scroll). Slots verrouillés cliquables → objectif à
 // accomplir. Pas de P1/P2, pas de silhouette SVG fantôme.
 import { useState, useRef, useEffect } from 'react';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, EPITHETS, AWARDS_INFO, awardIcon, LOCKED_SLOTS, bioOf } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, EPITHETS, AWARDS_INFO, awardIcon, LOCKED_SLOTS, bioOf, fmtAud } from '../data';
+import { socket } from '../socket';
+import GrungeBg from '../GrungeBg';
+import { hasSpotifySession, spotifyLogin, searchPlaylists, spotifyPlayContext, spotifyTogglePlay, spotifyNext, onPlayerState } from '../spotify';
+
+// Stations radio = requêtes de recherche (pas d'IDs codés en dur → jamais de playlist morte). Rap FR.
+const RADIO_STATIONS = [
+  { label: 'Rap Français', q: 'rap français' },
+  { label: 'Classiques', q: 'classiques rap français' },
+  { label: 'Drill FR', q: 'drill française' },
+  { label: 'Nouveautés', q: 'nouveauté rap fr' },
+  { label: 'Rap Chill', q: 'chill rap français' },
+  { label: 'Marseille', q: 'rap marseille' },
+  { label: '90s / 2000s', q: 'rap français 2000' },
+  { label: 'Égotrip', q: 'egotrip rap fr' },
+];
 
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
 const cats = [...CATEGORY_ORDER, ...Array.from(new Set(AVATARS.map((a) => a.cat))).filter((c) => !CATEGORY_ORDER.includes(c))];
 const ROSTER = [...cats.flatMap((cat) => AVATARS.filter((a) => a.cat === cat && !a.locked)), ...AVATARS.filter((a) => a.locked)]; // par catégorie, puis les déblocables (révélés, à part) à la fin
 
-export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophies'; onClose: () => void }) {
+export default function HubBrowse({ mode, onClose, onRadioPlay }: { mode: 'roster' | 'trophies' | 'leaderboard' | 'radio'; onClose: () => void; onRadioPlay?: () => void }) {
   const [selId, setSelId] = useState(AVATARS[0].id);
   const figRef = useRef<HTMLDivElement>(null);
   const sel = avatarById(selId) || AVATARS[0];
   const lockedSel = LOCKED_SLOTS.find((s) => s.id === selId) || null;
   const bio = bioOf(selId);
+  const [board, setBoard] = useState<any[]>([]); // classement mondial Cypher (chargé quand mode = leaderboard)
+  const [radioResults, setRadioResults] = useState<any[]>([]); // playlists trouvées (station ou recherche)
+  const [radioQuery, setRadioQuery] = useState('');
+  const [radioLoading, setRadioLoading] = useState(false);
+  const [radioActiveUri, setRadioActiveUri] = useState<string>(''); // playlist en cours (surlignée)
+  const [nowPlaying, setNowPlaying] = useState<any>(null); // {paused,name,artist,image}
+  const [spReady, setSpReady] = useState(false);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
   }, []);
+  useEffect(() => {
+    if (mode !== 'leaderboard') return;
+    socket.emit('leaderboard:get', { n: 30 }, (r: any) => { if (r?.ok) setBoard(r.top || []); });
+  }, [mode]);
+  // Radio : abonnement au now-playing + 1re station chargée à l'ouverture
+  useEffect(() => {
+    if (mode !== 'radio') return;
+    const rdy = hasSpotifySession(); setSpReady(rdy); // session (token) suffit pour AFFICHER + chercher ; le device n'est requis que pour JOUER
+    const off = onPlayerState((s) => setNowPlaying(s));
+    if (rdy) runStation(RADIO_STATIONS[0]); // charge la 1re station tout de suite (la recherche marche avec le token)
+    return off;
+  }, [mode]);
+  async function runSearch(q: string) {
+    if (!q.trim()) return;
+    setRadioLoading(true); setRadioQuery(q);
+    const res = await searchPlaylists(q, 12);
+    setRadioResults(res); setRadioLoading(false);
+  }
+  function runStation(st: { label: string; q: string }) { runSearch(st.q); }
+  async function playPlaylist(p: { uri: string }) {
+    const ok = await spotifyPlayContext(p.uri);
+    if (ok) { setRadioActiveUri(p.uri); onRadioPlay?.(); } // coupe l'instru du menu (évite le double son)
+  }
+  // avatar rond réutilisable (même markup/classe .med que l'écran de jeu) — GROS car affiché sur TV
+  const avNode = (id?: string) => { const a = avatarById(id || ''); return <span className="med" style={{ width: 54, height: 54, fontSize: 20, background: a?.color || 'linear-gradient(150deg,#7C5CFF,#432E8C)' }}>{a?.img ? <img src={`/avatars/${a.id}.png`} alt="" onError={hideOnErr} /> : initials(a?.name || id || '?')}</span>; };
 
   // glitch VHS (déchirures de tracking) sur le portrait
   useEffect(() => {
@@ -89,6 +136,99 @@ export default function HubBrowse({ mode, onClose }: { mode: 'roster' | 'trophie
             ))}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (mode === 'leaderboard') {
+    return (
+      <div className="hub-overlay">
+        <GrungeBg />
+        <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
+          <div className="topbar">
+            <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={onClose}>← Retour au hub</button>
+            <h1 className="wm" style={{ fontSize: 22 }}>CLASSEMENT <span className="d">MONDIAL</span></h1>
+            <span className="gpill">Cypher</span>
+          </div>
+          <p className="muted" style={{ textAlign: 'center', margin: '2px 0 30px', fontSize: 13 }}>Le contre-la-montre — meilleurs scores, tous salons confondus.</p>
+          {board.length === 0 ? (
+            <p className="muted" style={{ textAlign: 'center', marginTop: 70, fontSize: 'clamp(18px,2vw,24px)' }}>Aucun score pour l'instant.<br />Lance un <b style={{ color: 'var(--fluo)' }}>Cypher</b> pour ouvrir le classement.</p>
+          ) : (
+            <div className="board tvbig" style={{ maxWidth: 940, margin: '0 auto' }}>
+              {board.map((t: any, i: number) => (
+                <div className={`prow ${i === 0 ? 'lead' : ''}`} key={i} style={{ animation: `rowin .3s ease ${Math.min(i, 12) * 0.035}s both` }}>
+                  <span className="who"><span className="rk">{i + 1}</span>{avNode(t.avatar)}{t.name}</span>
+                  <span className="row" style={{ gap: 24, alignItems: 'baseline' }}>
+                    <span className="gain zero" style={{ fontSize: 'clamp(16px,1.7vw,22px)' }}>{t.tracks} ✓</span>
+                    <span className="pts">{fmtAud(t.score)}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'radio') {
+    return (
+      <div className="hub-overlay">
+        <GrungeBg />
+        <div className="wrap" style={{ position: 'relative', zIndex: 1, paddingBottom: nowPlaying ? 108 : 24 }}>
+          <div className="topbar">
+            <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={onClose}>← Retour au hub</button>
+            <h1 className="wm" style={{ fontSize: 22 }}>RADIO <span className="d">PUNCHLINR</span></h1>
+            <span className="gpill">Spotify</span>
+          </div>
+          <p className="muted" style={{ textAlign: 'center', margin: '2px 0 20px', fontSize: 13 }}>De l'ambiance pour le salon — choisis une station ou cherche une playlist.</p>
+
+          {!spReady ? (
+            <div className="center" style={{ marginTop: 50, gap: 14 }}>
+              <p className="muted" style={{ fontSize: 15 }}>La radio a besoin de <b style={{ color: 'var(--txt)' }}>Spotify (Premium)</b> connecté.</p>
+              <button className="btn warm" onClick={() => spotifyLogin()}>Connecter Spotify</button>
+            </div>
+          ) : (
+            <>
+              <div className="radio-bar">
+                {RADIO_STATIONS.map((st) => (
+                  <button key={st.q} className={`radio-chip ${radioQuery === st.q ? 'on' : ''}`} onClick={() => runStation(st)}>{st.label}</button>
+                ))}
+                <form className="radio-search" onSubmit={(e) => { e.preventDefault(); runSearch(radioQuery); }}>
+                  <input className="field" placeholder="Rechercher une playlist…" value={radioQuery} onChange={(e) => setRadioQuery(e.target.value)} />
+                </form>
+              </div>
+              {radioLoading ? (
+                <p className="muted" style={{ textAlign: 'center', marginTop: 36 }}>Recherche…</p>
+              ) : radioResults.length === 0 ? (
+                <p className="muted" style={{ textAlign: 'center', marginTop: 36 }}>Choisis une station ci-dessus.</p>
+              ) : (
+                <div className="radio-grid">
+                  {radioResults.map((p: any) => (
+                    <button key={p.uri} className={`radio-card ${radioActiveUri === p.uri ? 'on' : ''}`} onClick={() => playPlaylist(p)} title={p.name}>
+                      <div className="radio-cover">{p.image ? <img src={p.image} alt="" /> : <span>♪</span>}<span className="radio-play">▶</span></div>
+                      <div className="radio-name">{p.name}</div>
+                      <div className="radio-owner">{p.owner}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {nowPlaying && (
+          <div className="radio-player">
+            <div className="rp-track">
+              {nowPlaying.image && <img src={nowPlaying.image} alt="" />}
+              <div className="rp-meta"><div className="rp-name">{nowPlaying.name}</div><div className="rp-artist">{nowPlaying.artist}</div></div>
+            </div>
+            <div className="rp-controls">
+              <button className="rp-btn" onClick={() => spotifyTogglePlay()} aria-label={nowPlaying.paused ? 'Lecture' : 'Pause'}>{nowPlaying.paused ? '▶' : '❚❚'}</button>
+              <button className="rp-btn" onClick={() => spotifyNext()} aria-label="Suivant">⏭</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
