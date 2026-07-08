@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
-import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon, REACTIONS, END_REACTIONS, CERTIF_TIER } from '../data';
+import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon, REACTIONS, END_REACTIONS, CERTIF_TIER, UNLOCKS } from '../data';
 import ConfigWizard from './ConfigWizard';
 import HubBrowse from './HubBrowse';
+import ChallengerReveal from './ChallengerReveal';
 import GrungeBg from '../GrungeBg';
 import { sfx, sfxLoopStop } from '../sfx';
 
@@ -20,6 +21,21 @@ function fitName(el: HTMLDivElement | null, maxW: number, base: number, min: num
   el.style.whiteSpace = 'nowrap'; el.style.fontSize = base + 'px';
   const w = el.scrollWidth;
   if (w > maxW) el.style.fontSize = Math.max(min, Math.floor(base * maxW / w)) + 'px';
+}
+
+// Un rappeur a-t-il été DÉBLOQUÉ cette partie ? (conditions UNLOCKS, testées par joueur) → id du perso, sinon null.
+function computeUnlock(d: any): string | null {
+  const activeBoard = (d.scores || []).filter((p: any) => !p.isMJ);
+  const rounds = d.rounds || 0;
+  const diff = d.settings?.difficulty; const mode = d.settings?.mode;
+  for (let i = 0; i < activeBoard.length; i++) {
+    const p = activeBoard[i];
+    const myAwards = (d.awards || []).filter((a: any) => a.playerId === p.id).map((a: any) => a.id);
+    const ctx = { won: i === 0, rank: i + 1, certifShort: certif(p.score, rounds).short, awardIds: myAwards, difficulty: diff, mode, rounds };
+    const hit = UNLOCKS.find((u) => u.check(ctx as any));
+    if (hit) return hit.id;
+  }
+  return null;
 }
 
 function Med({ avatarId, size = 38 }: { avatarId?: string; size?: number }) {
@@ -70,6 +86,8 @@ export default function Host() {
   const troTimer = useRef<any>(null);
   const troCdRef = useRef<any>(null);
   const [series, setSeries] = useState<any>(null);       // cumul de la série (multi-parties)
+  const [pendingUnlock, setPendingUnlock] = useState<string | null>(null); // rappeur débloqué cette partie (arrivée du Challenger)
+  const [showReveal, setShowReveal] = useState(false);   // l'overlay d'arrivée est en cours
   const [finalRounds, setFinalRounds] = useState(0);     // nb de manches de la partie (pour la certif)
   const [rushEnd, setRushEnd] = useState<any>(null);     // fin de run Cypher (résultats + top 10 mondial)
   const [waiting, setWaiting] = useState(0);             // joueurs en salle d'attente
@@ -142,7 +160,7 @@ export default function Host() {
     socket.on('buzz:winner', (d: any) => setBuzzWinner(d.name));
     socket.on('buzz:open', () => setBuzzWinner(null));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // le son continue de tourner ; plus de "scratch" (jugé désagréable)
-    socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final'); }); // musique de podium retirée ; on coupe proprement (le watchdog ne relance rien)
+    socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(computeUnlock(d)); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées
     socket.on('power:used', (d: any) => { setPowerFeed((f) => [...f.slice(-4), { ...d, key: powerKeyRef.current++ }]); sfx('scratch'); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('reaction', (d: any) => {
@@ -375,6 +393,7 @@ export default function Host() {
   return (
     <>
     {hubView && <HubBrowse mode={hubView} onClose={() => setHubView(null)} />}
+    {showReveal && pendingUnlock && <ChallengerReveal charId={pendingUnlock} onClose={() => { setShowReveal(false); setPendingUnlock(null); }} />}
     {((phase === 'lobby' && !configuring) || ['prep', 'countdown', 'playing', 'reveal', 'final', 'rushend'].includes(phase)) && <GrungeBg />}
     {reactions.length > 0 && (
       <div className="reactfloat">
@@ -806,11 +825,15 @@ export default function Host() {
                 <button className="btn warm" style={{ maxWidth: 300 }} disabled={troBusy} onClick={() => troRunSlot(troIdx + 1)}>{troIdx + 2 >= awards.length ? 'Dernier trophée →' : 'Suivant →'}</button>
               </div>
             ) : (!troBusy && (
-              <div className="row" style={{ gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
-                <button className="btn warm" onClick={() => relance(true)}>Relancer une partie →</button>
-                <button className="btn" onClick={() => relance(false)}>Retour au salon</button>
-                {multi && <button className="btn ghost" onClick={resetSeries}>Nouvelle série</button>}
-              </div>
+              pendingUnlock ? (
+                <button className="btn warm" style={{ maxWidth: 460, background: 'linear-gradient(90deg,#c0182b,#ff5a1f)', color: '#fff', boxShadow: '0 0 26px -6px #ff5a1f' }} onClick={() => setShowReveal(true)}>🔓 Un nouveau challenger débloqué — Découvrir →</button>
+              ) : (
+                <div className="row" style={{ gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
+                  <button className="btn warm" onClick={() => relance(true)}>Relancer une partie →</button>
+                  <button className="btn" onClick={() => relance(false)}>Retour au salon</button>
+                  {multi && <button className="btn ghost" onClick={resetSeries}>Nouvelle série</button>}
+                </div>
+              )
             ))}
           </div>
           )}
