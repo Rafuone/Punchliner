@@ -10,10 +10,11 @@ type Props = { poolSize: number; roomCode: string; players: number; playerList?:
 
 /* ====== données (architecture 5 étapes) ====== */
 const GAMES = [
-  { id: 'blind', name: 'Blind Test', cat: 'Station · Live', soon: false, desc: 'Tout le monde répond en même temps. Le plus rapide et juste rafle la mise.' },
-  { id: 'buzz', name: 'Buzzer', cat: 'Station · Duel', soon: false, desc: 'Le premier qui buzze prend la main. Silence radio pour les autres.' },
-  { id: 'quiz', name: 'Quiz', cat: 'Station · Culture', soon: false, desc: 'Blazes, années, groupes, villes, albums… la culture rap FR en QCM.' },
-  { id: 'rush', name: 'Cypher', cat: 'Station · Solo', soon: false, desc: 'Les sons s’enchaînent sans temps mort. Chaque bonne réponse rallonge le chrono — tiens le plus longtemps, décroche le record.' },
+  { id: 'blind', name: 'Blind Test', cat: 'Station · Live', family: 'multi', soon: false, desc: 'Tout le monde répond en même temps. Le plus rapide et juste rafle la mise.' },
+  { id: 'buzz', name: 'Buzzer', cat: 'Station · Duel', family: 'multi', soon: false, desc: 'Le premier qui buzze prend la main. Silence radio pour les autres.' },
+  { id: 'quiz', name: 'Quiz', cat: 'Station · Culture', family: 'multi', soon: false, desc: 'Blazes, années, groupes, villes, albums… la culture rap FR en QCM.' },
+  { id: 'rush', name: 'Cypher', cat: 'Station · Chrono', family: 'solo', soon: false, desc: 'Les sons s’enchaînent sans temps mort. Chaque bonne réponse rallonge le chrono — tiens le plus longtemps, décroche le record.' },
+  { id: 'adventure', name: 'Aventure', cat: 'Station · Campagne', family: 'solo', soon: true, desc: 'Un mode campagne solo, à débloquer étape par étape. Bientôt.' },
 ];
 const ERAS = [
   { id: 'all', big: '∞', lab: 'Toutes', sub: 'époques' },
@@ -80,6 +81,7 @@ const KEYART: Record<string, string> = {
   buzz: `<svg viewBox="0 0 400 560" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><rect width="400" height="560" fill="#111214"/><g transform="translate(200 300)"><ellipse cx="0" cy="118" rx="120" ry="34" fill="rgba(0,0,0,.5)"/><ellipse cx="0" cy="66" rx="118" ry="46" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.45)" stroke-width="2.5"/><path d="M-118 66v-18a118 46 0 0 1 236 0v18" fill="rgba(0,0,0,.4)" stroke="rgba(255,255,255,.35)" stroke-width="2"/><ellipse cx="0" cy="34" rx="96" ry="40" fill="rgba(255,255,255,.1)" stroke="#fff" stroke-width="3"/><ellipse cx="0" cy="26" rx="70" ry="30" fill="rgba(255,255,255,.16)" stroke="rgba(255,255,255,.6)" stroke-width="2"/><ellipse cx="-22" cy="16" rx="26" ry="12" fill="rgba(255,255,255,.3)"/><g stroke="#fff" stroke-width="3.5" stroke-linecap="round" opacity=".8"><line x1="130" y1="-30" x2="168" y2="-46"/><line x1="140" y1="6" x2="182" y2="4"/><line x1="130" y1="42" x2="168" y2="56"/><line x1="-130" y1="-30" x2="-168" y2="-46"/><line x1="-140" y1="6" x2="-182" y2="4"/><line x1="-130" y1="42" x2="-168" y2="56"/></g></g></svg>`,
   quiz: `<svg viewBox="0 0 400 560" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><rect width="400" height="560" fill="#131315"/><g transform="translate(200 250)"><g transform="rotate(-8) translate(-150 -6)"><rect x="-42" y="-52" width="84" height="104" rx="4" fill="rgba(0,0,0,.5)" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/><circle r="26" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/><circle r="5" fill="rgba(255,255,255,.16)"/></g><g transform="rotate(8) translate(150 -6)"><rect x="-42" y="-52" width="84" height="104" rx="4" fill="rgba(0,0,0,.5)" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/><circle r="26" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1.5"/><circle r="5" fill="rgba(255,255,255,.16)"/></g><rect x="-72" y="-96" width="144" height="192" rx="4" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.3)" stroke-width="2.5"/><text x="0" y="34" text-anchor="middle" font-family="'Clash Display',sans-serif" font-size="130" font-weight="700" fill="rgba(255,255,255,.7)">?</text></g></svg>`,
   rush: `<svg viewBox="0 0 400 560" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><rect width="400" height="560" fill="#121315"/><g transform="translate(200 272)"><rect x="-22" y="-178" width="44" height="22" rx="5" fill="rgba(255,255,255,.5)"/><line x1="0" y1="-156" x2="0" y2="-130" stroke="rgba(255,255,255,.5)" stroke-width="7" stroke-linecap="round"/><circle r="120" fill="rgba(0,0,0,.4)" stroke="rgba(255,255,255,.5)" stroke-width="3"/><circle r="104" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="1.5"/><g stroke="rgba(255,255,255,.5)" stroke-width="3" stroke-linecap="round"><line x1="0" y1="-110" x2="0" y2="-92"/><line x1="0" y1="110" x2="0" y2="92"/><line x1="-110" y1="0" x2="-92" y2="0"/><line x1="110" y1="0" x2="92" y2="0"/></g><line x1="0" y1="0" x2="0" y2="-80" stroke="#fff" stroke-width="6" stroke-linecap="round"/><line x1="0" y1="0" x2="56" y2="32" stroke="#fff" stroke-width="5" stroke-linecap="round"/><circle r="9" fill="#fff"/></g></svg>`,
+  adventure: `<svg viewBox="0 0 400 560" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><rect width="400" height="560" fill="#121315"/><g stroke="rgba(255,255,255,.5)" stroke-width="4" fill="none" stroke-linecap="round" stroke-dasharray="2 15"><path d="M120 480 C 40 380, 340 350, 210 255 C 90 180, 320 150, 215 78"/></g><g fill="rgba(255,255,255,.55)"><circle cx="120" cy="480" r="10"/><circle cx="210" cy="255" r="7"/></g><g transform="translate(215 78)"><path d="M0 6 v-52" stroke="rgba(255,255,255,.6)" stroke-width="4" stroke-linecap="round"/><path d="M0 -46 h36 l-10 12 10 12 h-36 z" fill="rgba(255,255,255,.6)"/></g></svg>`,
 };
 const vhsOverlay = '<div class="vhs"><div class="lines"></div><div class="band"></div><div class="flick"></div></div>';
 // crunch/grésille fin par-dessus la vidéo Blind Test (reprise de la DA showcase perso : scanlines + bruit chroma + bande + voile froid)
@@ -277,32 +279,40 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
               <p className="act-sub">{STEP_SUB[step]}</p>
             </div>
 
-            {step === 0 && (
-              <>
-              <div className="games-stage">
-                {GAMES.map((g) => (
-                  <button key={g.id} ref={g.id === 'blind' ? blindCardRef : undefined} className={`keycard pick g-${g.id} ${game === g.id ? 'sel on' : ''} ${g.soon ? 'locked' : ''}`} onClick={() => !g.soon && setGame(g.id)}>
-                    <span {...H(bracketsSvg)} />
-                    <div className="kclip">
-                      <div className="keyart" {...H(KEYART[g.id])} />
-                      {g.id === 'blind' && (
-                        <>
-                          <video className="keyvid" ref={blindVidRef} src="/blind-test.mp4" muted loop playsInline preload="auto" disablePictureInPicture />
-                          <video className="keyvid-tear" ref={blindTearRef} src="/blind-test.mp4" muted loop playsInline preload="auto" aria-hidden="true" disablePictureInPicture />
-                          <div className="keyvid-fx" {...H(keyvidFx)} />
-                        </>
-                      )}
-                      <span {...H(vhsOverlay)} />
-                      <div className="kshade" />
-                    </div>
-                    <div className="reccue"><i />REC</div>
-                    {g.soon ? <span className="badge-soon"><span>Bientôt</span></span> : <span className="badge-live"><span><span className="dot" style={{ width: 6, height: 6 }} />Jouable</span></span>}
-                    <div className="kbody"><div className="kcat">{g.cat}</div><div className="kname">{g.name}</div><div className="kdesc">{g.desc}</div></div>
-                  </button>
-                ))}
-              </div>
-              </>
-            )}
+            {step === 0 && (() => {
+              const gameCard = (g: any) => (
+                <button key={g.id} ref={g.id === 'blind' ? blindCardRef : undefined} className={`keycard pick g-${g.id} ${game === g.id ? 'sel on' : ''} ${g.soon ? 'locked' : ''}`} onClick={() => !g.soon && setGame(g.id)}>
+                  <span {...H(bracketsSvg)} />
+                  <div className="kclip">
+                    <div className="keyart" {...H(KEYART[g.id] || '')} />
+                    {g.id === 'blind' && (
+                      <>
+                        <video className="keyvid" ref={blindVidRef} src="/blind-test.mp4" muted loop playsInline preload="auto" disablePictureInPicture />
+                        <video className="keyvid-tear" ref={blindTearRef} src="/blind-test.mp4" muted loop playsInline preload="auto" aria-hidden="true" disablePictureInPicture />
+                        <div className="keyvid-fx" {...H(keyvidFx)} />
+                      </>
+                    )}
+                    <span {...H(vhsOverlay)} />
+                    <div className="kshade" />
+                  </div>
+                  <div className="reccue"><i />REC</div>
+                  {g.soon ? <span className="badge-soon"><span>Bientôt</span></span> : <span className="badge-live"><span><span className="dot" style={{ width: 6, height: 6 }} />Jouable</span></span>}
+                  <div className="kbody"><div className="kcat">{g.cat}</div><div className="kname">{g.name}</div><div className="kdesc">{g.desc}</div><span className="kfam">{g.family === 'solo' ? '1 joueur · record' : '2 à 8 · soirée'}</span></div>
+                </button>
+              );
+              return (
+                <div className="games-groups">
+                  <div className="games-group">
+                    <div className="games-glabel">Multijoueur <span>· la soirée à plusieurs</span></div>
+                    <div className="games-stage">{GAMES.filter((g) => g.family === 'multi').map(gameCard)}</div>
+                  </div>
+                  <div className="games-group">
+                    <div className="games-glabel">Solo <span>· records &amp; campagne</span></div>
+                    <div className="games-stage">{GAMES.filter((g) => g.family === 'solo').map(gameCard)}</div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {step === 1 && (
               <>

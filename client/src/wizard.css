@@ -128,11 +128,20 @@
 @media(prefers-reduced-motion:reduce) {
   .wz .pick .brackets, .wz .pick .brackets b, .wz .pick .p1tag {transition:none;}
 }
-/* 2 cartes par ligne (symétrie gaming : 2 ou 4 par ligne, JAMAIS 3) → 4 modes = 2×2 */
-.wz .games-stage {display:grid; grid-template-columns:repeat(2,1fr); gap:clamp(12px,1.4vw,20px); align-items:stretch;}
+/* étape « LE JEU » : deux familles (Multijoueur / Solo), TOUT visible sans scroll */
+.wz .games-groups {display:flex; flex-direction:column; gap:clamp(10px,2.2vh,22px);}
+.wz .games-glabel {display:flex; align-items:baseline; gap:8px; font-family:var(--disp); font-weight:700; text-transform:uppercase; letter-spacing:.14em; font-size:clamp(12px,1.4vw,15px); color:var(--fluo); padding-bottom:8px; border-bottom:1px solid var(--line2); margin-bottom:clamp(8px,1.4vh,14px);}
+.wz .games-glabel span {font-family:var(--ui); font-weight:700; font-size:.78em; letter-spacing:.02em; text-transform:none; color:var(--muted2);}
+.wz .games-stage {display:flex; justify-content:center; gap:clamp(12px,1.4vw,20px); flex-wrap:wrap;}
+.wz .games-groups .keycard {flex:0 0 clamp(168px,24vw,272px); min-height:0; height:clamp(142px,25vh,258px);}   /* cartes compactes → 2 rangées + en-têtes tiennent à l'écran */
+.wz .games-groups .keycard .kbody {padding:clamp(9px,1vw,15px);}
+.wz .games-groups .keycard .kcat {margin-bottom:4px;}
+.wz .games-groups .keycard .kname {font-size:clamp(20px,2vw,30px);}
+.wz .games-groups .keycard .kdesc {display:none;}   /* carte courte : cat + nom + famille suffisent (0 scroll) */
+.wz .keycard .kfam {display:inline-block; margin-top:5px; font-family:var(--ui); font-weight:800; font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted2);}
+.wz .keycard.sel .kfam {color:var(--fluo);}
 @media(max-width:720px) {
-  .wz .games-stage {grid-template-columns:1fr; gap:12px;}
-  .wz .keycard {min-height:clamp(200px,30vh,300px);}
+  .wz .games-groups .keycard {flex-basis:100%; height:clamp(150px,24vh,220px);}
 }
 .wz .keycard {position:relative; display:flex; flex-direction:column; text-align:left; width:100%; cursor:pointer; color:var(--txt);
   border:1px solid var(--line2); min-height:clamp(360px,52vh,560px);
