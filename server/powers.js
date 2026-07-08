@@ -13,7 +13,7 @@
 //   sustain{amount,rounds}(revenu garanti pendant N manches — echo/slowburn).
 export const POWERS = {
   // ===== S — légendes / élite =====
-  booba:      { name: 'DUC',                    type: 'steal',    amount: 16000 },
+  booba:      { name: 'DUC',                    type: 'steal',    amount: 14000, shield: true }, // vole le meneur ET devient intouchable ce tour (utile même quand Booba mène → il peut enfin défendre)
   iam:        { name: "L'École du Micro",       type: 'safety',   floor: 24000, self: 9000 },
   solaar:     { name: 'Le Prince des Mots',     type: 'nofault',  self: 17000 },
   ntm:        { name: 'Police',                 type: 'sabotage', targets: 2 },

@@ -51,7 +51,7 @@ export const CERTIF_TIER: Record<string, number> = { 'Espoir': 0, 'Or': 1, 'Plat
 
 export const AVATARS: Avatar[] = [
   // ---- Légende (pionniers) — tier S ----
-  { id: 'booba', name: 'Booba', color: '#3A2F52', cat: 'Légende', img: true, power: { name: 'DUC', effect: 'Le Duc rafle 22 000 auditeurs au n°1.' }, stats: { flow: 4, punch: 5, tech: 4, aura: 5 } },
+  { id: 'booba', name: 'Booba', color: '#3A2F52', cat: 'Légende', img: true, power: { name: 'DUC', effect: 'Rafle 14 000 auditeurs au meneur ET devient intouchable ce tour (vol, sabotage et dîme sans effet).' }, stats: { flow: 4, punch: 5, tech: 4, aura: 5 } },
   { id: 'iam', name: 'IAM', color: '#C98A4A', cat: 'Légende', img: true, power: { name: 'Planète Mars', effect: 'Les sages ne tombent pas : 12 000 auditeurs minimum cette manche, immunisé au sabotage.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 5 } },
   { id: 'ntm', name: 'NTM', color: '#B12A2A', cat: 'Légende', img: true, power: { name: 'Police', effect: 'Muselle les 2 joueurs en tête : 0 auditeur pour eux cette manche.' }, stats: { flow: 4, punch: 5, tech: 4, aura: 5 } },
   // ---- Mainstream (grand public) ----

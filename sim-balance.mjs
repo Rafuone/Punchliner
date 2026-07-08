@@ -40,7 +40,16 @@ function playGame(avatars, rounds, prof) {
     const leaderScore = Math.max(...players.map((p) => p.score));
     const leader = players.slice().sort((a, b) => b.score - a.score)[0];
     const muted = new Set();
+    const shielded = new Set(); // DUC (steal+shield) : intouchable ce tour (vol/sabotage/dîme sans effet)
     let jammer = null;
+    // 0) pré-pass bouclier : le meneur qui a DUC (steal+shield) + une charge se protège AVANT résolution
+    //    (comme la fenêtre prep : tout s'active en simultané avant le scoring), MAIS seulement s'il y a une
+    //    menace réelle en face (un adversaire chargé avec un pouvoir offensif) — sinon il garde sa charge.
+    const attacker = (x) => x.charges >= 1 && (x.pw.type === 'steal' || x.pw.type === 'sabotage' || x.pw.type === 'tax');
+    for (const p of players) {
+      if (p.charges >= 1 && p.pw.type === 'steal' && p.pw.shield && p.id === leader.id && r < rounds - 1
+        && players.some((x) => x.id !== p.id && attacker(x))) shielded.add(p.id);
+    }
     // 1) décisions d'activation (si charge dispo) + effets instantanés
     for (const p of players) {
       p.act = null;
@@ -49,7 +58,7 @@ function playGame(avatars, rounds, prof) {
       const t = p.pw.type;
       const behind = leaderScore - p.score;
       let use = false;
-      if (t === 'steal') use = p.id !== leader.id && leader.score > 3000;
+      if (t === 'steal') use = (p.id !== leader.id && leader.score > 3000) || shielded.has(p.id);
       else if (t === 'sabotage') use = p.id !== leader.id && leader.score > 3000;
       else if (t === 'tax') use = players.some((x) => x.id !== p.id && x.score > 2000);
       else if (t === 'draft') use = p.id !== leader.id; // surfe sur un meilleur que toi
@@ -59,13 +68,16 @@ function playGame(avatars, rounds, prof) {
       else use = true; // self-boost / allin / combo / sustain : dès qu'on a une charge
       if (!use) continue;
       p.charges -= 1; p.act = t;
-      if (t === 'steal') { const amt = Math.min(p.pw.amount, leader.score); leader.score -= amt; p.score += amt; }
+      if (t === 'steal') {
+        if (p.id !== leader.id && !shielded.has(leader.id)) { const amt = Math.min(p.pw.amount, leader.score); leader.score -= amt; p.score += amt; }
+        if (p.pw.shield) shielded.add(p.id); // intouchable ce tour
+      }
       else if (t === 'sabotage') {
-        const targets = players.filter((x) => x.id !== p.id && !(r <= x.vetUntil) && x.act !== 'safety')
+        const targets = players.filter((x) => x.id !== p.id && !(r <= x.vetUntil) && x.act !== 'safety' && !shielded.has(x.id))
           .sort((a, b) => b.score - a.score).slice(0, p.pw.targets || 1);
         targets.forEach((x) => { muted.add(x.id); if (p.pw.grab) { const amt = Math.min(p.pw.grab, x.score); x.score -= amt; p.score += amt; } });
       }
-      else if (t === 'tax') { players.filter((x) => x.id !== p.id && !(r <= x.vetUntil) && x.act !== 'safety').forEach((x) => { const amt = Math.min(p.pw.amount || 2500, x.score); x.score -= amt; p.score += amt; }); }
+      else if (t === 'tax') { players.filter((x) => x.id !== p.id && !(r <= x.vetUntil) && x.act !== 'safety' && !shielded.has(x.id)).forEach((x) => { const amt = Math.min(p.pw.amount || 2500, x.score); x.score -= amt; p.score += amt; }); }
       else if (t === 'allin') { const spent = p.charges + 1; p.score += (p.pw.per || 12000) * spent; p.charges = 0; } // +1 : la charge déjà décrémentée
       else if (t === 'sustain') { p.sustainUntil = r + ((p.pw.rounds || 2) - 1); p.sustainAmount = p.pw.amount || 8000; }
       else if (t === 'comeback') { const gain = Math.min(p.pw.cap, Math.round(behind * p.pw.factor)); p.score += gain; }

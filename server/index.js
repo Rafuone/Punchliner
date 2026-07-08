@@ -20,7 +20,9 @@ const fmtAud = (n) => Math.round(n || 0).toLocaleString('fr-FR');
 function powerNote(type, pw, detail) {
   const A = (n) => fmtAud(n);
   switch (type) {
-    case 'steal':      return detail?.stoleFrom ? `vole ${A(detail.amount)} auditeurs à ${detail.stoleFrom}` : 'vol raté';
+    case 'steal':      return detail?.stoleFrom
+      ? `vole ${A(detail.amount)} auditeurs à ${detail.stoleFrom}${detail.shield ? ' · intouchable ce tour' : ''}`
+      : detail?.shield ? 'intouchable ce tour (aucun meneur à voler)' : 'vol raté';
     case 'sabotage':   return detail?.mutedName ? `muselle ${detail.mutedName} (0 auditeur pour lui)` : 'sabotage';
     case 'tax':        return detail?.amount ? `dîme : +${A(detail.amount)} auditeurs pris à ${detail.count} joueur${detail.count > 1 ? 's' : ''}` : 'dîme (personne à taxer)';
     case 'allin':      return detail ? `tapis : ${detail.spent} charge${detail.spent > 1 ? 's' : ''} → +${A(detail.gain)} auditeurs` : 'tapis';
@@ -476,7 +478,7 @@ function endRound(room) {
       if (p.draftFrac) { let om = 0; for (const [pid, a] of room.answers) { if (pid !== p.id && a.points > om) om = a.points; } points += Math.round(p.draftFrac * om); } // draft : part du meilleur score adverse
       if (p.armed?.type === 'wager') points -= (p.armed.penalty || 15000); // quitte ou double raté
       p.score = Math.max(0, p.score + points);
-      p.armed = null; p.safety = false; p.nofault = false; p.selfBonus = 0; p.draftFrac = 0; // les pouvoirs de manche expirent
+      p.armed = null; p.safety = false; p.shield = false; p.nofault = false; p.selfBonus = 0; p.draftFrac = 0; // les pouvoirs de manche expirent
       p.streak = points > 0 ? (p.streak || 0) + 1 : 0;             // série de bonnes manches (momentum)
     }
     // stats de partie (trophées de fin) — le MJ n'est pas noté
@@ -962,16 +964,21 @@ io.on('connection', (socket) => {
     if (!pw) return cb?.({ error: 'Ce perso n\'a pas de pouvoir.' });
     // cohérence : un pouvoir qui ne peut RIEN faire ne consomme PAS la charge.
     // protégé = filet (safety) OU vétéran increvable → ni volable ni musclable
-    const protectedNow = (x) => !!x.safety || (x.veteranUntil != null && room.roundIndex <= x.veteranUntil);
+    const protectedNow = (x) => !!x.safety || !!x.shield || (x.veteranUntil != null && room.roundIndex <= x.veteranUntil);
     const topOther = () => [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting).sort((a, b) => b.score - a.score)[0];
     const topAttackable = () => [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting && !protectedNow(x)).sort((a, b) => b.score - a.score)[0];
     let detail = null;
     if (pw.type === 'steal') {
-      const leader = topAttackable();
-      if (!leader || leader.score <= 0) return cb?.({ error: 'Personne à voler pour l\'instant.' });
-      const amt = Math.min(pw.amount || 12000, leader.score);
-      leader.score -= amt; p.score += amt;
-      detail = { stoleFrom: leader.name, amount: amt };
+      const top = topAttackable();
+      // on ne vole QUE quelqu'un DEVANT soi (le meneur) — pas de snowball en volant le n°2 quand on est n°1.
+      const leader = top && top.score > p.score ? top : null;
+      // sans bouclier, un vol sans cible ne sert à rien → on n'entame pas la charge. Avec bouclier (DUC),
+      // le pouvoir reste utile même sans cible (défense quand on mène) → on continue.
+      if ((!leader || leader.score <= 0) && !pw.shield) return cb?.({ error: 'Personne à voler pour l\'instant.' });
+      let amt = 0;
+      if (leader && leader.score > 0) { amt = Math.min(pw.amount || 12000, leader.score); leader.score -= amt; p.score += amt; }
+      if (pw.shield) { p.shield = true; room.muted.delete(p.id); } // devient intouchable ce tour (immunisé vol/sabotage/dîme, annule un sabotage déjà posé) → peut DÉFENDRE son rang
+      detail = { stoleFrom: amt ? leader.name : null, amount: amt, shield: !!pw.shield };
     } else if (pw.type === 'sabotage') {
       const targets = [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting && !protectedNow(x)).sort((a, b) => b.score - a.score).slice(0, pw.targets || 1);
       if (!targets.length) return cb?.({ error: 'Aucun leader à museler (les meneurs sont blindés).' });
