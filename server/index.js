@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { Server } from 'socket.io';
-import { SEED_TRACKS, SEED_ARTISTS } from './tracks.js';
+import { SEED_TRACKS, SEED_ARTISTS, ARTIST_TAGS } from './tracks.js';
 import { gradeAnswer, speedMult, normalize, extractFeats } from './match.js';
 import { POWERS, firstLetters } from './powers.js';
 import { pickQuiz, buildQuizRound } from './quiz.js';
@@ -91,16 +91,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SKIT_RE = /\b(intro|outro|interlude|skit)\b/i; // on écarte les pistes non-jouables en blind-test
 const DZ = 'https://api.deezer.com';
 const POOL_CACHE = path.join(__dirname, '.pool-cache.json');
-const seedHash = () => crypto.createHash('md5').update(JSON.stringify(SEED_ARTISTS) + '|' + JSON.stringify(SEED_TRACKS)).digest('hex');
+// tags par artiste, clés NORMALISÉES → lookup sur l'artiste Deezer (casse/accents variables)
+const TAGMAP = new Map(Object.entries(ARTIST_TAGS).map(([k, v]) => [normalize(k), v]));
+// v2 dans le hash : le cache stocke maintenant année + tags → on force une reconstruction quand ce format/les tags changent
+const seedHash = () => crypto.createHash('md5').update('v2|' + JSON.stringify(SEED_ARTISTS) + '|' + JSON.stringify(SEED_TRACKS) + '|' + JSON.stringify(ARTIST_TAGS)).digest('hex');
 
 // Un « hit » Deezer (search track / artist top) → notre forme de morceau. On garde l'URL Deezer d'origine
 // dans .deezer et on expose .preview = notre route stable (l'extrait sera rapatrié à la volée, cf cacheTrack).
 function trackFromDeezer(h, fallbackArtist = '') {
-  const feats = extractFeats({ title: h.title, artist: h.artist?.name });
+  const artist = h.artist?.name || fallbackArtist;
+  const feats = extractFeats({ title: h.title, artist });
   return {
-    id: h.id, title: h.title_short || h.title, artist: h.artist?.name || fallbackArtist,
+    id: h.id, title: h.title_short || h.title, artist,
     cover: h.album?.cover_medium || h.album?.cover || '', deezer: h.preview,
     preview: `/api/preview/${h.id}`, rank: h.rank || 0, feats,
+    albumId: h.album?.id || null, year: 0,            // year rempli à l'enrichissement (release_date de l'album)
+    tags: TAGMAP.get(normalize(artist)) || [],        // styles/ville/legend de l'artiste → filtre THÈME
   };
 }
 function buildPoolIndex() { poolIndex = new Map(POOL.map((t) => [String(t.id), t])); }
@@ -169,6 +175,23 @@ async function resolveTrack(seed) {
   return hit ? trackFromDeezer(hit, seed.artist) : null;
 }
 
+// Enrichit chaque morceau avec son ANNÉE (release_date de l'album Deezer, DÉDUPLIQUÉ par album → bien moins de
+// requêtes que par titre). Coût one-time (le pool est ensuite figé sur disque). Sans année → 0 (exclu des époques).
+async function enrichYears() {
+  const albumIds = [...new Set(POOL.map((t) => t.albumId).filter(Boolean))];
+  const year = new Map();
+  const one = async (id) => {
+    try { const r = await fetch(`${DZ}/album/${id}`, UA); const rd = (await r.json())?.release_date; const y = rd ? parseInt(String(rd).slice(0, 4), 10) : 0; if (y >= 1980 && y <= 2035) year.set(id, y); } catch { /* pas d'année */ }
+  };
+  // Deezer throttle les bursts (~50 req/s) → concurrence basse + sleep. Une 2e passe rattrape les ratés du throttling.
+  const run = async (ids) => { for (let i = 0; i < ids.length; i += 5) { await Promise.allSettled(ids.slice(i, i + 5).map(one)); await sleep(190); } };
+  await run(albumIds);
+  const missing = albumIds.filter((id) => !year.has(id));
+  if (missing.length) await run(missing);
+  for (const t of POOL) t.year = year.get(t.albumId) || 0;
+  return { albums: albumIds.length, dated: year.size };
+}
+
 async function loadPool() {
   // 1) Cache disque → boot instantané tant que la liste de graines ne bouge pas
   const cached = readPoolCache();
@@ -189,21 +212,52 @@ async function loadPool() {
   }
   POOL = [...byId.values()];
   buildPoolIndex();
+  console.log(`[pool] ${POOL.length} morceaux (${gotArtists} via artistes + ${POOL.length - gotArtists} classiques). Datation des albums…`);
+  const yr = await enrichYears(); // année par morceau (pour le filtre ÉPOQUE)
   if (POOL.length > 50) writePoolCache(); // on ne fige pas un pool anémique (réseau KO)
-  console.log(`[pool] ${POOL.length} morceaux prêts (${gotArtists} via artistes + ${POOL.length - gotArtists} classiques). Extraits rapatriés à la volée.`);
+  console.log(`[pool] prêt · ${yr.dated}/${yr.albums} albums datés · extraits rapatriés à la volée.`);
   refreshHosts();
 }
-// Sous-ensemble du pool selon la popularité voulue (rank Deezer trié décroissant)
-function poolForTier(tier) {
-  const s = [...POOL].sort((a, b) => (b.rank || 0) - (a.rank || 0));
+// ÉPOQUE : sur l'ANNÉE RÉELLE du morceau (release_date), jamais l'artiste (qui traverse les décennies).
+function inEra(year, era) {
+  if (era === '90') return year >= 1990 && year <= 1999;
+  if (era === '00') return year >= 2000 && year <= 2009;
+  if (era === '10') return year >= 2010 && year <= 2019;
+  if (era === '20') return year >= 2020;
+  return true;
+}
+// THÈME : "old school" = année ≤ 2005 ; "gros feats" = morceau AVEC feat ; sinon = tag de l'artiste (style/ville/legend).
+function matchTheme(t, theme) {
+  if (theme === 'oldschool') return !!t.year && t.year <= 2005;
+  if (theme === 'feats') return (t.feats || []).length > 0;
+  return (t.tags || []).includes(theme);
+}
+function selectPool(era, theme) {
+  let s = POOL;
+  if (era && era !== 'all') s = s.filter((t) => t.year && inEra(t.year, era));
+  if (theme && theme !== 'all') s = s.filter((t) => matchTheme(t, theme));
+  return s;
+}
+// Sous-ensemble par POPULARITÉ (difficulté) dans un pool donné (rank Deezer trié décroissant).
+function tierSlice(arr, tier) {
+  const s = [...arr].sort((a, b) => (b.rank || 0) - (a.rank || 0));
   const N = s.length;
   if (tier === 'top') return s.slice(0, Math.max(6, Math.ceil(N * 0.55))); // les plus streamés
   if (tier === 'mid') return s.slice(Math.floor(N * 0.25));                // on retire le très grand public
   if (tier === 'deep') return s.slice(Math.floor(N * 0.45));               // le fond du bac
   return s;                                                                // high = tout
 }
-function pickPlaylist(n, tier) {
-  const src = poolForTier(tier);
+function poolForTier(tier) { return tierSlice(POOL, tier); } // compat (Cypher recycle)
+// Tire n morceaux : ÉPOQUE + THÈME → DIFFICULTÉ → aléatoire. Repli PROGRESSIF si le combo est trop restrictif
+// (on lâche d'abord la difficulté, puis époque/thème) → le jeu reste TOUJOURS jouable, jamais 0 morceau.
+function pickPlaylist(n, tier, era = 'all', theme = 'all') {
+  const base = selectPool(era, theme);
+  const tiered = tierSlice(base, tier);
+  let src;
+  if (tiered.length >= n) src = tiered;              // idéal : époque + thème + difficulté
+  else if (base.length >= n) src = base;             // assez en époque+thème mais pas au bon tier → on garde le filtre
+  else src = tierSlice(POOL, tier);                  // filtre trop restrictif → on le lâche, on garde la difficulté
+  if (src.length < Math.min(n, 3)) src = POOL;       // ultime filet
   return [...src].sort(() => Math.random() - 0.5).slice(0, Math.min(n, src.length));
 }
 
@@ -521,7 +575,7 @@ function rushAdvance(room, evt) {
   if (room.rushIndex >= room.rushPlaylist.length) { // POOL épuisé → on recycle en re-mélangeant
     const last = room.rushPlaylist[room.rushPlaylist.length - 1];
     const tier = (DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal).tier;
-    const next = pickPlaylist(POOL.length, tier);
+    const next = pickPlaylist(POOL.length, tier, room.settings.era, room.settings.theme);
     if (next[0] && last && next[0].id === last.id && next.length > 1) [next[0], next[1]] = [next[1], next[0]]; // pas de doublon immédiat
     room.rushPlaylist = next; room.rushIndex = 0;
     cacheTracks(next.slice(0, 12)); // rapatrie le prochain paquet en fond
@@ -540,7 +594,7 @@ function startRush(room) {
   const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
   room.phase = 'playing';
   room.mult = diff.mult; room.diffLabel = diff.label;
-  room.rushPlaylist = pickPlaylist(POOL.length, diff.tier);
+  room.rushPlaylist = pickPlaylist(POOL.length, diff.tier, room.settings.era, room.settings.theme);
   cacheTracks(room.rushPlaylist.slice(0, 12)); // Cypher enchaîne vite → on rapatrie le 1er paquet en fond
   room.rushIndex = 0;
   room.rushEndsAt = Date.now() + RUSH_START_MS;
@@ -698,7 +752,7 @@ io.on('connection', (socket) => {
     cb?.({ ok: true, players: publicPlayers(room) });
   });
 
-  socket.on('host:start', ({ rounds, difficulty, mode, mj, mjId, rebalance } = {}, cb) => {
+  socket.on('host:start', ({ rounds, difficulty, mode, mj, mjId, rebalance, era, theme } = {}, cb) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
     const wantMode = MODES.includes(mode) ? mode : 'multi';
@@ -712,6 +766,8 @@ io.on('connection', (socket) => {
       mode: wantMode,
       mj: useMj,
       rebalance: ['comeback', 'snowball', 'off'].includes(rebalance) ? rebalance : 'comeback',
+      era: typeof era === 'string' ? era : 'all',     // ÉPOQUE (année) — filtre le pool musical
+      theme: typeof theme === 'string' ? theme : 'all', // THÈME/STYLE — filtre le pool musical
     };
     for (const p of room.players.values()) { p.score = 0; p.waiting = false; p.stat = newStat(); p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; p.isMJ = false; p.streak = 0; p.decayUses = 0; p.veteranUntil = null; p.veteranFloor = 0; p.nofault = false; p.selfBonus = 0; p.sustainUntil = null; p.sustainAmount = 0; p.draftFrac = 0; p.rushScore = 0; p.rushTracks = 0; }
     room.mjDouble = false; room.mjPlus = false; room.mjId = null;
@@ -728,7 +784,7 @@ io.on('connection', (socket) => {
       room.playlist = pickQuiz(rounds || 8, room.settings.difficulty, room.usedQuiz); // filtre par difficulté + anti-répétition salon
     } else {
       const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
-      room.playlist = pickPlaylist(rounds || 8, diff.tier);
+      room.playlist = pickPlaylist(rounds || 8, diff.tier, room.settings.era, room.settings.theme);
       cacheTracks(room.playlist); // rapatrie les extraits de la partie en fond (le décompte couvre la manche 1)
     }
     room.totalRounds = room.playlist.length;

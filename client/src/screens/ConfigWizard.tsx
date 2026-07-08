@@ -3,7 +3,7 @@ import { avatarById, initials } from '../data';
 import '../wizard.css';
 
 /* ====== réglages envoyés au serveur (mappés depuis le wizard) ====== */
-export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; mjId?: string; rebalance: string };
+export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; mjId?: string; rebalance: string; era: string; theme: string };
 type Music = { nowPlaying: number; musicOn: boolean; onToggle: () => void; onNext: () => void; onPrev: () => void; bassRef: { current: number }; barsRef: { current: number[] }; waveRef?: { current: Uint8Array }; tracks: { title: string; artist: string }[] };
 type Player = { id: string; name: string; avatar?: string };
 type SpotifyCtl = { state: string; spotifyOn: boolean; deezerOn: boolean; onToggleSpotify: () => void; onToggleDeezer: () => void };
@@ -181,7 +181,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     const r = rounds === 'inf' ? Math.min(poolSize, 50) : Math.min(rounds, poolSize);
     const isMj = orch === 'mj';
     const mode = game === 'buzz' ? 'buzzer' : game === 'quiz' ? 'quiz' : game === 'rush' ? 'rush' : 'multi';
-    onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance });
+    onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance, era, theme });
   }
 
   // vidéo « diffusion télé » de la carte Blind Test : sélectionnée → couleur + lecture + déchirures de
