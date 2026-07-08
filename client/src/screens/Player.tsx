@@ -45,7 +45,7 @@ export default function Player() {
   const [error, setError] = useState('');
   const [joining, setJoining] = useState(false);
 
-  const [phase, setPhase] = useState<'lobby' | 'prep' | 'countdown' | 'playing' | 'reveal' | 'final'>('lobby');
+  const [phase, setPhase] = useState<'lobby' | 'prep' | 'countdown' | 'playing' | 'reveal' | 'final' | 'rushend'>('lobby');
   const [countdown, setCountdown] = useState(0);
   const [round, setRound] = useState<any>({ index: 0, total: 0, endsAt: 0, durationMs: 25000, mode: 'multi', difficulty: '' });
   const [guess, setGuess] = useState('');
@@ -53,6 +53,8 @@ export default function Player() {
   const [submitted, setSubmitted] = useState(false); // a validé cette manche → verrouille (1 seule tentative, résultat à la révélation)
   const [reveal, setReveal] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
+  const [rushEnd, setRushEnd] = useState<any>(null); // fin de run Cypher (mon rang mondial + top 10)
+  const rushTrackRef = useRef(0);                    // n° de morceau courant → reset de l'input à chaque enchaînement
   const [now, setNow] = useState(Date.now());
   const [buzz, setBuzz] = useState<'idle' | 'mine' | 'locked'>('idle');
   const [buzzMsg, setBuzzMsg] = useState('');
@@ -76,6 +78,9 @@ export default function Player() {
     if (state.phase === 'playing' && state.round) {
       setRound(state.round); setGuess(''); setFeedback(null); setReveal(null); setHint(null); setPhase('playing');
       if (state.round.mode === 'buzzer') applyBuzz(state.buzz);
+      if (state.round.mode === 'rush') rushTrackRef.current = state.round.trackNo || 0;
+    } else if (state.phase === 'rushend') {
+      setRushEnd(state.rushEnd); setPhase('rushend');
     } else if (state.phase === 'prep' && state.round) {
       setRound(state.round); setPrepEndsAt(state.round.endsAt || 0); setPrepDone(false); setNow(Date.now()); setPhase('prep');
     } else if (state.phase === 'reveal' && state.reveal) { setReveal(state.reveal); setPlayers(state.reveal.scores); setPhase('reveal'); }
@@ -130,6 +135,9 @@ export default function Player() {
     socket.on('round:prep', (d: any) => { setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setSubmitted(false); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setNow(Date.now()); setPhase('prep'); });
     socket.on('round:countdown', (d: any) => { setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setCountdown(d.seconds || 5); setPhase('countdown'); });
     socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setSubmitted(false); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); } });
+    // Mode Cypher : chaque nouveau morceau (trackNo change) → on remet l'input à zéro
+    socket.on('rush:state', (d: any) => { setRound((r: any) => ({ ...r, ...d })); if (rushTrackRef.current !== d.trackNo) { rushTrackRef.current = d.trackNo; setGuess(''); setFeedback(null); } setPhase('playing'); });
+    socket.on('rush:end', (d: any) => { setRushEnd(d); setPhase('rushend'); });
     socket.on('mj:track', (d: any) => setMjTrack(d));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // son de reveal retiré (jugé désagréable) — à recâbler plus tard
     socket.on('game:final', (d: any) => {
@@ -142,7 +150,7 @@ export default function Player() {
     socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) setBuzz('mine'); else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
     socket.on('buzz:open', (d: any) => { if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — attends la prochaine'); } else setBuzz('idle'); });
     socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); setJoined(false); localStorage.removeItem(SKEY); });
-    return () => ['connect', 'lobby', 'round:prep', 'round:countdown', 'round:go', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed'].forEach((e) => socket.off(e as any));
+    return () => ['connect', 'lobby', 'round:prep', 'round:countdown', 'round:go', 'rush:state', 'rush:end', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed'].forEach((e) => socket.off(e as any));
   }, []);
 
   useEffect(() => { if (phase !== 'playing' && phase !== 'prep') return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
@@ -210,6 +218,16 @@ export default function Player() {
     setSubmitted(true); // VERROU IMMÉDIAT : le bouton se coupe dès le 1er clic (plus de double validation)
     socket.emit('player:answer', { text: guess.trim() }, (res: any) => { if (res?.error) setSubmitted(false); }); // ré-ouvre seulement si refusé (ex. brouillé). Résultat à la révélation.
   }
+  // Mode Cypher : on répond en boucle (PAS de verrou), la bonne réponse fait avancer + rallonge le chrono
+  function submitRush(e?: any) {
+    e?.preventDefault();
+    if (!guess.trim() || phase !== 'playing') return;
+    socket.emit('rush:answer', { text: guess.trim() }, (res: any) => {
+      if (res?.correct) { setFeedback({ points: res.points, added: res.addedMs }); setGuess(''); }
+      else if (res && !res.error) setFeedback({ wrong: true });
+    });
+  }
+  function rushPass() { socket.emit('rush:pass', {}, (res: any) => { if (res?.ok) setFeedback({ removed: res.removedMs }); }); }
   function doBuzz() { socket.emit('player:buzz', {}, (res: any) => { if (res?.winner) setBuzz('mine'); }); }
   function submitQuiz(i: number) {
     if (quizPick !== null || phase !== 'playing') return;
@@ -534,14 +552,14 @@ export default function Player() {
   }
 
   /* ---- en jeu ---- */
-  const powerMode = round.mode !== 'quiz' && !round.mj; // charges visibles seulement quand les pouvoirs sont actifs
+  const powerMode = round.mode !== 'quiz' && round.mode !== 'rush' && !round.mj; // charges visibles seulement quand les pouvoirs sont actifs
   return (
     <><GrungeBg />
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
       <div className="topbar">
         <span className="row" style={{ gap: 9, minWidth: 0, flex: 1 }}>{av && <RMed id={av.id} size={34} />}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{name}</span></span>
         {/* auditeurs retirés du bandeau (blazes longs → ça débordait) ; les charges suffisent ici */}
-        {powerMode && phase !== 'lobby' && <span style={{ flex: '0 0 auto' }}><Charges n={charges} charge={charge} /></span>}
+        {powerMode && phase !== 'lobby' && phase !== 'countdown' && <span style={{ flex: '0 0 auto' }}><Charges n={charges} charge={charge} /></span>}
       </div>
       {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
 
@@ -603,8 +621,24 @@ export default function Player() {
 
       {phase === 'playing' && (
         <div className="center" style={{ gap: 14, justifyContent: 'flex-start', paddingTop: 'clamp(14px,5vh,40px)' }}>
-          <span className="eyebrow">Manche {round.index + 1} / {round.total} · {round.difficulty}{round.mode === 'quiz' ? ' · Quiz' : round.mj ? ' · Maître du jeu' : round.mode === 'buzzer' ? ' · Buzzer' : ''}</span>
-          {round.mode === 'quiz' ? (
+          {round.mode !== 'rush' && <span className="eyebrow">Manche {round.index + 1} / {round.total} · {round.difficulty}{round.mode === 'quiz' ? ' · Quiz' : round.mj ? ' · Maître du jeu' : round.mode === 'buzzer' ? ' · Buzzer' : ''}</span>}
+          {round.mode === 'rush' ? (() => {
+            const rs = Math.max(0, Math.ceil((round.endsAt - now) / 1000));
+            const mine = (round.scores || []).find((p: any) => p.id === meId.current);
+            return (
+              <>
+                <span className="eyebrow">Cypher · {round.difficulty}</span>
+                <div className="big-num" style={{ color: rs <= 8 ? '#ff5a1f' : 'var(--fluo)' }}>{rs}</div>
+                <span className="muted">Morceau {round.trackNo} · {mine ? `${fmtAud(mine.score)} aud. · ${mine.tracks} ✓` : '0 aud.'}</span>
+                <form onSubmit={submitRush} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre + artiste, vite !" autoFocus />
+                  <button className="btn warm big send" type="submit">Envoyer</button>
+                  <button className="btn" type="button" onClick={rushPass}>Passer · −temps</button>
+                </form>
+                {feedback && (feedback.added ? <p className="feedback good">Trouvé ! +{fmtAud(feedback.points || 0)} · +{Math.round(feedback.added / 1000)} s</p> : feedback.removed ? <p className="feedback bad">Passé · −{Math.round(feedback.removed / 1000)} s</p> : feedback.wrong ? <p className="feedback bad">Pas ça… réessaie</p> : null)}
+              </>
+            );
+          })() : round.mode === 'quiz' ? (
             <>
               <span className="gpill" style={{ color: 'var(--fluo)' }}>{round.quiz?.cat}</span>
               <h2 className="title-xl" style={{ maxWidth: 520 }}>{round.quiz?.q}</h2>
@@ -638,7 +672,7 @@ export default function Player() {
             <><h2 className="title-xl">À toi de jouer</h2><form onSubmit={submitAnswer} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}><input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre et/ou artiste…" autoFocus /><div className="bar"><i style={{ width: `${frac * 100}%` }} /></div><button className="btn warm big send" type="submit">Valider</button></form></>
           )}
           {hint && <p className="feedback" style={{ color: 'var(--v1)' }}>Indice — Titre : <b>{hint.title}</b> · Artiste : <b>{hint.artist}</b></p>}
-          {feedback && <p className={`feedback ${feedback.points ? 'good' : 'bad'}`}>{feedback.points ? `Bien vu ! +${fmtAud(feedback.points)}` : 'Pas ça…'}</p>}
+          {feedback && round.mode !== 'rush' && <p className={`feedback ${feedback.points ? 'good' : 'bad'}`}>{feedback.points ? `Bien vu ! +${fmtAud(feedback.points)}` : 'Pas ça…'}</p>}
           {powerMsg && <p className="feedback" style={{ color: 'var(--ember)' }}>{powerMsg}</p>}
         </div>
       )}
@@ -669,6 +703,31 @@ export default function Player() {
           {av && <p className="muted" style={{ fontSize: 13, margin: '2px 0 0', maxWidth: 400, lineHeight: 1.45 }}>Ton pouvoir — <b style={{ color: 'var(--ember)' }}>{av.power.name}</b> : {av.power.effect}</p>}
           </div>
       )}
+
+      {phase === 'rushend' && rushEnd && (() => {
+        const res = rushEnd.results || [];
+        const top = rushEnd.top || [];
+        const mine = res.find((r: any) => r.id === meId.current);
+        return (
+        <div className="center" style={{ gap: 12, justifyContent: 'flex-start', paddingTop: 'clamp(14px,5vh,40px)' }}>
+          <span className="eyebrow">Cypher — terminé</span>
+          <div className="big-num" style={{ color: 'var(--fluo)' }}>{mine ? fmtAud(mine.score) : 0}</div>
+          <h2 className="title-xl" style={{ margin: 0 }}>{mine ? `${mine.tracks} morceaux trouvés` : 'Fini'}</h2>
+          {mine && <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 14, padding: '10px 16px' }}>Record #{mine.rank} au classement mondial</div>}
+          <span className="eyebrow" style={{ marginTop: 8 }}>Top 10 mondial</span>
+          <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {top.map((t: any, i: number) => (
+              <div key={i} className="row" style={{ gap: 10, alignItems: 'center', padding: '6px 12px', borderRadius: 8, border: '1px solid ' + (i === 0 ? 'rgba(255,215,107,.5)' : 'var(--line)') }}>
+                <b style={{ fontFamily: 'var(--disp)', color: i === 0 ? '#ffd76b' : 'var(--muted2)', width: 22 }}>{i + 1}</b>
+                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+                <b style={{ fontFamily: 'var(--disp)', color: i === 0 ? '#ffd76b' : 'var(--txt)' }}>{fmtAud(t.score)}</b>
+              </div>
+            ))}
+          </div>
+          <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>L'hôte peut relancer ou revenir au salon.</p>
+        </div>
+        );
+      })()}
 
       {phase === 'final' && (() => {
         const myAwards = awards.filter((a: any) => a.playerId === meId.current);

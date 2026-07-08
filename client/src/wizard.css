@@ -128,9 +128,9 @@
 @media(prefers-reduced-motion:reduce) {
   .wz .pick .brackets, .wz .pick .brackets b, .wz .pick .p1tag {transition:none;}
 }
-.wz .games-stage {display:grid; grid-template-columns:repeat(3,1fr); gap:clamp(12px,1.4vw,20px); align-items:stretch;}
-/* pas assez de largeur pour 3 cartes → on empile (sinon le sous-texte se tasse) */
-@media(max-width:960px) {
+/* 2 cartes par ligne (symétrie gaming : 2 ou 4 par ligne, JAMAIS 3) → 4 modes = 2×2 */
+.wz .games-stage {display:grid; grid-template-columns:repeat(2,1fr); gap:clamp(12px,1.4vw,20px); align-items:stretch;}
+@media(max-width:720px) {
   .wz .games-stage {grid-template-columns:1fr; gap:12px;}
   .wz .keycard {min-height:clamp(200px,30vh,300px);}
 }

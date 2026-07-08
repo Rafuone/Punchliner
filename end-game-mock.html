@@ -812,6 +812,9 @@ button, input { font-family: inherit; }
 .certdisc .cd-label { position: relative; z-index: 2; width: 42%; height: 42%; border-radius: 50%; display: grid; place-items: center;
   background: #0c0d10; box-shadow: inset 0 0 0 2px rgba(255,255,255,.28), 0 0 0 3px rgba(0,0,0,.5); overflow: hidden; }
 .certdisc .cd-label .med { border: 0; }
+/* podium : UN SEUL disque, plus grand, visage bien lisible au centre (fini les 2 ronds empilés) */
+.certdisc.podface .cd-label { width: 54%; height: 54%; } /* visage un peu plus petit → plus d'anneau = ça ressemble à un vrai vinyle */
+.certdisc.podface .cd-label .med { border: 0; box-shadow: none; }
 .certdisc .cd-hole { width: 30%; height: 30%; border-radius: 50%; background: #0c0d10; box-shadow: inset 0 0 0 2px rgba(255,255,255,.22); }
 @keyframes cdspin { to { transform: rotate(360deg); } }
 @keyframes cdshine { 0%, 100% { opacity: .22; transform: translateX(-9%); } 50% { opacity: .66; transform: translateX(9%); } }
@@ -821,8 +824,28 @@ button, input { font-family: inherit; }
 .certdisc-t2 { --cd-a: #eef2f8; --cd-b: #97a1ac; --cd-glow: rgba(220,230,245,.5); }
 .certdisc-t3 { --cd-a: #f2f6ff; --cd-b: #aab7c9; --cd-glow: rgba(205,220,255,.55); }
 .certdisc-t4 { --cd-a: #f7f3ff; --cd-b: #bfc6d9; --cd-glow: rgba(210,215,255,.58); }
-.certdisc-t5 { --cd-glow: rgba(180,255,220,.6); }
-.certdisc-t5 .cd-sheen { background: conic-gradient(from 0deg, #ff5db4, #ffd7ec, #ff9a4d, #ffe98a, #b6ff5e, #7df0ff, #c0b6ff, #ff8fd0, #ff5db4); }
+/* DIAMANT — un VRAI diamant : blanc glacé bleuté, GLOSSY, éclats vifs. PAS d'arc-en-ciel (ça, c'est les Légendes). */
+.certdisc-t5 { --cd-glow: rgba(140,215,255,.92);
+  box-shadow: 0 14px 40px -12px rgba(0,0,0,.9), inset 0 0 0 1px rgba(230,245,255,.75), 0 0 44px -4px rgba(140,215,255,.9), 0 0 104px -14px rgba(90,175,255,.55); }
+/* surface polie : blanc + bleu glacé + argent (monochrome bleu, AUCUN spectre) */
+.certdisc-t5 .cd-sheen { background: conic-gradient(from 205deg, #ffffff, #bfe4ff, #ffffff, #7fbdf0, #eaf6ff, #ffffff, #9fd0f7, #ffffff, #d6ecff, #ffffff); filter: brightness(1.16) contrast(1.08); animation: cdspin 5s linear infinite; }
+/* reflet spéculaire NET et brillant (le "glossy") */
+.certdisc-t5 .cd-shine { background: linear-gradient(118deg, transparent 33%, rgba(255,255,255,1) 46%, rgba(195,230,255,.9) 51%, transparent 61%); mix-blend-mode: screen; animation: cdshine 1.9s ease-in-out infinite; }
+/* dôme de lumière glossy en haut à gauche (la lumière sur une gemme) */
+.certdisc-t5::before { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; z-index: 3; mix-blend-mode: screen;
+  background: radial-gradient(58% 52% at 34% 26%, rgba(255,255,255,.8), rgba(205,235,255,.28) 46%, transparent 70%); }
+/* scintillations "feu" du diamant : éclats blancs/bleus qui pétillent */
+.certdisc-t5::after { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; z-index: 4; mix-blend-mode: screen;
+  background:
+    radial-gradient(circle 3px at 30% 24%, #fff, transparent 60%),
+    radial-gradient(circle 2px at 72% 30%, #dff1ff, transparent 60%),
+    radial-gradient(circle 2.5px at 66% 70%, #fff, transparent 60%),
+    radial-gradient(circle 2px at 32% 72%, #cfe9ff, transparent 60%),
+    radial-gradient(circle 1.6px at 52% 15%, #fff, transparent 60%),
+    radial-gradient(circle 1.6px at 84% 54%, #eaf6ff, transparent 60%),
+    radial-gradient(circle 2px at 18% 50%, #fff, transparent 60%);
+  animation: diamsparkle 1.8s ease-in-out infinite; }
+@keyframes diamsparkle { 0%,100% { opacity: .45; transform: scale(.99); } 22% { opacity: 1; } 46% { opacity: .55; } 72% { opacity: 1; transform: scale(1.02); } }
 
 /* label de certif du champion, coloré par palier */
 .certlabel { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
@@ -859,6 +882,50 @@ button, input { font-family: inherit; }
 
 /* ---- révélation SÉQUENTIELLE des trophées (suspense façon étoiles bonus Mario Party) ---- */
 .awards-stage { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+/* TROPHÉES — showcase : un seul trophée, GROS, lisible à 3 m, occupe l'espace */
+.tro-stage { display: flex; flex-direction: column; align-items: center; gap: clamp(14px,2.4vh,26px); width: 100%; max-width: 660px; margin: 0 auto; }
+.tro-card { min-height: clamp(320px,52vh,470px); width: 100%; display: flex; align-items: center; justify-content: center; }
+.tro-drum { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.tro-drumico { font-size: clamp(60px,11vw,104px); animation: drumshake .16s ease-in-out infinite; }
+.tro-drumtxt { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .16em; color: var(--muted); font-size: clamp(14px,2vw,20px); }
+.tro-trophy { display: flex; flex-direction: column; align-items: center; gap: clamp(10px,1.6vh,18px); text-align: center; }
+.tro-trophy.pop { animation: tropop .5s cubic-bezier(.2,.9,.3,1.3) both; }
+@keyframes tropop { 0% { opacity: 0; transform: scale(.62) translateY(16px); } 60% { opacity: 1; transform: scale(1.05); } 100% { opacity: 1; transform: none; } }
+.tro-ill { width: clamp(190px,32vh,290px); height: clamp(190px,32vh,290px); border-radius: 3px; display: grid; place-items: center; flex: 0 0 auto; color: #ffd76b; /* CARRÉ (notre DA n'a pas d'arrondis) + plus GROS */
+  background: radial-gradient(120% 120% at 50% 18%, rgba(255,215,107,.18), rgba(0,0,0,.42));
+  border: 1px solid rgba(255,215,107,.42); box-shadow: 0 22px 64px -20px #000, 0 0 72px -14px rgba(255,215,107,.6), inset 0 0 44px -20px rgba(255,215,107,.55); }
+.tro-ill svg { width: 60%; height: 60%; filter: drop-shadow(0 0 14px rgba(255,215,107,.55)); }
+.tro-name { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; line-height: 1; color: #fff; font-size: clamp(30px,5.4vw,58px); text-shadow: 0 2px 26px rgba(0,0,0,.6); }
+.tro-desc { font-family: var(--ui); font-weight: 600; color: var(--muted); font-size: clamp(16px,2.4vw,24px); line-height: 1.35; max-width: 520px; }
+.tro-winner { display: inline-flex; align-items: center; gap: 12px; margin-top: clamp(6px,1.2vh,12px); padding: 8px 18px 8px 9px; border-radius: 2px; background: rgba(255,255,255,.05); border: 1px solid var(--line2); } /* tag CARRÉ */
+.tro-winner .med { border: 2px solid var(--fluo); box-shadow: 0 0 18px -4px var(--fluo); }
+.tro-wlabel { font-family: var(--ui); font-weight: 700; text-transform: uppercase; letter-spacing: .1em; font-size: 11px; color: var(--muted2); }
+.tro-wname { font-family: var(--disp); font-weight: 700; text-transform: uppercase; font-size: clamp(20px,3vw,30px); color: var(--fluo); }
+.tro-dots { display: flex; gap: 8px; }
+.tro-dots i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.16); transition: all .2s; }
+.tro-dots i.on { background: var(--fluo); box-shadow: 0 0 10px -1px var(--fluo); }
+/* décompte auto + bouton skip */
+.tro-nav { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.tro-cd { display: flex; flex-direction: column; align-items: center; gap: 7px; font-family: var(--ui); font-weight: 700; font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted2); }
+.tro-cd b { color: var(--fluo); font-variant-numeric: tabular-nums; }
+.tro-cdbar { display: block; width: 190px; height: 3px; background: rgba(255,255,255,.12); overflow: hidden; } /* carré */
+.tro-cdbar b { display: block; height: 100%; width: 100%; background: var(--fluo); box-shadow: 0 0 8px -1px var(--fluo); }
+/* transitions (remplacent le tambour) */
+.tro-ill.flick { animation: troflick .1s steps(2) infinite; }
+@keyframes troflick { 0% { opacity: .45; } 100% { opacity: .95; } }
+.tro-fx-flash { width: 100%; height: 100%; background: radial-gradient(circle at 50% 44%, rgba(255,255,255,.55), transparent 62%); animation: troflash .3s ease-out; }
+@keyframes troflash { 0% { opacity: 1; } 100% { opacity: 0; } }
+/* GLITCH FORT du décodage : bandes RGB + bruit + jitter → on NE VOIT PAS le trophée avant le reveal (pas de spoil) */
+.tro-ill.tro-gl { background: #0a0b0e; overflow: hidden; position: relative; }
+.tro-ill.tro-gl::before { content: ''; position: absolute; inset: 0; mix-blend-mode: screen;
+  background: repeating-linear-gradient(0deg, rgba(0,238,255,.9) 0 5px, transparent 5px 13px, rgba(255,0,120,.9) 13px 18px, transparent 18px 30px, rgba(255,255,255,.95) 30px 33px, transparent 33px 46px);
+  animation: glslide .45s linear infinite, gljit .07s steps(2) infinite; }
+.tro-ill.tro-gl::after { content: ''; position: absolute; inset: 0; opacity: .55; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 130px; animation: glnoise .1s steps(2) infinite; }
+@keyframes glslide { from { background-position: 0 0; } to { background-position: 0 -46px; } }
+@keyframes gljit { 0% { transform: translateX(0); } 50% { transform: translateX(-5px); } 100% { transform: translateX(4px); } }
+@keyframes glnoise { 0% { transform: translate(0,0); } 100% { transform: translate(-10%,6%); } }
 .awards-eyebrow { color: var(--fluo); }
 /* chaque trophée arrive avec un POP marqué (overshoot + éclat sur l'icône) */
 .award.pop { animation: awardpop .55s cubic-bezier(.2,.8,.3,1.3) both; animation-delay: 0s; }
@@ -913,7 +980,7 @@ body{overflow-x:hidden}
 .final{gap:22px}
 
 /* PODIUM (top 3) */
-.podium{display:flex;justify-content:center;align-items:flex-end;gap:clamp(10px,2vw,26px);width:100%;max-width:760px;margin:6px auto 4px}
+.podium{display:flex;justify-content:center;align-items:flex-end;gap:clamp(12px,2.4vw,34px);width:100%;max-width:900px;margin:6px auto 4px}
 .pod{display:flex;flex-direction:column;align-items:center;gap:9px;flex:0 0 auto;animation:podin .55s cubic-bezier(.2,.8,.3,1.15) both}
 .pod.p2{animation-delay:.1s}.pod.p1{animation-delay:.25s}.pod.p3{animation-delay:0s}
 @keyframes podin{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
@@ -921,6 +988,9 @@ body{overflow-x:hidden}
 .pod .p-name{font-family:var(--disp);font-weight:700;text-transform:uppercase;line-height:1;letter-spacing:-.01em}
 .pod .p-aud{font-family:var(--disp);font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
 .pod .p-aud small{font-family:var(--ui);font-weight:700;font-size:.42em;color:var(--muted2)}
+/* moyenne d'auditeurs / manche — même info que le 4e+, pour ne rien perdre sur le top 3 */
+.pod .p-permanche{font-family:var(--ui);font-weight:700;font-size:12px;color:var(--muted2);font-variant-numeric:tabular-nums;line-height:1;margin-top:1px}
+.pod.p1 .p-permanche{font-size:13px;color:var(--muted)}
 .pod .ped{width:100%;min-width:96px;border-radius:6px 6px 0 0;background:linear-gradient(180deg,var(--surf2),var(--surf));border:1px solid var(--line2);border-bottom:0;display:grid;place-items:center;font-family:var(--disp);font-weight:700;color:var(--muted2)}
 .pod.p1 .ped{height:132px;border-color:var(--fluo);background:linear-gradient(180deg,rgba(228,255,26,.14),rgba(228,255,26,.03));color:var(--fluo);font-size:52px}
 .pod.p2 .ped{height:96px;font-size:40px}.pod.p3 .ped{height:70px;font-size:36px}
@@ -966,34 +1036,71 @@ body{overflow-x:hidden}
 @keyframes blink{0%,100%{opacity:.2}50%{opacity:.95}}
 .uk .warn{position:absolute;top:8%;left:0;right:0;text-align:center;font-family:var(--disp);font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#ff5a5a;font-size:clamp(14px,2.4vw,24px);animation:blink .5s steps(2) infinite}
 .uk .qm{position:absolute;top:38%;left:0;right:0;text-align:center;font-family:var(--disp);font-weight:700;text-transform:uppercase;font-size:clamp(34px,9vw,96px);color:#fff;opacity:0}
-.uk[data-phase="alarm"] .qm{animation:qmslam .45s cubic-bezier(.2,.8,.3,1.4) .3s both,glitchx .12s steps(2) 6 .35s}
+.uk[data-phase="alarm"] .qm{animation:qmslam .45s cubic-bezier(.2,.8,.3,1.4) .3s both,glitchx .1s steps(2) 2 .4s}
 .uk[data-phase="build"] .qm{opacity:0;transition:opacity .25s}
 @keyframes qmslam{0%{opacity:0;transform:scale(1.6) rotate(-3deg)}70%{opacity:1;transform:scale(.94)}100%{opacity:1;transform:none}}
-@keyframes glitchx{0%{text-shadow:-4px 0 #ff2b5e,4px 0 #29eaff;clip-path:inset(0 0 55% 0)}50%{text-shadow:4px 0 #ff2b5e,-4px 0 #29eaff;clip-path:inset(60% 0 0 0)}100%{text-shadow:none;clip-path:inset(0)}}
+@keyframes glitchx{0%{text-shadow:-2px 0 #ff2b5e,2px 0 #29eaff}50%{text-shadow:2px 0 #ff2b5e,-2px 0 #29eaff}100%{text-shadow:none}}
+/* punchline de l'intrus, en phase rouge, sous INTRUSION DANS LE CERCLE */
+.uk .boast{position:absolute;top:80%;left:0;right:0;text-align:center;padding:0 9%;font-family:var(--ui);font-weight:400;font-style:italic;font-size:clamp(16px,2.3vw,28px);line-height:1.4;color:#fff;text-shadow:0 2px 16px rgba(0,0,0,.9);opacity:0}
+.uk .boast b{color:#ff5a5a}
+.uk[data-phase="alarm"] .boast{animation:boastin .5s ease .35s both}
+.uk[data-phase="build"] .boast,.uk[data-phase="reveal"] .boast{opacity:0;transition:opacity .18s}
+@keyframes boastin{0%{opacity:0;transform:translateY(16px) scale(.96)}100%{opacity:1;transform:none}}
 /* build : lueur qui grossit + lignes de vitesse + tremblement */
-.uk .glow{position:absolute;left:50%;top:50%;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);
-  background:radial-gradient(circle,rgba(255,255,255,.95),rgba(255,207,63,.6) 38%,transparent 70%);opacity:0}
-.uk[data-phase="build"] .glow{animation:glow 3s cubic-bezier(.65,0,.9,1) forwards}
-@keyframes glow{0%{opacity:.25;width:20px;height:20px}82%{opacity:.95}100%{opacity:1;width:1700px;height:1700px}}
+/* cœur BLANC net et rapide (plus de blob orange baveux) */
+.uk .glow{position:absolute;left:50%;top:50%;width:8px;height:8px;border-radius:50%;transform:translate(-50%,-50%);mix-blend-mode:screen;
+  background:radial-gradient(circle,#fff 0%,rgba(255,255,255,.5) 42%,transparent 70%);opacity:0}
+.uk[data-phase="build"] .glow{animation:glowc 1.05s cubic-bezier(.85,0,.9,1) forwards}
+@keyframes glowc{0%{opacity:0;width:8px;height:8px}45%{opacity:.26;width:52px;height:52px}72%{opacity:.5;width:150px;height:150px}88%{opacity:.72;width:300px;height:300px}100%{opacity:.96;width:560px;height:560px}}
 .uk .speed{position:absolute;inset:0;opacity:0;background:
-  repeating-conic-gradient(from 0deg at 50% 50%,transparent 0 6deg,rgba(255,255,255,.05) 6deg 6.6deg,transparent 6.6deg 12deg)}
-.uk[data-phase="build"] .speed{animation:speedin 3s ease-in forwards}
-@keyframes speedin{0%{opacity:0;transform:scale(2)}100%{opacity:.8;transform:scale(.4)}}
-.uk[data-phase="build"]{animation:shakeup 3s ease-in forwards}
-@keyframes shakeup{0%{transform:translate(0,0)}15%{transform:translate(-1px,1px)}30%{transform:translate(2px,-2px)}45%{transform:translate(-2px,2px)}60%{transform:translate(3px,-3px)}75%{transform:translate(-4px,3px)}88%{transform:translate(5px,-4px)}100%{transform:translate(-6px,5px)}}
+  repeating-conic-gradient(from 0deg at 50% 50%,transparent 0 5deg,rgba(255,255,255,.09) 5deg 5.5deg,transparent 5.5deg 10deg)}
+.uk[data-phase="build"] .speed{animation:speedin 1.05s cubic-bezier(.85,0,.9,1) forwards}
+@keyframes speedin{0%{opacity:0;transform:scale(2.6) rotate(0)}55%{opacity:.4;transform:scale(1.7) rotate(3deg)}100%{opacity:.95;transform:scale(.28) rotate(11deg)}}
+.uk[data-phase="build"]{animation:shakeup 1.05s cubic-bezier(.85,0,.9,1) forwards}
+@keyframes shakeup{0%{transform:translate(0,0)}40%{transform:translate(-1px,1px)}60%{transform:translate(-3px,2px)}75%{transform:translate(4px,-3px)}86%{transform:translate(-6px,5px)}94%{transform:translate(8px,-6px)}100%{transform:translate(-10px,8px)}}
 /* --- BOOM --- */
 .uk .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
-.uk[data-phase="reveal"] .flash{animation:flash .55s ease-out}
-@keyframes flash{0%{opacity:1}100%{opacity:0}}
-.uk .shock{position:absolute;left:50%;top:44%;width:20px;height:20px;border-radius:50%;transform:translate(-50%,-50%);border:6px solid #fff;opacity:0}
-.uk[data-phase="reveal"] .shock{animation:shock .6s ease-out}
-@keyframes shock{0%{opacity:.9;width:20px;height:20px;border-width:14px}100%{opacity:0;width:1200px;height:1200px;border-width:1px}}
+.uk[data-phase="reveal"] .flash{animation:flash .66s ease-out}
+@keyframes flash{0%{opacity:1}14%{opacity:.5}26%{opacity:1}100%{opacity:0}}
+.uk .shock,.uk .shock2{position:absolute;left:50%;top:46%;width:20px;height:20px;border-radius:50%;transform:translate(-50%,-50%);border:6px solid #fff;opacity:0}
+.uk .shock2{border-color:var(--cc)}
+.uk[data-phase="reveal"] .shock{animation:shock .62s ease-out}
+.uk[data-phase="reveal"] .shock2{animation:shock .74s ease-out .1s}
+@keyframes shock{0%{opacity:.95;width:20px;height:20px;border-width:18px}100%{opacity:0;width:1700px;height:1700px;border-width:1px}}
 .uk[data-phase="reveal"] .stage-uk{animation:bang .5s cubic-bezier(.2,.9,.3,1.1)}
 @keyframes bang{0%{transform:scale(1.06)}30%{transform:scale(.985) translateX(4px)}50%{transform:translateX(-4px)}70%{transform:translateX(2px)}100%{transform:none}}
 /* --- reveal : Disiz débarque --- */
 .uk .stage-uk{position:relative;z-index:2;width:100%;height:100%;display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:clamp(8px,1.6vh,18px);padding:clamp(12px,3vh,32px) 0;opacity:0}
 .uk .stage-uk::before{content:'';position:absolute;inset:0;z-index:-2;background:radial-gradient(120% 100% at 50% 0%,#171019,#0a0b0e 60%,#060608)}
-.uk .stage-uk .kchip{align-self:center}
+.uk .stage-uk .challbanner{align-self:center}
+/* hero borné + centré (Disiz plus grand mais pas plein écran) */
+.uk .stage-uk .tvros-hero{max-width:1180px;width:100%;margin:0 auto;justify-content:center;align-items:center;gap:clamp(24px,3vw,58px)}
+.uk .stage-uk .tvros-fig{max-height:min(78vh,760px);transform:translateY(-3%)} /* à peine remonté (~3%) — on laisse la place au "pourquoi" en haut */
+.uk .stage-uk .tvros-side{flex:0 1 520px;max-width:520px}
+/* colonne droite plus COMPACTE (stats sur 2 colonnes) → moins haute, mieux équilibrée */
+.uk .stage-uk .tvros-statpow{gap:14px}
+.uk .stage-uk .tvros-block,.uk .stage-uk .tvros-obj{min-height:0;padding:14px 18px;flex:1 1 230px}
+.uk .stage-uk .tvros-blabel{margin-bottom:9px}
+.uk .stage-uk .tvros-sgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px 22px}
+.uk .stage-uk .tvros-sgrid .tvros-srow{margin-bottom:0}
+.uk .stage-uk .tvros-slab{flex:0 0 62px;font-size:12.5px}
+.uk .stage-uk .tvros-sbar{gap:5px}
+.uk .stage-uk .tvros-sbar i{height:12px}
+/* bouton Retour épinglé en bas, toujours atteignable */
+.uk .stage-uk .close{position:absolute;left:50%;bottom:clamp(16px,4vh,40px);transform:translateX(-50%);z-index:6;opacity:0;margin:0}
+.uk .stage-uk .close.show{animation:closein .4s ease forwards}
+@keyframes closein{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}
+/* bannière NOUVEAU CHALLENGER qui claque (façon Smash) */
+.uk .challbanner{display:inline-flex;align-items:center;gap:clamp(10px,1.8vw,20px);font-family:var(--disp);font-weight:700;text-transform:uppercase;letter-spacing:.18em;
+  font-size:clamp(15px,2.5vw,30px);color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.45),0 0 26px var(--cc);
+  padding:2px 6px;margin-bottom:6px;opacity:0;white-space:nowrap}
+/* le POURQUOI du déblocage (l'accomplissement) — sous la bannière, plus discret */
+.uk .chall-why{align-self:center;font-family:var(--ui);font-size:clamp(13px,1.7vw,18px);line-height:1.4;color:var(--muted);text-align:center;max-width:600px;margin-bottom:clamp(8px,2vh,20px);opacity:0}
+.uk .chall-why b{color:var(--cc);font-weight:700}
+.uk[data-phase="reveal"] .chall-why{animation:up .5s ease .18s both}
+.uk .challbanner::before,.uk .challbanner::after{content:'';width:clamp(22px,4vw,64px);height:2px;background:var(--cc);box-shadow:0 0 12px var(--cc)}
+.uk[data-phase="reveal"] .challbanner{animation:challslam .5s cubic-bezier(.2,.9,.3,1.4) both}
+@keyframes challslam{0%{opacity:0;transform:scale(1.5) skewX(-8deg);letter-spacing:.5em}64%{opacity:1;transform:scale(.96)}100%{opacity:1;transform:none;letter-spacing:.18em}}
 .uk[data-phase="reveal"] .tvros-name{animation:nameslam .5s cubic-bezier(.2,.9,.3,1.3) .1s both}
 .uk[data-phase="reveal"] .stage-uk{animation:revin .55s cubic-bezier(.15,.85,.3,1.2) forwards}
 @keyframes revin{0%{opacity:0;transform:scale(1.45)}62%{opacity:1;transform:scale(.97)}100%{opacity:1;transform:scale(1)}}
@@ -1045,35 +1152,28 @@ body{overflow-x:hidden}
 
 <div class="wrap" style="position:relative;z-index:1">
   <div class="topbar"><h1 class="wm" style="font-size:24px">PUNCHLIN<span class="d">R</span></h1>
-    <span class="eyebrow" id="stageLabel">Podium</span></div>
+    <span class="eyebrow" id="stageLabel">Partie terminée</span></div>
 
   <!-- ÉTAPE 1 : PODIUM + CLASSEMENT -->
-  <section class="stage on center final" id="s-podium" style="justify-content:flex-start;padding-top:clamp(12px,3vh,34px)">
-    <span class="eyebrow">Partie terminée — Podium</span>
+  <section class="stage on center final" id="s-podium" style="justify-content:flex-start;padding-top:clamp(10px,2.4vh,26px)">
     <div class="podium" id="podEl"></div>
     <div class="eyebrow" style="margin-top:6px" id="restLabel">Le reste du classement</div>
     <div class="certgrid" id="gridEl"></div>
   </section>
 
-  <!-- ÉTAPE 2 : TROPHÉES -->
-  <section class="stage center final" id="s-trophies" style="justify-content:flex-start;padding-top:clamp(14px,4vh,50px);gap:20px">
-    <div class="awards-stage">
-      <span class="eyebrow awards-eyebrow">Trophées de la soirée · <span id="awShown">0</span>/<span id="awTotal">0</span></span>
-      <div class="awards" id="awEl"></div>
-      <button class="btn warm" id="awNext" style="max-width:340px">Révéler le 1ᵉʳ trophée →</button>
-    </div>
-  </section>
-
-  <!-- ÉTAPE 3 : RÉCAP -->
-  <section class="stage center final" id="s-recap" style="justify-content:flex-start;padding-top:clamp(14px,4vh,50px);gap:18px">
-    <span class="eyebrow">Récap de la partie</span>
-    <div class="recap">
-      <div class="rcard"><div class="eyebrow" style="margin-bottom:8px">Classement final</div><div id="recapBoard"></div></div>
-      <div class="rcard"><div class="eyebrow" style="margin-bottom:8px">Trophées décernés</div><div id="recapAw"></div></div>
-    </div>
-    <div class="row" style="gap:12px;flex-wrap:wrap;justify-content:center;margin-top:4px">
-      <button class="btn warm">Relancer une partie →</button>
-      <button class="btn">Retour au salon</button>
+  <!-- ÉTAPE 2 : TROPHÉES (un à la fois, en GRAND) -->
+  <section class="stage center final" id="s-trophies" style="justify-content:center;gap:clamp(14px,2.4vh,26px)">
+    <div class="tro-stage">
+      <div class="tro-card" id="troCard"></div>
+      <div class="tro-dots" id="troDots"></div>
+      <div class="tro-nav" id="troNav">
+        <div class="tro-cd">Trophée suivant dans <b id="troCd">12</b> s<i class="tro-cdbar"><b id="troCdBar"></b></i></div>
+        <button class="btn warm" id="awNext" style="max-width:300px">Suivant →</button>
+      </div>
+      <div class="row" id="troEnd" style="gap:12px;flex-wrap:wrap;justify-content:center;display:none">
+        <button class="btn warm">Relancer une partie →</button>
+        <button class="btn">Retour au salon</button>
+      </div>
     </div>
   </section>
 </div>
@@ -1082,7 +1182,6 @@ body{overflow-x:hidden}
   <div class="seg" id="nav">
     <button data-s="podium" class="on">Podium</button>
     <button data-s="trophies">Trophées</button>
-    <button data-s="recap">Récap</button>
   </div>
   <span class="auto">auto dans <b id="autoT">30</b>s</span>
   <button class="trig" id="unlockBtn">🔓 Simuler le déblocage de Disiz</button>
@@ -1095,11 +1194,13 @@ body{overflow-x:hidden}
   <div class="alarm"><div class="scan"></div><div class="vig"></div>
     <div class="warn">⚠ Signal brouillé ⚠</div></div>
   <div class="qm">INTRUSION<br>DANS LE CERCLE</div>
+  <div class="boast">« Laissez-moi 1 an de chômage avec <b>Claude</b> et je fais décoller des fusées »</div>
   <div class="glow"></div><div class="speed"></div>
-  <div class="flash"></div><div class="shock"></div>
+  <div class="flash"></div><div class="shock"></div><div class="shock2"></div>
   <div class="stage-uk">
     <div class="rays"></div>
-    <div class="kchip">Nouveau challenger débloqué</div>
+    <div class="challbanner">Nouveau Challenger</div>
+    <div class="chall-why">Débloqué — trophée <b>« Comeback King »</b> décroché : le plus gros retour de la soirée.</div>
     <div class="tvros-hero">
       <div class="tvros-fig" id="ukFig">
         <div class="tvros-figglow"></div>
@@ -1120,10 +1221,12 @@ body{overflow-x:hidden}
         <div class="tvros-statpow">
           <div class="tvros-block tvros-stats">
             <div class="tvros-blabel">Statistiques</div>
-            <div class="tvros-srow"><span class="tvros-slab">Flow</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
-            <div class="tvros-srow"><span class="tvros-slab">Punch</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
-            <div class="tvros-srow"><span class="tvros-slab">Tech</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
-            <div class="tvros-srow"><span class="tvros-slab">Aura</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+            <div class="tvros-sgrid">
+              <div class="tvros-srow"><span class="tvros-slab">Flow</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+              <div class="tvros-srow"><span class="tvros-slab">Punch</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+              <div class="tvros-srow"><span class="tvros-slab">Tech</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+              <div class="tvros-srow"><span class="tvros-slab">Aura</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+            </div>
           </div>
           <div class="tvros-block tvros-pow">
             <div class="tvros-blabel">Pouvoir signature</div>
@@ -1133,8 +1236,9 @@ body{overflow-x:hidden}
         </div>
       </div>
     </div>
-    <button class="btn close" id="ukClose" style="align-self:center;margin-top:4px">Fermer</button>
+    <button class="btn close" id="ukClose">Retour</button>
   </div>
+  <audio id="alarmSfx" src="assets/challenger-approaching-super-smash-bros.mp3" preload="auto"></audio>
   <audio id="disizTrack" src="client/public/music/disiz-toussa-toussa.mp3" preload="auto"></audio>
 </div>
 
@@ -1181,7 +1285,7 @@ const CERTIFS=[{min:50000,label:'Disque de Diamant',short:'Diamant',t:5},{min:35
 const certif=s=>CERTIFS.find(c=>s/ROUNDS>=c.min);
 const fmt=n=>Math.round(n).toLocaleString('fr-FR');
 const PLAYERS=[
-  {name:'Alexandre',rap:'Nekfeu',avId:'nekfeu',ini:'AL',color:'#E9703C',score:624000},
+  {name:'Alexandre',rap:'Nekfeu',avId:'nekfeu',ini:'AL',color:'#E9703C',score:912000},
   {name:'Moka',rap:'Rohff',avId:'rohff',ini:'MO',color:'#932F2F',score:412000},
   {name:'Sacha',rap:'SCH',avId:'sch',ini:'SA',color:'#44405A',score:298000},
   {name:'Lina',rap:'Jul',avId:'jul',ini:'LI',color:'#2E9E8F',score:184000},
@@ -1196,49 +1300,74 @@ const AWARD_ICONS={crown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 
 /* ===== HELPERS RENDU (fidèles à l'app) ===== */
 const med=(p,size)=>`<span class="med" style="width:${size}px;height:${size}px;font-size:${Math.round(size*.37)}px;background:radial-gradient(80% 70% at 50% 22%,${p.color},#111)">${p.ini}<img src="client/public/avatars/${p.avId}.png" alt="" onerror="this.remove()"></span>`;
-const disc=(tier,size,p)=>`<span class="certdisc certdisc-t${tier}" style="width:${size}px;height:${size}px"><span class="cd-sheen"></span><span class="cd-grooves"></span><span class="cd-shine"></span><span class="cd-label">${med(p,Math.round(size*.4))}</span></span>`;
+const disc=(tier,size,p)=>`<span class="certdisc certdisc-t${tier} podface" style="width:${size}px;height:${size}px"><span class="cd-sheen"></span><span class="cd-grooves"></span><span class="cd-shine"></span><span class="cd-label">${med(p,Math.round(size*.5))}</span></span>`;
+// taille de prénom ADAPTATIVE (façon maillot de basket) : grand si court, réduit s'il déborde
+function fitName(el,maxW,base,min){if(!el)return;el.style.whiteSpace='nowrap';el.style.fontSize=base+'px';const w=el.scrollWidth;if(w>maxW)el.style.fontSize=Math.max(min,Math.floor(base*maxW/w))+'px';}
 
 function renderPodium(){
   const [p1,p2,p3]=PLAYERS;
   const col=(p,pos)=>{const c=certif(p.score);return `<div class="pod p${pos}">
     <div class="p-cert certlabel tier-${c.t}" style="font-size:${pos===1?'clamp(15px,1.8vw,20px)':'13px'};padding:${pos===1?'7px 14px':'5px 11px'}">${c.short}</div>
-    ${disc(c.t,pos===1?66:48,p)}${med(p,pos===1?86:60)}
+    ${disc(c.t,pos===1?172:126,p)}
     <div class="p-name">${p.name}</div>
     <div class="p-aud">${fmt(p.score)}<small> aud.</small></div>
+    <div class="p-permanche">≈ ${fmt(Math.round(p.score/ROUNDS))} <span>aud./manche</span></div>
     <div class="ped">${pos}</div></div>`;};
   document.getElementById('podEl').innerHTML=col(p2,2)+col(p1,1)+col(p3,3);
+  document.querySelectorAll('#podEl .pod').forEach(pod=>{const p1=pod.classList.contains('p1');fitName(pod.querySelector('.p-name'),p1?240:176,p1?32:20,p1?16:13);});
   // le classement en bas = LES AUTRES (4e et +), le top 3 est déjà sur le podium
   document.getElementById('gridEl').innerHTML=PLAYERS.slice(3).map((p,i)=>{const c=certif(p.score),min=CERTIFS.find(x=>x.t===c.t).min;
     return `<div class="certcard">
-      <span class="cc-rk">${i+4}</span>${disc(c.t,72,p)}
+      <span class="cc-rk">${i+4}</span>${disc(c.t,78,p)}
       <div class="cc-info"><div class="cc-name">${p.name}</div><div class="cc-cert tier-${c.t}">${c.short}<span class="cc-thresh">≥ <b>${fmt(min)}</b> aud./manche</span></div></div>
       <div class="cc-score">${fmt(p.score)}<span> aud.</span></div></div>`;}).join('');
   document.getElementById('restLabel').style.display=PLAYERS.length>3?'':'none';
 }
-let awShown=0;
-function renderAwards(){
-  document.getElementById('awTotal').textContent=AWARDS.length;
-  const all=awShown>=AWARDS.length;
-  document.getElementById('awEl').innerHTML=AWARDS.slice(0,awShown).map(a=>`<div class="award pop">
-    <span class="aw-ic">${AWARD_ICONS[a.ic]}</span><div class="aw-title">${a.t}</div>
-    <div class="aw-who">${med(a.w,32)}<span>${a.w.name}</span></div><div class="aw-desc">${a.d}</div></div>`).join('')
-    +(!all?`<div class="award pending"><span class="aw-drum">🥁</span><div class="aw-title">Trophée ${awShown+1}</div><div class="aw-desc">roulement de tambour…</div></div>`:'');
-  document.getElementById('awShown').textContent=Math.min(awShown,AWARDS.length);
-  const b=document.getElementById('awNext');b.style.display=all?'none':'';b.textContent=awShown===0?'Révéler le 1ᵉʳ trophée →':awShown+1>=AWARDS.length?'Dernier trophée →':'Trophée suivant →';
+let awShown=0,awBusy=false,troCd=0,troCdIv=null;
+const CD_SECS=12; // auto-passage au trophée suivant (confort canapé) — modifiable
+function troStopCd(){clearInterval(troCdIv);troCdIv=null;}
+function troStartCd(){ troStopCd(); if(awShown>=AWARDS.length){document.getElementById('troNav').style.display='none';return;}
+  troCd=CD_SECS; const num=document.getElementById('troCd'); if(num)num.textContent=troCd;
+  const bar=document.getElementById('troCdBar'); if(bar){bar.style.transition='none';bar.style.width='100%';void bar.offsetWidth;bar.style.transition='width '+CD_SECS+'s linear';bar.style.width='0%';}
+  troCdIv=setInterval(()=>{troCd--;if(num)num.textContent=Math.max(0,troCd);if(troCd<=0){troStopCd();troNext();}},1000);
 }
-document.getElementById('awNext').onclick=()=>{awShown=Math.min(awShown+1,AWARDS.length);renderAwards();};
-function renderRecap(){
-  document.getElementById('recapBoard').innerHTML=PLAYERS.map((p,i)=>{const c=certif(p.score);
-    return `<div class="rrow"><span class="n">${i+1}. ${p.name} <small>${c.short}</small></span><span class="v">${fmt(p.score)}</span></div>`;}).join('');
-  document.getElementById('recapAw').innerHTML=AWARDS.map(a=>`<div class="rrow"><span class="n">${a.t}</span><span class="v">${a.w.name}</span></div>`).join('');
+function troControls(){ const all=awShown>=AWARDS.length;
+  document.getElementById('troDots').innerHTML=AWARDS.map((_,i)=>`<i class="${i<awShown?'on':''}"></i>`).join('');
+  document.getElementById('troNav').style.display=(all||awBusy)?'none':'flex';
+  document.getElementById('awNext').textContent=awShown+1>=AWARDS.length?'Dernier trophée →':'Suivant →';
+  document.getElementById('troEnd').style.display=(all&&!awBusy)?'flex':'none'; // Rejouer/Salon BLOQUÉS tant que pas tout vu
 }
-
+function troTrophy(a,cls){ return `<div class="tro-trophy ${cls||''}">
+    <div class="tro-ill">${AWARD_ICONS[a.ic]}</div>
+    <div class="tro-name">${a.t}</div>
+    <div class="tro-desc">${a.d}</div>
+    <div class="tro-winner"><span class="tro-wlabel">Remporté par</span>${med(a.w,54)}<span class="tro-wname">${a.w.name}</span></div>
+  </div>`; }
+function troShow(){ const a=AWARDS[awShown-1]; if(!a)return;
+  document.getElementById('troCard').innerHTML=troTrophy(a,'pop');
+  try{ac().resume&&ac().resume();beep(740,ac().currentTime+.02,.1,.05);beep(1180,ac().currentTime+.09,.16,.05);}catch(e){}
+  troControls(); troStartCd();
+}
+/* --- transition UNIQUE : le SLOT (défile puis se cale), partout — y compris le 1er trophée --- */
+function troSlot(cb){ const a=AWARDS[awShown]; // slot reel (défile puis se cale)
+  document.getElementById('troCard').innerHTML=`<div class="tro-trophy"><div class="tro-ill" id="slotIll">${AWARD_ICONS[AWARDS[0].ic]}</div><div class="tro-name" id="slotName">${AWARDS[0].t}</div><div class="tro-desc" style="opacity:.35">&nbsp;</div></div>`;
+  const ill=document.getElementById('slotIll'),nm=document.getElementById('slotName'); let i=0,delay=48;
+  (function tick(){ const x=AWARDS[i%AWARDS.length]; ill.innerHTML=AWARD_ICONS[x.ic]; nm.textContent=x.t; i++;
+    try{beep(900,ac().currentTime+.005,.03,.02,'square');}catch(e){}
+    delay*=1.26;
+    if(delay<250)setTimeout(tick,delay); else {ill.innerHTML=AWARD_ICONS[a.ic];nm.textContent=a.t;setTimeout(cb,150);}
+  })();
+}
+function troNext(){ if(awBusy||awShown>=AWARDS.length)return; troStopCd(); awBusy=true; troControls();
+  troSlot(()=>{awShown++;awBusy=false;troShow();}); // MÊME transition (slot) partout, dès le 1er trophée
+}
+document.getElementById('awNext').onclick=troNext;
+function renderAwards(){ awShown=0;awBusy=false;troStopCd(); troControls(); troNext(); } // le 1er trophée se révèle AUTOMATIQUEMENT
 /* ===== NAV + AUTO 30s ===== */
-const STAGES=['podium','trophies','recap'];let cur='podium',autoLeft=30;
+const STAGES=['podium','trophies'];let cur='podium',autoLeft=30;
 function show(s){cur=s;STAGES.forEach(x=>document.getElementById('s-'+x).classList.toggle('on',x===s));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));
-  document.getElementById('stageLabel').textContent={podium:'Podium',trophies:'Trophées',recap:'Récap'}[s];
-  if(s==='podium')renderPodium();if(s==='trophies')renderAwards();if(s==='recap'){awShown=AWARDS.length;renderRecap();}
+  if(s==='podium')renderPodium();if(s==='trophies')renderAwards();
   autoLeft=30;}
 document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>show(b.dataset.s));
 setInterval(()=>{autoLeft--;document.getElementById('autoT').textContent=Math.max(0,autoLeft);
@@ -1252,8 +1381,17 @@ function beep(f,t,d,g=.06,ty='sine'){const c=ac(),o=c.createOscillator(),ga=c.cr
 function riser(t,d){const c=ac(),o=c.createOscillator(),ga=c.createGain(),f=c.createBiquadFilter();o.type='sawtooth';o.frequency.setValueAtTime(60,t);o.frequency.exponentialRampToValueAtTime(620,t+d);f.type='lowpass';f.frequency.setValueAtTime(280,t);f.frequency.exponentialRampToValueAtTime(5200,t+d);ga.gain.setValueAtTime(.001,t);ga.gain.exponentialRampToValueAtTime(.3,t+d);ga.gain.linearRampToValueAtTime(0,t+d+.06);o.connect(f).connect(ga).connect(c.destination);o.start(t);o.stop(t+d+.1);
   const n=c.createBufferSource();n.buffer=nb(c,d+.2);const nf=c.createBiquadFilter();nf.type='highpass';nf.frequency.setValueAtTime(200,t);nf.frequency.exponentialRampToValueAtTime(9000,t+d);const ng=c.createGain();ng.gain.setValueAtTime(.001,t);ng.gain.exponentialRampToValueAtTime(.16,t+d);ng.gain.linearRampToValueAtTime(0,t+d+.06);n.connect(nf).connect(ng).connect(c.destination);n.start(t);n.stop(t+d+.1);}
 function snareRoll(t,d){const c=ac();let x=0,step=.2;while(x<d){const tt=t+x;const s=c.createBufferSource();s.buffer=nb(c,.05);const f=c.createBiquadFilter();f.type='bandpass';f.frequency.value=1800;const g=c.createGain();const gain=.05+.16*(x/d);g.gain.setValueAtTime(gain,tt);g.gain.exponentialRampToValueAtTime(.001,tt+.05);s.connect(f).connect(g).connect(c.destination);s.start(tt);s.stop(tt+.06);x+=step;step=Math.max(.05,step*.9);}}/* pas PLANCHER à .05 → la boucle termine (avant: step*=.88 => x plafonnait, boucle infinie) */
-function impact(t){const c=ac();const o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.setValueAtTime(180,t);o.frequency.exponentialRampToValueAtTime(38,t+.22);g.gain.setValueAtTime(1,t);g.gain.exponentialRampToValueAtTime(.001,t+.6);o.connect(g).connect(c.destination);o.start(t);o.stop(t+.65);
-  const n=c.createBufferSource();n.buffer=nb(c,.9);const f=c.createBiquadFilter();f.type='highpass';f.frequency.value=1200;const ng=c.createGain();ng.gain.setValueAtTime(.5,t);ng.gain.exponentialRampToValueAtTime(.001,t+.9);n.connect(f).connect(ng).connect(c.destination);n.start(t);n.stop(t+.95);}
+function impact(t){const c=ac();
+  // BOOM = 808 accordé sur C# : sub sinus (chute de pitch vers C#2→C#1) + drive tanh (le rend audible sur petites enceintes) + clic d'attaque. Fini le "toc".
+  const o=c.createOscillator(),g=c.createGain();o.type='sine';
+  o.frequency.setValueAtTime(174,t);
+  o.frequency.exponentialRampToValueAtTime(69.3,t+.05);   // chute rapide → C#2
+  o.frequency.exponentialRampToValueAtTime(34.65,t+.85);  // glisse vers C#1 (le boom qui descend)
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(1,t+.006);g.gain.setValueAtTime(1,t+.06);g.gain.exponentialRampToValueAtTime(.001,t+1.1);
+  const ws=c.createWaveShaper();const cv=new Float32Array(129);for(let i=0;i<129;i++){const x=i/64-1;cv[i]=Math.tanh(x*2);}ws.curve=cv;ws.oversample='2x';
+  o.connect(ws).connect(g).connect(c.destination);o.start(t);o.stop(t+1.15);
+  // clic d'attaque net (filtré haut → ne bouffe pas le sub)
+  const n=c.createBufferSource();n.buffer=nb(c,.04);const f=c.createBiquadFilter();f.type='highpass';f.frequency.value=1400;const ng=c.createGain();ng.gain.setValueAtTime(.55,t);ng.gain.exponentialRampToValueAtTime(.001,t+.05);n.connect(f).connect(ng).connect(c.destination);n.start(t);n.stop(t+.06);}
 function kick(t){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(48,t+.11);g.gain.setValueAtTime(.8,t);g.gain.exponentialRampToValueAtTime(.001,t+.3);o.connect(g).connect(c.destination);o.start(t);o.stop(t+.32);}
 function snare(t){const c=ac(),n=c.createBufferSource();n.buffer=nb(c,.2);const f=c.createBiquadFilter();f.type='highpass';f.frequency.value=1500;const g=c.createGain();g.gain.setValueAtTime(.4,t);g.gain.exponentialRampToValueAtTime(.001,t+.2);n.connect(f).connect(g).connect(c.destination);n.start(t);n.stop(t+.22);}
 function hat(t){const c=ac(),n=c.createBufferSource();n.buffer=nb(c,.04);const f=c.createBiquadFilter();f.type='highpass';f.frequency.value=8000;const g=c.createGain();g.gain.setValueAtTime(.1,t);g.gain.exponentialRampToValueAtTime(.001,t+.04);n.connect(f).connect(g).connect(c.destination);n.start(t);n.stop(t+.05);}
@@ -1262,18 +1400,25 @@ function beat(start,bars){const spb=60/94;for(let b=0;b<bars;b++){const t=start+
 /* ALARME = sirène « wail » (fréquence qui monte/descend) passée dans un lowpass → chaude, pas stridente.
    Synchro avec l'animation rouge. Si tu veux un VRAI son d'alarme précis : donne-moi un lien mp3 direct
    ou dépose un fichier (ex. client/public/sfx/alarme.mp3) et je le câble comme la musique. */
-function alarm(t,dur){const c=ac(),o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();
-  o.type='sawtooth';f.type='lowpass';f.frequency.value=1300;f.Q.value=.7;
-  const P=.82;o.frequency.setValueAtTime(430,t);
-  for(let x=0;x<dur;x+=P){o.frequency.linearRampToValueAtTime(690,t+x+P/2);o.frequency.linearRampToValueAtTime(430,t+Math.min(dur,x+P));}
-  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.055,t+.12);g.gain.setValueAtTime(.055,t+Math.max(.2,dur-.2));g.gain.linearRampToValueAtTime(0,t+dur);
-  o.connect(f).connect(g).connect(c.destination);o.start(t);o.stop(t+dur+.05);
-  // + un léger "bip" d'alerte par-dessus, en rythme avec le clignotement rouge (0.5s)
-  for(let i=0;i*.5<dur;i++)beep(880,t+.05+i*.5,.12,.03,'square');}
+function alarm(t,dur){const c=ac();
+  const g=c.createGain();g.connect(c.destination);
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.075,t+.12);g.gain.setValueAtTime(.075,t+Math.max(.2,dur-.25));g.gain.linearRampToValueAtTime(0,t+dur);
+  const f=c.createBiquadFilter();f.type='lowpass';f.frequency.value=2200;f.Q.value=.6;f.connect(g);
+  // SIRÈNE DE POLICE "deux-tons" (pin-pon) : sawtooth (corps) + square à la quinte (perçant), lowpass pour adoucir
+  const o=c.createOscillator();o.type='sawtooth';o.connect(f);
+  const o2=c.createOscillator();o2.type='square';const g2=c.createGain();g2.gain.value=.32;o2.connect(g2).connect(f);
+  const HI=855,LO=605,P=.5;let hi=true; // pin (haut) / pon (bas), 0,5 s chacun → calé sur le clignotement rouge
+  for(let x=0;x<dur;x+=P){const fr=hi?HI:LO;o.frequency.setValueAtTime(fr,t+x);o2.frequency.setValueAtTime(fr*1.5,t+x);hi=!hi;}
+  o.start(t);o.stop(t+dur+.05);o2.start(t);o2.stop(t+dur+.05);}
 /* joue le VRAI morceau de Disiz au drop (repli sur le beat synthé si le fichier est absent) */
 function dropTrack(){const a=document.getElementById('disizTrack');try{a.currentTime=0;}catch(e){}a.volume=0;
   a.play().then(()=>{let v=0;const f=setInterval(()=>{v=Math.min(.85,v+.1);a.volume=v;if(v>=.85)clearInterval(f);},50);})
    .catch(()=>{beat(ac().currentTime+.02,10);});}
+/* ALARME = le vrai son "New Challenger Approaching" (Smash) ; repli sur la sirène synthé si le mp3 ne part pas */
+function playAlarm(){const a=document.getElementById('alarmSfx');
+  if(!a){alarm(ac().currentTime+.02,4.4);return;}
+  try{a.currentTime=0;}catch(e){}a.volume=.9;
+  a.play().catch(()=>{alarm(ac().currentTime+.02,4.4);});}
 
 /* ===== SÉQUENCE ÉPIQUE ===== */
 const uk=document.getElementById('uk');let busy=false;let glxTimer=null;
@@ -1289,19 +1434,18 @@ function fireGlitch(){const fig=document.getElementById('ukFig');if(!fig||!uk.cl
 function trigger(){if(busy)return;busy=true;const c=ac(),now=c.currentTime;
   uk.classList.add('on');uk.setAttribute('data-phase','alarm');
   document.getElementById('ukClose').classList.remove('show');
-  // ALARME pendant l'animation rouge (0 → 1.8s)
-  alarm(now+.05,1.7);
-  // 1.8s : la montée qui ACCÉLÈRE (riser aigu + roulement de caisse qui s'emballe)
-  riser(now+1.8,3);snareRoll(now+1.8,3);
-  setTimeout(()=>uk.setAttribute('data-phase','build'),1800);
-  // 4.8s : BOOM + Disiz débarque + le VRAI son de Disiz tombe
-  impact(now+4.8);
-  setTimeout(()=>{uk.setAttribute('data-phase','reveal');clearTimeout(glxTimer);fireGlitch();},4800);
-  setTimeout(dropTrack,4820);
-  setTimeout(()=>document.getElementById('ukClose').classList.add('show'),6200);
+  // ALARME = le VRAI son "New Challenger Approaching" (Smash, ~4,55 s) ; on cale le BOOM sur sa FIN
+  playAlarm();
+  // build (charge blanche qui accélère) sur la dernière ~0,9 s de l'alarme
+  setTimeout(()=>uk.setAttribute('data-phase','build'),3600);
+  // ~4,5 s : BOOM (gros flash) pile quand le son finit + Disiz débarque + sa musique tombe
+  impact(now+4.5);
+  setTimeout(()=>{uk.setAttribute('data-phase','reveal');clearTimeout(glxTimer);fireGlitch();},4500);
+  setTimeout(dropTrack,4520);
+  setTimeout(()=>document.getElementById('ukClose').classList.add('show'),6100);
 }
 document.getElementById('unlockBtn').onclick=trigger;
-document.getElementById('ukClose').onclick=()=>{uk.classList.remove('on');uk.removeAttribute('data-phase');busy=false;clearTimeout(glxTimer);try{const a=document.getElementById('disizTrack');a.pause();a.currentTime=0;}catch(e){}try{AC&&AC.close();AC=null;}catch(e){}};
+document.getElementById('ukClose').onclick=()=>{uk.classList.remove('on');uk.removeAttribute('data-phase');busy=false;clearTimeout(glxTimer);try{const a=document.getElementById('disizTrack');a.pause();a.currentTime=0;}catch(e){}try{const b=document.getElementById('alarmSfx');b.pause();b.currentTime=0;}catch(e){}try{AC&&AC.close();AC=null;}catch(e){}};
 </script>
 </body>
 </html>

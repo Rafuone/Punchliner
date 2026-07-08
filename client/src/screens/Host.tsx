@@ -37,7 +37,7 @@ function CertifDisc({ score, rounds, size = 92, avatarId }: { score: number; rou
 }
 
 export default function Host() {
-  const [phase, setPhase] = useState<'connecting' | 'lobby' | 'prep' | 'countdown' | 'playing' | 'reveal' | 'final'>('connecting');
+  const [phase, setPhase] = useState<'connecting' | 'lobby' | 'prep' | 'countdown' | 'playing' | 'reveal' | 'final' | 'rushend'>('connecting');
   const [countdown, setCountdown] = useState(0);
   const [code, setCode] = useState('');
   const [poolSize, setPoolSize] = useState(0);
@@ -54,9 +54,16 @@ export default function Host() {
   const [revealStep, setRevealStep] = useState(0); // 0 = réponses seules · 1 = + classement (on affiche l'un PUIS l'autre)
   const [finalScores, setFinalScores] = useState<any[]>([]);
   const [awards, setAwards] = useState<any[]>([]);       // trophées de la partie qui vient de finir
-  const [awardsShown, setAwardsShown] = useState(0);     // révélation SÉQUENTIELLE des trophées (suspense façon étoiles bonus Mario Party)
+  const [finalStep, setFinalStep] = useState<'podium' | 'trophies'>('podium'); // fin de partie : podium → showcase trophées
+  const [troIdx, setTroIdx] = useState(-1);              // index du trophée AFFICHÉ (-1 = aucun encore)
+  const [troBusy, setTroBusy] = useState(false);         // pendant l'animation slot
+  const [troSlot, setTroSlot] = useState<any>(null);     // item qui défile pendant le slot
+  const [troCd, setTroCd] = useState(0);                 // décompte auto avant le trophée suivant
+  const troTimer = useRef<any>(null);
+  const troCdRef = useRef<any>(null);
   const [series, setSeries] = useState<any>(null);       // cumul de la série (multi-parties)
   const [finalRounds, setFinalRounds] = useState(0);     // nb de manches de la partie (pour la certif)
+  const [rushEnd, setRushEnd] = useState<any>(null);     // fin de run Cypher (résultats + top 10 mondial)
   const [waiting, setWaiting] = useState(0);             // joueurs en salle d'attente
   const [error, setError] = useState('');
   const [joinBase, setJoinBase] = useState(window.location.origin.replace(/\/$/, ''));
@@ -70,6 +77,7 @@ export default function Host() {
   const clipTimer = useRef<any>(null);
   const audioRetryRef = useRef<any>(null);   // relances programmées quand le son échoue (auto-réparation)
   const wantAudioRef = useRef(false);         // true = un extrait DOIT être en train de jouer (manche en cours)
+  const seekedUrlRef = useRef<string>('');    // extrait déjà positionné au startAt → on ne rembobine PAS à chaque reprise (auto-réparation)
   const menuAudioRef = useRef<HTMLAudioElement | null>(null);
   const [nowPlaying, setNowPlaying] = useState(-1);
   const [musicOn, setMusicOn] = useState(true);
@@ -84,7 +92,10 @@ export default function Host() {
     setSettings((s) => ({ ...s, difficulty: state.settings?.difficulty || s.difficulty, mode: state.settings?.mode || s.mode }));
     if (state.phase === 'playing' && state.round) {
       setRound(state.round); setBuzzWinner(state.buzz?.winnerName || null); setPhase('playing');
+      if (state.round.mode === 'rush' && state.round.scores) setPlayers(state.round.scores);
       playPreview(state.round.preview, state.round.startAt);
+    } else if (state.phase === 'rushend') {
+      setRushEnd(state.rushEnd); setPhase('rushend');
     } else if (state.phase === 'prep' && state.round) {
       setRound(state.round); setPrepEndsAt(state.round.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep');
     } else if (state.phase === 'reveal' && state.reveal) {
@@ -115,6 +126,10 @@ export default function Host() {
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
     socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
     socket.on('round:host', (d: any) => { setReveal(null); setAnswered([]); setBuzzWinner(null); setRound(d); setPhase('playing'); playPreview(d.preview, d.startAt); });
+    // Mode Cypher (contre-la-montre) : le son s'enchaîne automatiquement à chaque nouveau morceau
+    socket.on('rush:host', (d: any) => { setError(''); setRound(d); if (d.scores) setPlayers(d.scores); setPhase('playing'); playPreview(d.preview, d.startAt); });
+    socket.on('rush:state', (d: any) => { setRound(d); if (d.scores) setPlayers(d.scores); });
+    socket.on('rush:end', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); clearTimeout(audioRetryRef.current); setRushEnd(d); setPhase('rushend'); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
     socket.on('buzz:winner', (d: any) => setBuzzWinner(d.name));
     socket.on('buzz:open', () => setBuzzWinner(null));
@@ -130,7 +145,7 @@ export default function Host() {
       setTimeout(() => setReactions((rs) => rs.filter((r) => r.key !== key)), 4800);
     });
     socket.on('room:closed', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); setError(d.reason || 'Salon fermé.'); localStorage.removeItem(HKEY); sfxLoopStop(); });
-    return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'round:countdown', 'round:host', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'reaction', 'room:closed'].forEach((e) => socket.off(e as any));
+    return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'round:countdown', 'round:host', 'rush:host', 'rush:state', 'rush:end', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'reaction', 'room:closed'].forEach((e) => socket.off(e as any));
   }, []);
 
   useEffect(() => { if (phase !== 'playing' && phase !== 'prep') return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
@@ -140,7 +155,8 @@ export default function Host() {
   useEffect(() => { if (phase === 'prep' && prepSec > 0) sfx('countdown'); }, [prepSec]); // idem pendant l'activation des pouvoirs
   // Podium : les trophées se révèlent UN PAR UN, à la MAIN (l'hôte clique) — on prend le temps de lire.
   // On remet juste le compteur à zéro à chaque nouveau podium.
-  useEffect(() => { setAwardsShown(0); }, [phase, awards]);
+  // reset du showcase des trophées à chaque nouvelle fin de partie
+  useEffect(() => { setFinalStep('podium'); setTroIdx(-1); setTroBusy(false); setTroSlot(null); clearTimeout(troTimer.current); clearInterval(troCdRef.current); }, [awards]);
   // Reveal en DEUX temps qui se REMPLACENT (jamais les deux à l'écran) : 1) qui a répondu quoi + points
   // gagnés, puis 2) le classement. L'hôte passe à l'étape 2 à la MAIN (bouton « Voir les scores ») ;
   // repli automatique à 30 s si personne ne clique — on a tout le temps de lire, même à 6 joueurs.
@@ -178,11 +194,11 @@ export default function Host() {
   const barsRef = useRef<number[]>([0, 0, 0, 0, 0, 0, 0]); // bandes de l'égaliseur (0..1)
   const acRef = useRef<any>(null);  // AudioContext + analyser
   const dockEqRef = useRef<HTMLSpanElement | null>(null);  // barres EQ du dock (peintes en RAF)
-  function pickTrack(exclude: number) {
+  function pickTrack(cur: number) {
+    // Lecture SÉQUENTIELLE (aléatoire désactivé tant que l'ouverture est imposée sur Bishok).
+    // À réactiver le random quand on retirera Bishok. Évite les répétitions rapprochées.
     if (MENU_TRACKS.length <= 1) return 0;
-    let n = exclude;
-    while (n === exclude) n = Math.floor(Math.random() * MENU_TRACKS.length);
-    return n;
+    return (cur + 1) % MENU_TRACKS.length;
   }
   function ensureAnalyser() {
     const a = menuAudioRef.current; if (!a || acRef.current) return;
@@ -247,7 +263,7 @@ export default function Host() {
   function startMenu() {
     if (startedRef.current || !musicOnRef.current) return;
     startedRef.current = true;
-    playMenuTrack(0); // au démarrage : toujours le son de Bishok (MENU_TRACKS[0]) ; l'aléatoire prend le relais ensuite
+    playMenuTrack(0); // au démarrage : toujours le son de Bishok (MENU_TRACKS[0]) ; puis lecture séquentielle (plus d'aléatoire)
   }
   function toggleMusic() {
     const on = !musicOn; setMusicOn(on); musicOnRef.current = on;
@@ -294,7 +310,7 @@ export default function Host() {
     a.volume = 1;
     const p = a.play();
     if (p && p.then) {
-      p.then(() => { try { if (startAt && Math.abs(a.currentTime - startAt / 1000) > 1) a.currentTime = startAt / 1000; } catch {} })
+      p.then(() => { try { if (startAt && seekedUrlRef.current !== url) { if (Math.abs(a.currentTime - startAt / 1000) > 1) a.currentTime = startAt / 1000; seekedUrlRef.current = url; } } catch {} }) // seek 1x par extrait (pas à la reprise → sinon on rejouerait ce qui a déjà tourné)
        .catch(() => { if (wantAudioRef.current && attempt < 6) audioRetryRef.current = setTimeout(() => playPreview(url, startAt, attempt + 1), 300); }); // le watchdog prend le relais ensuite
     }
   }
@@ -312,6 +328,27 @@ export default function Host() {
   }
   // Relance depuis le podium : retour au salon (cumul de série conservé) ; toConfig → droit dans l'assistant.
   function relance(toConfig: boolean) { socket.emit('host:restart', {}, () => { if (toConfig) setConfiguring(true); }); }
+  // TROPHÉES — transition "slot" (défile puis se cale) : la MÊME partout, y compris le 1er
+  function troRunSlot(target: number) {
+    clearInterval(troCdRef.current); clearTimeout(troTimer.current);
+    if (!awards.length) return;
+    setTroBusy(true);
+    let i = 0, delay = 48;
+    const tick = () => {
+      setTroSlot(awards[i % awards.length]); i++;
+      delay *= 1.26;
+      if (delay < 250) troTimer.current = setTimeout(tick, delay);
+      else { setTroSlot(null); setTroIdx(target); setTroBusy(false); sfx('launch'); }
+    };
+    tick();
+  }
+  // décompte auto (confort) entre deux trophées ; le dernier ne s'auto-avance pas → boutons de fin
+  useEffect(() => {
+    if (phase !== 'final' || finalStep !== 'trophies' || troBusy || troIdx < 0 || troIdx >= awards.length - 1) return;
+    setTroCd(12);
+    troCdRef.current = setInterval(() => setTroCd((c) => { if (c <= 1) { clearInterval(troCdRef.current); troRunSlot(troIdx + 1); return 0; } return c - 1; }), 1000);
+    return () => clearInterval(troCdRef.current);
+  }, [phase, finalStep, troIdx, troBusy, awards.length]);
   function newSalon() {
     if (players.length && !confirm('Ouvrir un NOUVEAU salon ? Les joueurs actuels seront éjectés.')) return;
     socket.emit('host:new', {}, (res: any) => {
@@ -325,11 +362,12 @@ export default function Host() {
   const remaining = Math.max(0, round.endsAt - now);
   const seconds = Math.ceil(remaining / 1000);
   const frac = round.durationMs ? remaining / round.durationMs : 0;
+  const rushFrac = round.rushMax ? Math.max(0, Math.min(1, remaining / round.rushMax)) : 0; // jauge de temps Cypher
 
   return (
     <>
     {hubView && <HubBrowse mode={hubView} onClose={() => setHubView(null)} />}
-    {((phase === 'lobby' && !configuring) || ['prep', 'countdown', 'playing', 'reveal', 'final'].includes(phase)) && <GrungeBg />}
+    {((phase === 'lobby' && !configuring) || ['prep', 'countdown', 'playing', 'reveal', 'final', 'rushend'].includes(phase)) && <GrungeBg />}
     {reactions.length > 0 && (
       <div className="reactfloat">
         {reactions.map((r) => {
@@ -344,13 +382,15 @@ export default function Host() {
       </div>
     )}
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
-      <div className={`topbar${['prep', 'countdown', 'playing', 'reveal', 'final'].includes(phase) ? ' gamebar' : ''}`}>
+      <div className={`topbar${['prep', 'countdown', 'playing', 'reveal', 'final', 'rushend'].includes(phase) ? ' gamebar' : ''}`}>
         <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">R</span></h1>
         <span className="row" style={{ gap: 14, alignItems: 'center' }}>
           {phase === 'lobby' && <span className="gpill"><span className="dot" />Salon {code} · {players.length} j.</span>}
           {['prep', 'countdown', 'playing', 'reveal'].includes(phase) && (<>
             <span className="gmeta">
-              <span className="gmeta-round"><span className="gl">Manche</span><b>{round.index + 1}<i>/{round.total}</i></b></span>
+              {round.mode === 'rush'
+                ? <span className="gmeta-round"><span className="gl">Cypher</span><b>{round.trackNo || 1}<i> morceau</i></b></span>
+                : <span className="gmeta-round"><span className="gl">Manche</span><b>{round.index + 1}<i>/{round.total}</i></b></span>}
               <span className="gmeta-chip">{round.difficulty}</span>
               <span className="gmeta-chip">{players.length} j.{waiting > 0 ? ` · ${waiting} att.` : ''}</span>
             </span>
@@ -442,7 +482,33 @@ export default function Host() {
 
       {phase === 'playing' && (
         <div className="center">
-          {round.mode === 'quiz' ? (
+          {round.mode === 'rush' ? (
+            <div style={{ width: '100%', maxWidth: 960, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+              <span className="playmeta">Cypher — contre-la-montre · {round.difficulty}</span>
+              <div className="ring big">
+                <svg viewBox="0 0 120 120">
+                  <circle cx="60" cy="60" r="54" stroke="rgba(255,255,255,.10)" strokeWidth="9" fill="none" />
+                  <circle cx="60" cy="60" r="54" stroke={seconds <= 8 ? '#ff5a1f' : '#a6ff00'} strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - rushFrac)} />
+                </svg>
+                <span className="n" style={{ color: seconds <= 8 ? '#ff5a1f' : undefined }}>{seconds}</span>
+              </div>
+              <span className="playmeta">Morceau {round.trackNo}{round.event?.reason === 'hit' && round.event?.name ? ` · ${round.event.name} +${Math.round((round.event.addedMs || 0) / 1000)} s` : round.event?.reason === 'pass' ? ` · passé −${Math.round((round.event.removedMs || 0) / 1000)} s` : ''}</span>
+              <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
+              {Array.isArray(round.scores) && round.scores.length > 0 && (
+                <div style={{ width: '100%', maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                  {round.scores.map((p: any, i: number) => (
+                    <div key={p.id} className="row" style={{ gap: 12, alignItems: 'center', background: 'rgba(8,9,12,.5)', border: '1px solid var(--line2)', borderRadius: 10, padding: '8px 14px' }}>
+                      <b style={{ fontFamily: 'var(--disp)', color: 'var(--muted2)', width: 22 }}>{i + 1}</b>
+                      <Med avatarId={p.avatar} size={30} />
+                      <span style={{ fontFamily: 'var(--disp)', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                      <span style={{ color: 'var(--muted)', fontSize: 13 }}>{p.tracks} ✓</span>
+                      <b style={{ fontFamily: 'var(--disp)', color: 'var(--fluo)' }}>{fmtAud(p.score)}</b>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : round.mode === 'quiz' ? (
             <div style={{ width: '100%', maxWidth: 840, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
               <div className="row" style={{ gap: 18, alignItems: 'center', justifyContent: 'center' }}>
                 <span className="gpill" style={{ color: 'var(--fluo)' }}>{round.quiz?.cat}</span>
@@ -585,6 +651,53 @@ export default function Host() {
         </div>
       )}
 
+      {phase === 'rushend' && rushEnd && (() => {
+        const res = rushEnd.results || [];
+        const top = rushEnd.top || [];
+        return (
+        <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(14px,3vh,44px)', gap: 18 }}>
+          <span className="eyebrow">Cypher — contre-la-montre terminé</span>
+          {res[0] && (
+            <div className="champ">
+              <Med avatarId={res[0].avatar} size={120} />
+              <h2 className="title-xl champ-name">{res[0].name} <span className="champ-tag">{fmtAud(res[0].score)} aud.</span></h2>
+              <div className="certlabel">{res[0].tracks} morceaux trouvés · record #{res[0].rank} au classement mondial</div>
+            </div>
+          )}
+          {res.length > 1 && (
+            <div style={{ width: '100%', maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {res.map((r: any, i: number) => (
+                <div key={r.id} className="row" style={{ gap: 12, alignItems: 'center', background: 'rgba(8,9,12,.5)', border: '1px solid var(--line2)', borderRadius: 10, padding: '8px 14px' }}>
+                  <b style={{ fontFamily: 'var(--disp)', color: 'var(--muted2)', width: 22 }}>{i + 1}</b>
+                  <Med avatarId={r.avatar} size={28} />
+                  <span style={{ fontFamily: 'var(--disp)', flex: 1 }}>{r.name}</span>
+                  <span style={{ color: 'var(--muted)', fontSize: 13 }}>#{r.rank} mond.</span>
+                  <b style={{ fontFamily: 'var(--disp)', color: 'var(--fluo)' }}>{fmtAud(r.score)}</b>
+                </div>
+              ))}
+            </div>
+          )}
+          <span className="eyebrow" style={{ marginTop: 8 }}>Classement mondial — Top 10</span>
+          <div style={{ width: '100%', maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {top.length === 0 && <p className="feedback" style={{ color: 'var(--muted)' }}>Premier score enregistré — le classement démarre !</p>}
+            {top.map((t: any, i: number) => (
+              <div key={i} className="row" style={{ gap: 12, alignItems: 'center', padding: '6px 14px', borderRadius: 8, border: '1px solid ' + (i === 0 ? 'rgba(255,215,107,.5)' : 'var(--line)') }}>
+                <b style={{ fontFamily: 'var(--disp)', color: i === 0 ? '#ffd76b' : 'var(--muted2)', width: 26 }}>{i + 1}</b>
+                <Med avatarId={t.avatar} size={26} />
+                <span style={{ fontFamily: 'var(--disp)', flex: 1 }}>{t.name}</span>
+                <span style={{ color: 'var(--muted)', fontSize: 12 }}>{t.tracks} ✓</span>
+                <b style={{ fontFamily: 'var(--disp)', color: i === 0 ? '#ffd76b' : 'var(--txt)' }}>{fmtAud(t.score)}</b>
+              </div>
+            ))}
+          </div>
+          <div className="row" style={{ gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
+            <button className="btn warm" onClick={() => socket.emit('host:start', { difficulty: settings.difficulty, mode: 'rush' }, (r: any) => r?.error && setError(r.error))}>Rejouer →</button>
+            <button className="btn" onClick={() => socket.emit('host:restart')}>Retour au salon</button>
+          </div>
+        </div>
+        );
+      })()}
+
       {phase === 'final' && (() => {
         const board = finalScores.filter((p: any) => !p.isMJ);
         const champ = board[0];
@@ -592,9 +705,9 @@ export default function Host() {
         const standings = series?.standings || [];
         const seriesLeader = standings[0];
         const gameRounds = finalRounds || round.total || 1;
-        const allAwardsShown = awards.length === 0 || awardsShown >= awards.length; // trophées tous révélés → on dévoile le reste
         return (
         <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(14px,3vh,44px)', gap: 20 }}>
+          {finalStep === 'podium' ? (<>
           <span className="eyebrow">{multi ? `Partie ${series.gamesPlayed} — terminée` : 'Podium'}</span>
           {champ && (
             <div className="champ">
@@ -603,39 +716,7 @@ export default function Host() {
               <div className={`certlabel tier-${CERTIF_TIER[certif(champ.score, gameRounds).short] ?? 0}`}>{certif(champ.score, gameRounds).label}</div>
             </div>
           )}
-
-          {/* TROPHÉES révélés UN PAR UN, à la MAIN (l'hôte clique pour dévoiler le suivant → on a le temps de lire) */}
-          {awards.length > 0 && (
-            <div className="awards-stage">
-              <span className="eyebrow awards-eyebrow">Trophées de la soirée · {Math.min(awardsShown, awards.length)}/{awards.length}</span>
-              <div className="awards">
-                {awards.slice(0, awardsShown).map((a: any) => (
-                  <div className="award pop" key={a.id}>
-                    <span className="aw-ic" dangerouslySetInnerHTML={{ __html: awardIcon(a.icon) }} />
-                    <div className="aw-title">{a.title}</div>
-                    <div className="aw-who"><Med avatarId={a.avatar} size={32} /><span>{a.playerName}</span></div>
-                    <div className="aw-desc">{a.desc}</div>
-                  </div>
-                ))}
-                {!allAwardsShown && (
-                  <div className="award pending" key="pending">
-                    <span className="aw-drum">🥁</span>
-                    <div className="aw-title">Trophée {awardsShown + 1}</div>
-                    <div className="aw-desc">roulement de tambour…</div>
-                  </div>
-                )}
-              </div>
-              {!allAwardsShown && (
-                <button className="btn warm" onClick={() => { setAwardsShown((n) => Math.min(n + 1, awards.length)); sfx('launch'); }}>
-                  {awardsShown === 0 ? 'Révéler le 1ᵉʳ trophée →' : awardsShown + 1 >= awards.length ? 'Dernier trophée →' : 'Trophée suivant →'}
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* CERTIFS DE LA SOIRÉE — chacun repart avec sa plaque (pas que le gagnant), écrit GROS pour la TV.
-              Apparaît une fois tous les trophées tombés → garde le suspense. */}
-          {allAwardsShown && (
+          {/* CERTIFS DE LA SOIRÉE — chacun repart avec sa plaque (pas que le gagnant), écrit GROS pour la TV. */}
           <div className="certgrid">
             {board.map((p, i) => {
               const c = certif(p.score, gameRounds);
@@ -653,9 +734,7 @@ export default function Host() {
               );
             })}
           </div>
-          )}
-
-          {allAwardsShown && multi && (
+          {multi && (
             <div className="series-wrap">
               <div className="series-head">
                 <span className="eyebrow">Classement général · {series.gamesPlayed} parties</span>
@@ -672,12 +751,49 @@ export default function Host() {
               </div>
             </div>
           )}
-
           <div className="row" style={{ gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
-            <button className="btn warm" onClick={() => relance(true)}>Relancer une partie →</button>
-            <button className="btn" onClick={() => relance(false)}>Retour au salon</button>
+            {awards.length > 0
+              ? <button className="btn warm" onClick={() => { setFinalStep('trophies'); troRunSlot(0); }}>Voir les trophées →</button>
+              : (<>
+                  <button className="btn warm" onClick={() => relance(true)}>Relancer une partie →</button>
+                  <button className="btn" onClick={() => relance(false)}>Retour au salon</button>
+                </>)}
             {multi && <button className="btn ghost" onClick={resetSeries}>Nouvelle série</button>}
           </div>
+          </>) : (
+          /* ÉTAPE TROPHÉES — showcase (un à la fois, slot, décompte auto + skip) */
+          <div className="tro-stage">
+            <div className="tro-card">
+              {troBusy && troSlot ? (
+                <div className="tro-trophy">
+                  <div className="tro-ill"><span dangerouslySetInnerHTML={{ __html: awardIcon(troSlot.icon) }} /></div>
+                  <div className="tro-name">{troSlot.title}</div>
+                  <div className="tro-desc">&nbsp;</div>
+                </div>
+              ) : (troIdx >= 0 && awards[troIdx]) ? (
+                <div className="tro-trophy pop" key={troIdx}>
+                  <div className="tro-ill"><span dangerouslySetInnerHTML={{ __html: awardIcon(awards[troIdx].icon) }} /></div>
+                  <div className="tro-name">{awards[troIdx].title}</div>
+                  <div className="tro-desc">{awards[troIdx].desc}</div>
+                  <div className="tro-winner"><span className="tro-wlabel">Remporté par</span><Med avatarId={awards[troIdx].avatar} size={54} /><span className="tro-wname">{awards[troIdx].playerName}</span></div>
+                </div>
+              ) : null}
+            </div>
+            <div className="tro-dots">{awards.map((_: any, i: number) => <i key={i} className={i <= troIdx ? 'on' : ''} />)}</div>
+            {troIdx < awards.length - 1 ? (
+              <div className="tro-nav">
+                {!troBusy && <div className="tro-cd">Trophée suivant dans <b>{troCd}</b> s<i className="tro-cdbar"><b style={{ width: `${(troCd / 12) * 100}%`, transition: 'width 1s linear' }} /></i></div>}
+                <button className="btn warm" style={{ maxWidth: 300 }} disabled={troBusy} onClick={() => troRunSlot(troIdx + 1)}>{troIdx + 2 >= awards.length ? 'Dernier trophée →' : 'Suivant →'}</button>
+              </div>
+            ) : (!troBusy && (
+              <div className="row" style={{ gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
+                <button className="btn warm" onClick={() => relance(true)}>Relancer une partie →</button>
+                <button className="btn" onClick={() => relance(false)}>Retour au salon</button>
+                {multi && <button className="btn ghost" onClick={resetSeries}>Nouvelle série</button>}
+              </div>
+            ))}
+          </div>
+          )}
         </div>
         );
       })()}

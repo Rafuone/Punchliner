@@ -11,6 +11,7 @@ import { gradeAnswer, speedMult, normalize, extractFeats } from './match.js';
 import { POWERS, firstLetters } from './powers.js';
 import { pickQuiz, buildQuizRound } from './quiz.js';
 import { computeAwards } from './awards.js';
+import { addScore, getTop } from './leaderboard.js';
 
 // format auditeurs (fr-FR) — utilisé pour les textes des trophées
 const fmtAud = (n) => Math.round(n || 0).toLocaleString('fr-FR');
@@ -56,6 +57,13 @@ const PREVIEW_MS = 30000; // durée d'un extrait Deezer
 const QUIZ_MS = FAST ? 1500 : 22000; // durée d'une question de quiz (QCM)
 const HOST_GRACE_MS = 120000; // délai avant de fermer un salon dont l'hôte a disparu
 
+// Mode Cypher (contre-la-montre) — jauge de temps PARTAGÉE (bonne réponse = +temps, "passer" = -temps)
+const RUSH_START_MS = FAST ? 8000 : 45000; // budget de départ
+const RUSH_BONUS_MS = FAST ? 3000 : 6000;  // +temps par bonne réponse
+const RUSH_PASS_MS  = FAST ? 3000 : 8000;  // -temps sur "passer"
+const RUSH_MAX_MS   = 90000;               // plafond de la jauge (anti-inflation)
+const RUSH_REF_MS   = 10000;               // fenêtre de référence pour la prime de vitesse
+
 // Difficulté = QUELS morceaux tombent (popularité via le rank Deezer), PAS la durée.
 // Le son joue toujours généreusement ; offset = on démarre en plein milieu sur les niveaux durs.
 const DIFFICULTY = {
@@ -64,7 +72,7 @@ const DIFFICULTY = {
   difficile: { label: 'Digger',       tier: 'mid',  windowMs: W(22000), mult: 1.6, offset: true },
   puriste:   { label: 'Puriste',      tier: 'deep', windowMs: W(20000), mult: 2.0, offset: true },
 };
-const MODES = ['multi', 'buzzer', 'quiz'];
+const MODES = ['multi', 'buzzer', 'quiz', 'rush'];
 
 const app = express();
 const httpServer = createServer(app);
@@ -187,7 +195,10 @@ function emitLobby(room) {
 // Snapshot pour qu'un client (re)connecté reprenne au bon écran
 function snapshot(room, isHost) {
   const s = { code: room.code, phase: room.phase, roundIndex: room.roundIndex, totalRounds: room.totalRounds, settings: room.settings, players: publicPlayers(room) };
-  if (room.phase === 'playing' && room.current) {
+  if (room.phase === 'playing' && room.settings.mode === 'rush') {
+    s.round = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: RUSH_MAX_MS, difficulty: room.diffLabel, scores: rushBoard(room) };
+    if (isHost && room.current) Object.assign(s.round, { preview: room.current.preview, startAt: 0 });
+  } else if (room.phase === 'playing' && room.current) {
     s.round = { index: room.roundIndex, roundIndex: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: room.windowMs, mode: room.settings.mode, difficulty: room.diffLabel, mj: room.settings.mj };
     if (room.settings.mode === 'quiz' && room.quiz) {
       s.round.quiz = isHost ? room.quiz : { id: room.quiz.id, cat: room.quiz.cat, q: room.quiz.q, choices: room.quiz.choices };
@@ -201,6 +212,8 @@ function snapshot(room, isHost) {
     s.reveal = room.lastReveal;
   } else if (room.phase === 'final') {
     s.final = room.lastFinal || { scores: publicPlayers(room) };
+  } else if (room.phase === 'rushend') {
+    s.rushEnd = room.lastRushEnd;
   }
   return s;
 }
@@ -425,6 +438,68 @@ function finishGame(room) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Mode Cypher (contre-la-montre) — jauge de temps partagée            */
+/* ------------------------------------------------------------------ */
+function rushBoard(room) {
+  return [...room.players.values()].filter((p) => !p.waiting)
+    .map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0 }))
+    .sort((a, b) => b.score - a.score);
+}
+function rushEmitTrack(room, evt = {}) {
+  const cur = room.rushPlaylist[room.rushIndex];
+  room.current = cur; // pour /api/dev/answer + le grade
+  room.rushTrackStartAt = Date.now();
+  const common = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: RUSH_MAX_MS, difficulty: room.diffLabel, scores: rushBoard(room), event: evt };
+  io.to(room.hostId).emit('rush:host', { ...common, preview: cur.preview, startAt: 0 }); // l'hôte joue le son
+  io.to(room.code).emit('rush:state', common); // les joueurs : chrono + score, pas d'audio
+}
+function rushAdvance(room, evt) {
+  room.rushIndex += 1;
+  if (room.rushIndex >= room.rushPlaylist.length) { // POOL épuisé → on recycle en re-mélangeant
+    const last = room.rushPlaylist[room.rushPlaylist.length - 1];
+    const tier = (DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal).tier;
+    const next = pickPlaylist(POOL.length, tier);
+    if (next[0] && last && next[0].id === last.id && next.length > 1) [next[0], next[1]] = [next[1], next[0]]; // pas de doublon immédiat
+    room.rushPlaylist = next; room.rushIndex = 0;
+  }
+  room.rushResolving = false;
+  rushEmitTrack(room, evt);
+}
+function rushApplyDelta(room, deltaMs) {
+  room.rushEndsAt = Math.min(Date.now() + RUSH_MAX_MS, room.rushEndsAt + deltaMs);
+  clearTimeout(room.rushTimer);
+  const left = room.rushEndsAt - Date.now();
+  if (left <= 0) return endRush(room);
+  room.rushTimer = setTimeout(() => endRush(room), left);
+}
+function startRush(room) {
+  const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
+  room.phase = 'playing';
+  room.mult = diff.mult; room.diffLabel = diff.label;
+  room.rushPlaylist = pickPlaylist(POOL.length, diff.tier);
+  room.rushIndex = 0;
+  room.rushEndsAt = Date.now() + RUSH_START_MS;
+  room.rushResolving = false;
+  for (const p of room.players.values()) { p.rushScore = 0; p.rushTracks = 0; }
+  clearTimeout(room.rushTimer);
+  room.rushTimer = setTimeout(() => endRush(room), RUSH_START_MS);
+  rushEmitTrack(room, { reason: 'start' });
+}
+function endRush(room) {
+  clearTimeout(room.rushTimer);
+  if (room.phase !== 'playing') return;
+  room.phase = 'rushend';
+  const players = [...room.players.values()].filter((p) => !p.waiting);
+  const results = players.map((p) => {
+    const placed = addScore({ name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0, difficulty: room.settings.difficulty });
+    return { id: p.id, name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0, rank: placed.rank };
+  }).sort((a, b) => b.score - a.score);
+  const payload = { results, top: getTop(10), difficulty: room.settings.difficulty };
+  room.lastRushEnd = payload;
+  io.to(room.code).emit('rush:end', payload);
+}
+
+/* ------------------------------------------------------------------ */
 /* Socket.IO                                                           */
 /* ------------------------------------------------------------------ */
 io.on('connection', (socket) => {
@@ -549,7 +624,7 @@ io.on('connection', (socket) => {
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
     const wantMode = MODES.includes(mode) ? mode : 'multi';
     const isQuiz = wantMode === 'quiz';
-    const useMj = !!mj && !isQuiz; // le quiz est objectif (QCM) : pas de Maître du jeu
+    const useMj = !!mj && !isQuiz && wantMode !== 'rush'; // quiz / Cypher : objectifs, pas de Maître du jeu
     if (!isQuiz && !POOL.length) return cb?.({ error: 'Aucun morceau disponible (réseau ?).' });
     if (room.players.size < 1) return cb?.({ error: 'Il faut au moins un joueur.' });
     if (useMj && room.players.size < 2) return cb?.({ error: 'Le mode Maître du jeu demande au moins 2 joueurs (1 anime, 1 joue).' });
@@ -559,8 +634,11 @@ io.on('connection', (socket) => {
       mj: useMj,
       rebalance: ['comeback', 'snowball', 'off'].includes(rebalance) ? rebalance : 'comeback',
     };
-    for (const p of room.players.values()) { p.score = 0; p.waiting = false; p.stat = newStat(); p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; p.isMJ = false; p.streak = 0; p.decayUses = 0; p.veteranUntil = null; p.veteranFloor = 0; p.nofault = false; p.selfBonus = 0; p.sustainUntil = null; p.sustainAmount = 0; p.draftFrac = 0; }
+    for (const p of room.players.values()) { p.score = 0; p.waiting = false; p.stat = newStat(); p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; p.isMJ = false; p.streak = 0; p.decayUses = 0; p.veteranUntil = null; p.veteranFloor = 0; p.nofault = false; p.selfBonus = 0; p.sustainUntil = null; p.sustainAmount = 0; p.draftFrac = 0; p.rushScore = 0; p.rushTracks = 0; }
     room.mjDouble = false; room.mjPlus = false; room.mjId = null;
+    clearTimeout(room.rushTimer);
+    // Mode Cypher : boucle dédiée (jauge de temps), pas de manches ni de pouvoirs → on lance et on sort
+    if (wantMode === 'rush') { room.totalRounds = 0; room.roundIndex = 0; room.prevRanks = null; cb?.({ ok: true }); return startRush(room); }
     if (room.settings.mj) {
       // le MJ est choisi explicitement (sinon 1er joueur connecté par défaut)
       const animator = (mjId && room.players.get(mjId)) || [...room.players.values()].find((p) => p.connected) || [...room.players.values()][0];
@@ -574,6 +652,7 @@ io.on('connection', (socket) => {
       room.playlist = pickPlaylist(rounds || 8, diff.tier);
     }
     room.totalRounds = room.playlist.length;
+    if (!room.totalRounds) return cb?.({ error: isQuiz ? 'Banque de quiz indisponible.' : 'Aucun morceau disponible.' });
     room.roundIndex = 0;
     room.prevRanks = null;
     cb?.({ ok: true });
@@ -624,6 +703,36 @@ io.on('connection', (socket) => {
     io.to(room.hostId).emit('player:answered', { id: p.id, name: p.name });
     // le son continue de tourner : on ne coupe plus la manche dès que tout le monde a répondu
   });
+
+  // Mode Cypher (contre-la-montre) : on répond en boucle, la 1re bonne réponse fait avancer TOUT LE MONDE
+  socket.on('rush:answer', ({ text } = {}, cb) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || room.phase !== 'playing' || room.settings.mode !== 'rush') return cb?.({ error: 'Pas de run.' });
+    if (room.rushResolving) return cb?.({ ok: true, correct: false }); // course : qqn a déjà trouvé ce morceau
+    const p = room.players.get(socket.data.playerId);
+    if (!p || p.waiting) return cb?.({ error: 'Joueur inconnu.' });
+    const g = gradeAnswer(text, room.current);
+    if (!(g.titleHit && g.artistHit)) return cb?.({ ok: true, correct: false }); // titre ET artiste requis pour avancer
+    room.rushResolving = true; // verrou anti double-résolution
+    const elapsed = Date.now() - (room.rushTrackStartAt || Date.now());
+    const sm = speedMult(Math.max(0, RUSH_REF_MS - elapsed), RUSH_REF_MS);
+    const pts = Math.round((g.base || 0) * sm * (room.mult || 1));
+    p.rushScore = (p.rushScore || 0) + pts; p.rushTracks = (p.rushTracks || 0) + 1;
+    cb?.({ ok: true, correct: true, points: pts, addedMs: RUSH_BONUS_MS });
+    rushApplyDelta(room, RUSH_BONUS_MS); // +temps
+    if (room.phase === 'playing') rushAdvance(room, { reason: 'hit', by: p.id, name: p.name, points: pts, addedMs: RUSH_BONUS_MS });
+  });
+  socket.on('rush:pass', (_p, cb) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || room.phase !== 'playing' || room.settings.mode !== 'rush' || room.rushResolving) return cb?.({ error: 'Non.' });
+    const p = room.players.get(socket.data.playerId);
+    if (!p || p.waiting) return;
+    room.rushResolving = true;
+    cb?.({ ok: true, removedMs: RUSH_PASS_MS });
+    rushApplyDelta(room, -RUSH_PASS_MS); // -temps (peut finir le run)
+    if (room.phase === 'playing') rushAdvance(room, { reason: 'pass', by: p.id, name: p.name, removedMs: RUSH_PASS_MS });
+  });
+  socket.on('leaderboard:get', (_p, cb) => cb?.({ ok: true, top: getTop(10) }));
 
   // Mode quiz : QCM, une seule réponse par joueur, note = justesse × vitesse
   socket.on('quiz:answer', ({ choice } = {}, cb) => {
@@ -705,6 +814,7 @@ io.on('connection', (socket) => {
     if (!room) return cb?.({ error: 'Pas de partie.' });
     const p = room.players.get(socket.data.playerId);
     if (!p) return cb?.({ error: 'Joueur inconnu.' });
+    if (p.waiting) return cb?.({ error: 'Tu rejoins une partie en cours : tu joueras au prochain salon.' });
     if (room.settings.mj) return cb?.({ error: 'Pas de pouvoirs en mode Maître du jeu.' });
     if (room.settings.mode === 'quiz') return cb?.({ error: 'Pas de pouvoirs en mode Quiz.' });
     // On active les pouvoirs AVANT la manche (fenêtre "prep"), pas en écoutant le son.
@@ -877,7 +987,7 @@ io.on('connection', (socket) => {
   socket.on('host:restart', (_p, cb) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
-    clearTimeout(room.timer); clearTimeout(room.buzzTimer); clearTimeout(room.cdTimer);
+    clearTimeout(room.timer); clearTimeout(room.buzzTimer); clearTimeout(room.cdTimer); clearTimeout(room.rushTimer);
     room.phase = 'lobby'; room.roundIndex = 0; room.prevRanks = null; room.current = null; room.lastReveal = null;
     for (const p of room.players.values()) {
       p.score = 0; p.waiting = false; p.stat = newStat(); // les « en attente » rejoignent la prochaine partie
@@ -937,6 +1047,7 @@ app.get('/api/preview/:id', (req, res) => {
     const start = m ? parseInt(m[1], 10) : 0;
     const end = m && m[2] ? Math.min(parseInt(m[2], 10), buf.length - 1) : buf.length - 1;
     if (start >= buf.length) return res.status(416).set('Content-Range', `bytes */${buf.length}`).end();
+    if (end < start) return res.set('Content-Length', String(buf.length)).end(buf); // plage inversée → on ignore la range, morceau complet
     res.status(206).set('Content-Range', `bytes ${start}-${end}/${buf.length}`).set('Content-Length', String(end - start + 1));
     return res.end(buf.subarray(start, end + 1));
   }

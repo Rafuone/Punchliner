@@ -57,7 +57,7 @@
   { "id": "g-92i", "cat": "Label", "diff": "normal", "q": "Quel label a été fondé par Booba ?", "correct": "92i", "distractors": ["Rec. 118", "Wati B", "Def Jam France"] },
   { "id": "g-ceinture", "cat": "Culture", "diff": "normal", "q": "L'album « Ceinture Noire » est de quel artiste ?", "correct": "Gims", "distractors": ["Soprano", "Black M", "Dadju"] },
   { "id": "g-yr-2freres", "cat": "Année", "diff": "normal", "q": "En quelle année sort « Deux frères » de PNL ?", "correct": "2019", "distractors": ["2016", "2017", "2020"] },
-  { "id": "g-yr-qalf", "cat": "Année", "diff": "normal", "q": "En quelle année sort « QALF » de Damso ?", "correct": "2021", "distractors": ["2018", "2019", "2020"] },
+  { "id": "g-yr-qalf", "cat": "Année", "diff": "normal", "q": "En quelle année sort « QALF » de Damso ?", "correct": "2020", "distractors": ["2018", "2019", "2022"] },
   { "id": "g-city-niska", "cat": "Ville", "diff": "normal", "q": "De quelle ville vient Niska ?", "correct": "Évry", "distractors": ["Paris", "Sevran", "Corbeil-Essonnes"] },
   { "id": "g-bloques", "cat": "Culture", "diff": "normal", "q": "La web-série « Bloqués » est l'œuvre de quel duo ?", "correct": "Orelsan & Gringe", "distractors": ["Bigflo & Oli", "PNL", "Suprême NTM"] },
   { "id": "g-romeo-angele", "cat": "Culture", "diff": "normal", "q": "De quel rappeur belge la chanteuse Angèle est-elle la sœur ?", "correct": "Roméo Elvis", "distractors": ["Damso", "Hamza", "Lomepal"] },
