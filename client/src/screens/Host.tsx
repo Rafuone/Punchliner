@@ -14,6 +14,14 @@ const C = 2 * Math.PI * 54;
 const HKEY = 'pl_host';
 const SILENT = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAACAgICAgICAgICAgICAgIA=';
 
+// prénom du podium à taille ADAPTATIVE (façon maillot de basket) : grand si court, réduit s'il déborde
+function fitName(el: HTMLDivElement | null, maxW: number, base: number, min: number) {
+  if (!el) return;
+  el.style.whiteSpace = 'nowrap'; el.style.fontSize = base + 'px';
+  const w = el.scrollWidth;
+  if (w > maxW) el.style.fontSize = Math.max(min, Math.floor(base * maxW / w)) + 'px';
+}
+
 function Med({ avatarId, size = 38 }: { avatarId?: string; size?: number }) {
   const a = avatarById(avatarId);
   return <span className="med" style={{ width: size, height: size, fontSize: Math.round(size * 0.37), background: a?.color || 'linear-gradient(150deg,#7C5CFF,#432E8C)' }}>
@@ -709,21 +717,32 @@ export default function Host() {
         <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(14px,3vh,44px)', gap: 20 }}>
           {finalStep === 'podium' ? (<>
           <span className="eyebrow">{multi ? `Partie ${series.gamesPlayed} — terminée` : 'Podium'}</span>
-          {champ && (
-            <div className="champ">
-              <CertifDisc score={champ.score} rounds={gameRounds} size={186} avatarId={champ.avatar} />
-              <h2 className="title-xl champ-name">{champ.name} <span className="champ-tag">gagne la partie</span></h2>
-              <div className={`certlabel tier-${CERTIF_TIER[certif(champ.score, gameRounds).short] ?? 0}`}>{certif(champ.score, gameRounds).label}</div>
-            </div>
-          )}
-          {/* CERTIFS DE LA SOIRÉE — chacun repart avec sa plaque (pas que le gagnant), écrit GROS pour la TV. */}
+          {/* PODIUM top 3 (2 · 1 · 3) — un seul disque de certif fusionné, prénom adaptatif, aud./manche */}
+          <div className="podium">
+            {([[board[1], 2], [board[0], 1], [board[2], 3]] as [any, number][]).map(([p, pos]) => {
+              if (!p) return null;
+              const c = certif(p.score, gameRounds); const t = CERTIF_TIER[c.short] ?? 0; const isP1 = pos === 1;
+              return (
+                <div className={`pod p${pos}`} key={p.id}>
+                  <div className={`p-cert certlabel tier-${t}`} style={{ fontSize: isP1 ? 'clamp(15px,1.8vw,20px)' : '13px', padding: isP1 ? '7px 14px' : '5px 11px' }}>{c.short}</div>
+                  <CertifDisc score={p.score} rounds={gameRounds} size={isP1 ? 168 : 122} avatarId={p.avatar} />
+                  <div className="p-name" ref={(el) => fitName(el, isP1 ? 240 : 176, isP1 ? 32 : 20, isP1 ? 16 : 13)}>{p.name}</div>
+                  <div className="p-aud">{fmtAud(p.score)}<small> aud.</small></div>
+                  <div className="p-permanche">≈ {fmtAud(Math.round(p.score / gameRounds))} <span>aud./manche</span></div>
+                  <div className="ped">{pos}</div>
+                </div>
+              );
+            })}
+          </div>
+          {/* LE RESTE DU CLASSEMENT (4e et +) — chacun sa plaque de certif */}
+          {board.length > 3 && (
           <div className="certgrid">
-            {board.map((p, i) => {
+            {board.slice(3).map((p, i) => {
               const c = certif(p.score, gameRounds);
               const t = CERTIF_TIER[c.short] ?? 0;
               return (
-                <div className={`certcard ${i === 0 ? 'lead' : ''}`} key={p.id}>
-                  <span className="cc-rk">{i + 1}</span>
+                <div className="certcard" key={p.id}>
+                  <span className="cc-rk">{i + 4}</span>
                   <CertifDisc score={p.score} rounds={gameRounds} size={72} avatarId={p.avatar} />
                   <div className="cc-info">
                     <div className="cc-name">{p.name}</div>
@@ -734,6 +753,7 @@ export default function Host() {
               );
             })}
           </div>
+          )}
           {multi && (
             <div className="series-wrap">
               <div className="series-head">

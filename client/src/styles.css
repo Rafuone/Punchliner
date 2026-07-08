@@ -881,6 +881,23 @@ button, input { font-family: inherit; }
 .tro-cdbar { display: block; width: 190px; height: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
 .tro-cdbar b { display: block; height: 100%; width: 100%; background: var(--fluo); box-shadow: 0 0 8px -1px var(--fluo); }
 
+/* PODIUM 3 marches (top 3) — un seul disque fusionné, prénom adaptatif, aud./manche */
+.podium { display: flex; justify-content: center; align-items: flex-end; gap: clamp(12px,2.4vw,34px); width: 100%; max-width: 900px; margin: 6px auto 4px; }
+.pod { display: flex; flex-direction: column; align-items: center; gap: 9px; flex: 0 0 auto; animation: podin .55s cubic-bezier(.2,.8,.3,1.15) both; }
+.pod.p2 { animation-delay: .1s; } .pod.p1 { animation-delay: .25s; } .pod.p3 { animation-delay: 0s; }
+@keyframes podin { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+.pod .p-cert { margin-bottom: 2px; }
+.pod .p-name { font-family: var(--disp); font-weight: 700; text-transform: uppercase; line-height: 1; letter-spacing: -.01em; }
+.pod .p-aud { font-family: var(--disp); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.pod .p-aud small { font-family: var(--ui); font-weight: 700; font-size: .42em; color: var(--muted2); }
+.pod .p-permanche { font-family: var(--ui); font-weight: 700; font-size: 12px; color: var(--muted2); font-variant-numeric: tabular-nums; line-height: 1; margin-top: 1px; }
+.pod.p1 .p-permanche { font-size: 13px; color: var(--muted); }
+.pod .ped { width: 100%; min-width: 96px; border-radius: 6px 6px 0 0; background: linear-gradient(180deg,var(--surf2),var(--surf)); border: 1px solid var(--line2); border-bottom: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; color: var(--muted2); }
+.pod.p1 .ped { height: 132px; border-color: var(--fluo); background: linear-gradient(180deg,rgba(228,255,26,.14),rgba(228,255,26,.03)); color: var(--fluo); font-size: 52px; }
+.pod.p2 .ped { height: 96px; font-size: 40px; } .pod.p3 .ped { height: 70px; font-size: 36px; }
+.pod.p1 .p-name { font-size: clamp(22px,3vw,30px); } .pod.p2 .p-name, .pod.p3 .p-name { font-size: 20px; }
+.pod.p1 .p-aud { font-size: clamp(22px,3vw,28px); color: var(--fluo); } .pod.p2 .p-aud, .pod.p3 .p-aud { font-size: 20px; }
+
 /* trophées de fin AGRANDIS sur la TV (host final) — lisibles à 3 m */
 .final .awards { max-width: 1020px; gap: 16px; }
 .final .award { min-width: 200px; max-width: 300px; padding: 20px 18px 18px; }
