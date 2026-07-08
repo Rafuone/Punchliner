@@ -72,7 +72,9 @@ export function gradeAnswer(answer, track, lenient = false) {
   const titleQ = matchQuality(answer, track.title, lenient);
   let artistQ = matchQuality(answer, track.artist, lenient);
   if (artistQ < 1) {
-    for (const f of extractFeats(track)) { const q = matchQuality(answer, f, lenient); if (q > artistQ) artistQ = q; }
+    // feats du titre/artiste + liste pré-calculée (track.feats = feats du titre COMPLET Deezer)
+    const feats = [...extractFeats(track), ...(track.feats || [])];
+    for (const f of feats) { const q = matchQuality(answer, f, lenient); if (q > artistQ) artistQ = q; }
   }
   const titleHit = titleQ > 0;
   const artistHit = artistQ > 0;

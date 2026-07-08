@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
-import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon, REACTIONS } from '../data';
+import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon, REACTIONS, END_REACTIONS, CERTIF_TIER } from '../data';
 import ConfigWizard from './ConfigWizard';
 import HubBrowse from './HubBrowse';
 import GrungeBg from '../GrungeBg';
-import { sfx, sfxLoop, sfxLoopStop } from '../sfx';
+import { sfx, sfxLoopStop } from '../sfx';
 
 // Fond du lobby (écran du code) : instru d'Alpha Wann. Crossfade vers la playlist (Bishok) à l'entrée du ConfigWizard.
 const LOBBY_TRACK = '/music/alphawann-philly-flingo.mp3';
@@ -21,6 +21,21 @@ function Med({ avatarId, size = 38 }: { avatarId?: string; size?: number }) {
   </span>;
 }
 
+// "CD" de certification (or / platine / 2×–3× / diamant) : disque métallique qui tourne, avatar au centre
+// (label du vinyle). La matière change selon le palier de certif → chacun repart avec sa plaque sur la TV.
+function CertifDisc({ score, rounds, size = 92, avatarId }: { score: number; rounds: number; size?: number; avatarId?: string }) {
+  const c = certif(score, rounds);
+  const tier = CERTIF_TIER[c.short] ?? 0;
+  return (
+    <span className={`certdisc certdisc-t${tier}`} style={{ width: size, height: size }} title={c.label}>
+      <span className="cd-sheen" />
+      <span className="cd-grooves" />
+      <span className="cd-shine" />
+      <span className="cd-label">{avatarId ? <Med avatarId={avatarId} size={Math.round(size * 0.4)} /> : <span className="cd-hole" />}</span>
+    </span>
+  );
+}
+
 export default function Host() {
   const [phase, setPhase] = useState<'connecting' | 'lobby' | 'prep' | 'countdown' | 'playing' | 'reveal' | 'final'>('connecting');
   const [countdown, setCountdown] = useState(0);
@@ -30,19 +45,21 @@ export default function Host() {
   const [settings, setSettings] = useState({ difficulty: 'normal', mode: 'multi', rounds: 8, mj: false, rebalance: 'comeback' });
   const [configuring, setConfiguring] = useState(false);
   const [hubView, setHubView] = useState<null | 'roster' | 'trophies'>(null); // consultation roster / palmarès sur la TV
-  const [powerLog, setPowerLog] = useState('');
+  const [powerFeed, setPowerFeed] = useState<any[]>([]); // pouvoirs activés (qui + quoi + effet) → mis en avant sur la TV
+  const powerKeyRef = useRef(0);
   const [round, setRound] = useState<any>({ index: 0, total: 0, endsAt: 0, durationMs: 25000, mode: 'multi', difficulty: '' });
   const [answered, setAnswered] = useState<string[]>([]);
   const [buzzWinner, setBuzzWinner] = useState<string | null>(null);
   const [reveal, setReveal] = useState<any>(null);
+  const [revealStep, setRevealStep] = useState(0); // 0 = réponses seules · 1 = + classement (on affiche l'un PUIS l'autre)
   const [finalScores, setFinalScores] = useState<any[]>([]);
   const [awards, setAwards] = useState<any[]>([]);       // trophées de la partie qui vient de finir
+  const [awardsShown, setAwardsShown] = useState(0);     // révélation SÉQUENTIELLE des trophées (suspense façon étoiles bonus Mario Party)
   const [series, setSeries] = useState<any>(null);       // cumul de la série (multi-parties)
   const [finalRounds, setFinalRounds] = useState(0);     // nb de manches de la partie (pour la certif)
   const [waiting, setWaiting] = useState(0);             // joueurs en salle d'attente
   const [error, setError] = useState('');
   const [joinBase, setJoinBase] = useState(window.location.origin.replace(/\/$/, ''));
-  const [audioBlocked, setAudioBlocked] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [reactions, setReactions] = useState<any[]>([]); // taunts flottants (façon Meet)
   const reactKeyRef = useRef(0);
@@ -51,6 +68,8 @@ export default function Host() {
   const previewRef = useRef<any>({ url: '', clipMs: 30000, startAt: 0 });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const clipTimer = useRef<any>(null);
+  const audioRetryRef = useRef<any>(null);   // relances programmées quand le son échoue (auto-réparation)
+  const wantAudioRef = useRef(false);         // true = un extrait DOIT être en train de jouer (manche en cours)
   const menuAudioRef = useRef<HTMLAudioElement | null>(null);
   const [nowPlaying, setNowPlaying] = useState(-1);
   const [musicOn, setMusicOn] = useState(true);
@@ -91,26 +110,26 @@ export default function Host() {
     });
     if (socket.connected) boot();
     socket.on('connect', boot);
-    socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); setWaiting(d.waiting || 0); if (d.phase === 'lobby') { setPhase('lobby'); sfxLoopStop(); } });
-    socket.on('round:prep', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
+    socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); setWaiting(d.waiting || 0); if (typeof d.poolSize === 'number') setPoolSize(d.poolSize); if (d.phase === 'lobby') { setPhase('lobby'); sfxLoopStop(); } });
+    socket.on('round:prep', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
-    socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
+    socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
     socket.on('round:host', (d: any) => { setReveal(null); setAnswered([]); setBuzzWinner(null); setRound(d); setPhase('playing'); playPreview(d.preview, d.startAt); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
     socket.on('buzz:winner', (d: any) => setBuzzWinner(d.name));
     socket.on('buzz:open', () => setBuzzWinner(null));
-    socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); sfx('scratch'); }); // le son continue de tourner sur la révélation
-    socket.on('game:final', (d: any) => { audioRef.current?.pause(); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final'); sfxLoop('recap'); });
-    socket.on('power:used', (d: any) => { setPowerLog(`${d.name} a lancé ${d.power}`); setTimeout(() => setPowerLog(''), 4500); sfx('scratch'); });
+    socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // le son continue de tourner ; plus de "scratch" (jugé désagréable)
+    socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final'); }); // musique de podium retirée ; on coupe proprement (le watchdog ne relance rien)
+    socket.on('power:used', (d: any) => { setPowerFeed((f) => [...f.slice(-4), { ...d, key: powerKeyRef.current++ }]); sfx('scratch'); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('reaction', (d: any) => {
       const key = reactKeyRef.current++;
-      const side = key % 2 === 0 ? 'l' : 'r';      // alterne gauche/droite (marges), jamais devant le contenu centré
-      const pos = 3 + Math.random() * 13;          // 3–16 % depuis le bord
-      setReactions((rs) => [...rs.slice(-7), { ...d, key, side, pos }]);
-      setTimeout(() => setReactions((rs) => rs.filter((r) => r.key !== key)), 5600);
+      const side = key % 2 === 0 ? 'l' : 'r';      // alterne gauche/droite : reste dans les MARGES, jamais devant le contenu centré
+      const pos = 1.5 + Math.random() * 7;         // 1,5–8,5 % depuis le bord (couloir latéral étroit)
+      setReactions((rs) => [...rs.slice(-5), { ...d, key, side, pos }]);
+      setTimeout(() => setReactions((rs) => rs.filter((r) => r.key !== key)), 4800);
     });
-    socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); localStorage.removeItem(HKEY); sfxLoopStop(); });
+    socket.on('room:closed', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); setError(d.reason || 'Salon fermé.'); localStorage.removeItem(HKEY); sfxLoopStop(); });
     return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'round:countdown', 'round:host', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'reaction', 'room:closed'].forEach((e) => socket.off(e as any));
   }, []);
 
@@ -119,6 +138,32 @@ export default function Host() {
   useEffect(() => { if (phase === 'countdown') sfx('countdown'); }, [countdown, phase]); // tick raccord avec chaque chiffre du décompte
   const prepSec = phase === 'prep' ? Math.max(0, Math.ceil((prepEndsAt - now) / 1000)) : -1;
   useEffect(() => { if (phase === 'prep' && prepSec > 0) sfx('countdown'); }, [prepSec]); // idem pendant l'activation des pouvoirs
+  // Podium : les trophées se révèlent UN PAR UN, à la MAIN (l'hôte clique) — on prend le temps de lire.
+  // On remet juste le compteur à zéro à chaque nouveau podium.
+  useEffect(() => { setAwardsShown(0); }, [phase, awards]);
+  // Reveal en DEUX temps qui se REMPLACENT (jamais les deux à l'écran) : 1) qui a répondu quoi + points
+  // gagnés, puis 2) le classement. L'hôte passe à l'étape 2 à la MAIN (bouton « Voir les scores ») ;
+  // repli automatique à 30 s si personne ne clique — on a tout le temps de lire, même à 6 joueurs.
+  useEffect(() => {
+    if (phase !== 'reveal') { setRevealStep(0); return; }
+    setRevealStep(0);
+    const t = setTimeout(() => setRevealStep(1), 30000);
+    return () => clearTimeout(t);
+  }, [phase, reveal]);
+  // AUTO-RÉPARATION DU SON (priorité : la musique doit marcher à chaque fois). Pendant qu'un extrait
+  // doit jouer, si le navigateur le coupe (suspension autoplay, onglet en veille, hoquet réseau), on le
+  // relance : au moindre geste, au retour de l'onglet, et via une horloge de garde toutes les 2,5 s.
+  useEffect(() => {
+    const musicPhase = (phase === 'playing' || phase === 'reveal') && round.mode !== 'quiz';
+    if (!musicPhase) return;
+    const kick = () => { const a = audioRef.current; if (a && wantAudioRef.current && a.paused && !a.ended && previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); };
+    const onVis = () => { if (document.visibilityState === 'visible') kick(); };
+    window.addEventListener('pointerdown', kick);
+    window.addEventListener('keydown', kick);
+    document.addEventListener('visibilitychange', onVis);
+    const wd = setInterval(kick, 1500); // filet de sécurité ; l'essentiel se répare via onPause (instantané)
+    return () => { window.removeEventListener('pointerdown', kick); window.removeEventListener('keydown', kick); document.removeEventListener('visibilitychange', onVis); clearInterval(wd); };
+  }, [phase, round.mode]);
   useEffect(() => {
     fetch('/api/net').then((r) => r.json()).then(({ ip }) => {
       const loc = window.location; const local = loc.hostname === 'localhost' || loc.hostname === '127.0.0.1';
@@ -236,14 +281,22 @@ export default function Host() {
     else if (!configuring && musicOnRef.current) playLobby();
   }, [phase]);
 
-  function playPreview(url: string, startAt = 0) {
+  // Lecture de l'extrait — AUTO-RÉPARANTE, sans aucun bouton ni geste. La page est déjà "déverrouillée"
+  // depuis le clic "Lancer", donc play() marche en programmatique : si le navigateur coupe le son, on le
+  // relance tout seul (retries ici + events onPause/onError de l'élément + horloge de garde plus bas).
+  function playPreview(url: string, startAt = 0, attempt = 0) {
     const a = audioRef.current; if (!a || !url) return;
     previewRef.current = { url, startAt };
-    a.src = url; a.volume = 1;
-    a.play().then(() => {
-      try { if (startAt) a.currentTime = startAt / 1000; } catch {}
-      setAudioBlocked(false); // le son joue à fond, on ne le coupe pas
-    }).catch((e: any) => { console.warn('[audio] bloqué:', e?.name); setAudioBlocked(true); });
+    wantAudioRef.current = true;
+    clearTimeout(audioRetryRef.current);
+    try { acRef.current?.ctx?.resume?.(); } catch {} // réveille l'audio de la page si suspendu
+    if (a.src !== url) a.src = url;
+    a.volume = 1;
+    const p = a.play();
+    if (p && p.then) {
+      p.then(() => { try { if (startAt && Math.abs(a.currentTime - startAt / 1000) > 1) a.currentTime = startAt / 1000; } catch {} })
+       .catch(() => { if (wantAudioRef.current && attempt < 6) audioRetryRef.current = setTimeout(() => playPreview(url, startAt, attempt + 1), 300); }); // le watchdog prend le relais ensuite
+    }
   }
   function start() {
     const a = audioRef.current;
@@ -279,21 +332,28 @@ export default function Host() {
     {((phase === 'lobby' && !configuring) || ['prep', 'countdown', 'playing', 'reveal', 'final'].includes(phase)) && <GrungeBg />}
     {reactions.length > 0 && (
       <div className="reactfloat">
-        {reactions.map((r) => (
+        {reactions.map((r) => {
+          const set = r.end ? END_REACTIONS : REACTIONS;
+          return (
           <div className="reactbubble" key={r.key} style={r.side === 'r' ? { right: `${r.pos}%` } : { left: `${r.pos}%` }}>
-            <span className="rb-e">{REACTIONS[r.id]?.e || '🔥'}</span>
-            <span className="rb-t"><b>{r.name}</b> {REACTIONS[r.id]?.t || ''}</span>
+            <span className="rb-e">{set[r.id]?.e || '🔥'}</span>
+            <span className="rb-t"><b>{r.name}</b> {set[r.id]?.t || ''}</span>
           </div>
-        ))}
+          );
+        })}
       </div>
     )}
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
-      <div className="topbar">
+      <div className={`topbar${['prep', 'countdown', 'playing', 'reveal', 'final'].includes(phase) ? ' gamebar' : ''}`}>
         <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">R</span></h1>
         <span className="row" style={{ gap: 14, alignItems: 'center' }}>
           {phase === 'lobby' && <span className="gpill"><span className="dot" />Salon {code} · {players.length} j.</span>}
           {['prep', 'countdown', 'playing', 'reveal'].includes(phase) && (<>
-            <span className="hostmeta">Manche <b>{round.index + 1}/{round.total}</b> · {round.difficulty} · {players.length} j.{waiting > 0 ? ` · ${waiting} en attente` : ''}</span>
+            <span className="gmeta">
+              <span className="gmeta-round"><span className="gl">Manche</span><b>{round.index + 1}<i>/{round.total}</i></b></span>
+              <span className="gmeta-chip">{round.difficulty}</span>
+              <span className="gmeta-chip">{players.length} j.{waiting > 0 ? ` · ${waiting} att.` : ''}</span>
+            </span>
             <span className="salontag"><span className="lbl">Salon</span><b className="cd">{code}</b></span>
             <button className="btn" style={{ padding: '9px 15px', fontSize: 14 }} onClick={() => socket.emit('host:restart')}>← Salon</button>
           </>)}
@@ -357,18 +417,31 @@ export default function Host() {
       )}
 
       {phase === 'prep' && (
-        <div className="center">
+        <div className="center" style={{ gap: 16 }}>
           <span className="eyebrow">Manche {round.index + 1} / {round.total}</span>
           <h2 className="title-xl">Activation des pouvoirs</h2>
           <div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.max(0, Math.ceil((prepEndsAt - now) / 1000))}</div>
           <span className="url">{prepReady.count}/{prepReady.total} prêt{prepReady.total > 1 ? 's' : ''}</span>
-          <p className="muted">Chaque joueur active son pouvoir — ou passe — avant que la musique démarre.</p>
+          {powerFeed.length > 0 ? (
+            <div className="pwfeed">
+              {powerFeed.map((p) => (
+                <div className="pwcard" key={p.key}>
+                  <Med avatarId={p.avatar} size={44} />
+                  <div className="pwtxt">
+                    <div className="pwhead"><b>{p.name}</b> lance <span className="pwname">{p.power}</span></div>
+                    {p.effect && <div className="pweff">{p.effect}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">Chaque joueur active son pouvoir — ou passe — avant que la musique démarre.</p>
+          )}
         </div>
       )}
 
       {phase === 'playing' && (
         <div className="center">
-          {audioBlocked && round.mode !== 'quiz' && <button className="btn warm big" style={{ maxWidth: 320 }} onClick={() => playPreview(previewRef.current.url, previewRef.current.startAt)}>Activer le son</button>}
           {round.mode === 'quiz' ? (
             <div style={{ width: '100%', maxWidth: 840, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
               <div className="row" style={{ gap: 18, alignItems: 'center', justifyContent: 'center' }}>
@@ -415,7 +488,13 @@ export default function Host() {
               )}
             </>
           )}
-          {powerLog && <p className="feedback" style={{ color: 'var(--v1)' }}>{powerLog}</p>}
+          {powerFeed.length > 0 && (
+            <div className="pwfeed compact">
+              {powerFeed.slice(-3).map((p) => (
+                <div className="pwchip" key={p.key}><Med avatarId={p.avatar} size={26} /><span><b>{p.power}</b>{p.effect ? ` — ${p.effect}` : ''}</span></div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -439,11 +518,42 @@ export default function Host() {
               </div>
             </div>
           )}
-          {reveal.hideBoard ? (
-            <div className="suspense-card">
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
-              <div><b>Scores masqués</b><span>Ça se joue sur la fin — le classement reste secret jusqu'au podium. Personne ne sait qui mène.</span></div>
+          {/* ÉTAPE 1 — QUI A RÉPONDU QUOI (+ points gagnés). Disparaît quand le classement arrive (revealStep>=1). */}
+          {revealStep < 1 && !round.mj && reveal.results && reveal.results.filter((r: any) => !r.isMJ).length > 0 && (
+            <div className="verdicts">
+              {reveal.results.filter((r: any) => !r.isMJ).map((r: any) => {
+                const good = r.points > 0;
+                return (
+                  <div className={`verdict ${good ? 'good' : 'bad'}`} key={r.id}>
+                    <Med avatarId={r.avatar} size={46} />
+                    <div className="v-main">
+                      <div className="v-who">{r.name}<span className="v-rap">{avatarById(r.avatar)?.name}</span></div>
+                      <div className="v-ans">{r.answer ? <>« {r.answer} »</> : <i className="v-none">pas de réponse</i>}</div>
+                      {r.power && <div className="v-pow"><span className="v-bolt">⚡</span> <b>{r.power.name}</b> — {r.power.note}</div>}
+                    </div>
+                    <div className="v-res">
+                      {good && (r.titleHit || r.artistHit) && <span className="v-hits">{r.titleHit ? 'Titre' : ''}{r.titleHit && r.artistHit ? ' + ' : ''}{r.artistHit ? 'Artiste' : ''}</span>}
+                      {reveal.hideBoard
+                        ? <span className={`v-mark ${good ? 'ok' : ''}`}>{good ? '✓' : '·'}</span>
+                        : <span className={`v-pts ${r.points > 0 ? '' : r.points < 0 ? 'loss' : 'zero'}`}>{r.points > 0 ? `+${fmtAud(r.points)}` : r.points < 0 ? `−${fmtAud(-r.points)}` : '—'}</span>}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+          )}
+          {revealStep >= 1 && (reveal.hideBoard ? (
+            reveal.lastRound ? (
+              <div className="suspense-card final-teaser">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" /><path d="M9.5 13v3.3h5V13M8 20.5h8" /></svg>
+                <div><b>Dernière manche bouclée</b><span>Le classement final se dévoile sur le podium. Roulement de tambour…</span></div>
+              </div>
+            ) : (
+              <div className="suspense-card">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+                <div><b>Scores masqués</b><span>Ça se joue sur la fin — le classement reste secret jusqu'au podium. Personne ne sait qui mène.</span></div>
+              </div>
+            )
           ) : (
           <div className="board tvbig" style={{ maxWidth: 780 }}>
             {reveal.scores.filter((p: any) => !p.isMJ).map((p: any, i: number) => {
@@ -461,15 +571,17 @@ export default function Host() {
                         {Math.abs(d)}
                       </span>
                     )}
-                    <span className={`gain ${r && r.points ? '' : 'zero'}`}>{r && r.points ? `+${fmtAud(r.points)}` : '·'}</span>
+                    <span className={`gain ${r && r.points > 0 ? '' : r && r.points < 0 ? 'loss' : 'zero'}`}>{r && r.points > 0 ? `+${fmtAud(r.points)}` : r && r.points < 0 ? `−${fmtAud(-r.points)}` : '·'}</span>
                     <span className="pts">{fmtAud(p.score)}</span>
                   </span>
                 </div>
               );
             })}
           </div>
-          )}
-          <button className="btn warm" onClick={() => socket.emit('host:next')}>{round.index + 1 >= round.total ? 'Voir le podium' : 'Manche suivante'}</button>
+          ))}
+          {revealStep < 1
+            ? <button className="btn warm" onClick={() => setRevealStep(1)}>Voir les scores →</button>
+            : <button className="btn warm" onClick={() => socket.emit('host:next')}>{round.index + 1 >= round.total ? 'Voir le podium' : 'Manche suivante'}</button>}
         </div>
       )}
 
@@ -480,36 +592,70 @@ export default function Host() {
         const standings = series?.standings || [];
         const seriesLeader = standings[0];
         const gameRounds = finalRounds || round.total || 1;
+        const allAwardsShown = awards.length === 0 || awardsShown >= awards.length; // trophées tous révélés → on dévoile le reste
         return (
         <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(14px,3vh,44px)', gap: 20 }}>
           <span className="eyebrow">{multi ? `Partie ${series.gamesPlayed} — terminée` : 'Podium'}</span>
-          <div style={{ color: 'var(--fluo)' }}><svg width="86" height="86" viewBox="0 0 24 24" fill="none"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" stroke="currentColor" strokeWidth="1.3" /><path d="M7 5H4v1.6A3.4 3.4 0 0 0 7.3 10M17 5h3v1.6A3.4 3.4 0 0 1 16.7 10" stroke="currentColor" strokeWidth="1.3" /><path d="M9.5 13v3.3h5V13M8 20.5h8M10.4 16.8h3.2v3.7h-3.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></div>
-          <h2 className="title-xl">{champ?.name} gagne la partie</h2>
-          <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 15, padding: '10px 18px' }}>{certif(champ?.score ?? 0, gameRounds).label}</div>
-
-          {awards.length > 0 && (
-            <div className="awards">
-              {awards.map((a: any) => (
-                <div className="award" key={a.id}>
-                  <span className="aw-ic" dangerouslySetInnerHTML={{ __html: awardIcon(a.icon) }} />
-                  <div className="aw-title">{a.title}</div>
-                  <div className="aw-who"><Med avatarId={a.avatar} size={22} /><span>{a.playerName}</span></div>
-                  <div className="aw-desc">{a.desc}</div>
-                </div>
-              ))}
+          {champ && (
+            <div className="champ">
+              <CertifDisc score={champ.score} rounds={gameRounds} size={186} avatarId={champ.avatar} />
+              <h2 className="title-xl champ-name">{champ.name} <span className="champ-tag">gagne la partie</span></h2>
+              <div className={`certlabel tier-${CERTIF_TIER[certif(champ.score, gameRounds).short] ?? 0}`}>{certif(champ.score, gameRounds).label}</div>
             </div>
           )}
 
-          <div className="board" style={{ maxWidth: 560 }}>
-            {board.map((p, i) => (
-              <div className={`prow ${i === 0 ? 'lead' : ''}`} key={p.id}>
-                <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={26} />{p.name}</span>
-                <span className="pts">{fmtAud(p.score)}</span>
+          {/* TROPHÉES révélés UN PAR UN, à la MAIN (l'hôte clique pour dévoiler le suivant → on a le temps de lire) */}
+          {awards.length > 0 && (
+            <div className="awards-stage">
+              <span className="eyebrow awards-eyebrow">Trophées de la soirée · {Math.min(awardsShown, awards.length)}/{awards.length}</span>
+              <div className="awards">
+                {awards.slice(0, awardsShown).map((a: any) => (
+                  <div className="award pop" key={a.id}>
+                    <span className="aw-ic" dangerouslySetInnerHTML={{ __html: awardIcon(a.icon) }} />
+                    <div className="aw-title">{a.title}</div>
+                    <div className="aw-who"><Med avatarId={a.avatar} size={32} /><span>{a.playerName}</span></div>
+                    <div className="aw-desc">{a.desc}</div>
+                  </div>
+                ))}
+                {!allAwardsShown && (
+                  <div className="award pending" key="pending">
+                    <span className="aw-drum">🥁</span>
+                    <div className="aw-title">Trophée {awardsShown + 1}</div>
+                    <div className="aw-desc">roulement de tambour…</div>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
+              {!allAwardsShown && (
+                <button className="btn warm" onClick={() => { setAwardsShown((n) => Math.min(n + 1, awards.length)); sfx('launch'); }}>
+                  {awardsShown === 0 ? 'Révéler le 1ᵉʳ trophée →' : awardsShown + 1 >= awards.length ? 'Dernier trophée →' : 'Trophée suivant →'}
+                </button>
+              )}
+            </div>
+          )}
 
-          {multi && (
+          {/* CERTIFS DE LA SOIRÉE — chacun repart avec sa plaque (pas que le gagnant), écrit GROS pour la TV.
+              Apparaît une fois tous les trophées tombés → garde le suspense. */}
+          {allAwardsShown && (
+          <div className="certgrid">
+            {board.map((p, i) => {
+              const c = certif(p.score, gameRounds);
+              const t = CERTIF_TIER[c.short] ?? 0;
+              return (
+                <div className={`certcard ${i === 0 ? 'lead' : ''}`} key={p.id}>
+                  <span className="cc-rk">{i + 1}</span>
+                  <CertifDisc score={p.score} rounds={gameRounds} size={72} avatarId={p.avatar} />
+                  <div className="cc-info">
+                    <div className="cc-name">{p.name}</div>
+                    <div className={`cc-cert tier-${t}`}>{c.short}</div>
+                  </div>
+                  <div className="cc-score">{fmtAud(p.score)}<span> aud.</span></div>
+                </div>
+              );
+            })}
+          </div>
+          )}
+
+          {allAwardsShown && multi && (
             <div className="series-wrap">
               <div className="series-head">
                 <span className="eyebrow">Classement général · {series.gamesPlayed} parties</span>
@@ -536,7 +682,9 @@ export default function Host() {
         );
       })()}
 
-      <audio ref={audioRef} preload="auto" />
+      <audio ref={audioRef} preload="auto"
+        onPause={() => { const a = audioRef.current; if (a && wantAudioRef.current && !a.ended && previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); }}
+        onError={() => { if (wantAudioRef.current && previewRef.current.url) { clearTimeout(audioRetryRef.current); audioRetryRef.current = setTimeout(() => playPreview(previewRef.current.url, previewRef.current.startAt, 0), 300); } }} />
       <audio ref={menuAudioRef} preload="auto" onEnded={() => nextTrack()} />
       <audio ref={lobbyAudioRef} preload="auto" loop />
     </div>

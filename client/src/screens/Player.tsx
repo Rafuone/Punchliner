@@ -1,8 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { socket } from '../socket';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO, EPITHETS, REACTIONS } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO, EPITHETS, REACTIONS, END_REACTIONS, TRASH_TALK } from '../data';
 import GrungeBg from '../GrungeBg';
 import { sfx } from '../sfx';
+
+// Jauge de pouvoir LISIBLE : pastilles pleines/vides (charges dispo /5) + fine barre de progression
+// vers la charge suivante. Une charge = un pouvoir.
+function Charges({ n, max = 5, charge }: { n: number; max?: number; charge?: number }) {
+  return (
+    <span className="charges" role="img" aria-label={`${n} charge${n > 1 ? 's' : ''} de pouvoir sur ${max}`}>
+      <svg className="charges-ic" width="12" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2L4 14h6l-1 8 9-12h-6z" /></svg>
+      {Array.from({ length: max }).map((_, i) => <i key={i} className={i < n ? 'on' : ''} />)}
+      {typeof charge === 'number' && n < max && <b className="charges-pct">{Math.round(charge)}%</b>}
+    </span>
+  );
+}
 
 const SKEY = 'pl_session';
 const loadSession = () => { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch { return null; } };
@@ -105,12 +117,21 @@ export default function Player() {
   }, []);
 
   useEffect(() => {
+    // Reconnexion (ex. serveur redémarré) : si on était déjà entré, on rejoint automatiquement le MÊME
+    // salon avec sa session → pas besoin de retaper le code, la partie reprend.
+    socket.on('connect', () => {
+      if (!meId.current) return; // pas encore entré : le flux normal gère la 1re connexion
+      const s = loadSession();
+      if (s?.code && s?.playerId) socket.emit('player:join', { code: s.code, name: s.name, avatar: s.avatar, playerId: s.playerId }, (res: any) => {
+        if (res?.ok) { meId.current = res.playerId; setWaiting(!!res.waiting); setError(''); applyState(res.state); }
+      });
+    });
     socket.on('lobby', (d: any) => { setPlayers(d.players); if (d.phase === 'lobby') { setWaiting(false); setPhase('lobby'); setNewChars([]); } });
     socket.on('round:prep', (d: any) => { setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setSubmitted(false); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setNow(Date.now()); setPhase('prep'); });
     socket.on('round:countdown', (d: any) => { setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setCountdown(d.seconds || 5); setPhase('countdown'); });
     socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setSubmitted(false); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); } });
     socket.on('mj:track', (d: any) => setMjTrack(d));
-    socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); sfx('scratch'); });
+    socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // son de reveal retiré (jugé désagréable) — à recâbler plus tard
     socket.on('game:final', (d: any) => {
       setPlayers(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final');
       const mineAw = (d.awards || []).filter((a: any) => a.playerId === meId.current).map((a: any) => a.id);
@@ -121,7 +142,7 @@ export default function Player() {
     socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) setBuzz('mine'); else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
     socket.on('buzz:open', (d: any) => { if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — attends la prochaine'); } else setBuzz('idle'); });
     socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); setJoined(false); localStorage.removeItem(SKEY); });
-    return () => ['lobby', 'round:prep', 'round:countdown', 'round:go', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed'].forEach((e) => socket.off(e as any));
+    return () => ['connect', 'lobby', 'round:prep', 'round:countdown', 'round:go', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed'].forEach((e) => socket.off(e as any));
   }, []);
 
   useEffect(() => { if (phase !== 'playing' && phase !== 'prep') return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
@@ -173,7 +194,7 @@ export default function Player() {
       if (res?.error) return setError(res.error);
       meId.current = res.playerId;
       saveSession({ code: code.trim().toUpperCase(), name: name.trim(), avatar: avatarId, playerId: res.playerId });
-      setWaiting(!!res.waiting); setJoined(true); applyState(res.state); sfx('confirm');
+      setWaiting(!!res.waiting); setJoined(true); applyState(res.state); sfx('launch'); // même son que "Lancer la partie" (raccord)
     });
   }
   function changeChar() {
@@ -183,15 +204,19 @@ export default function Player() {
       setError(''); setChanging(false);
     });
   }
-  function submitAnswer(e?: any) { e?.preventDefault(); if (!guess.trim() || phase !== 'playing' || submitted) return; socket.emit('player:answer', { text: guess.trim() }, (res: any) => { if (res?.ok) setSubmitted(true); }); } // 1 validation, résultat à la révélation (pas de points affichés avant)
+  function submitAnswer(e?: any) {
+    e?.preventDefault();
+    if (!guess.trim() || phase !== 'playing' || submitted) return;
+    setSubmitted(true); // VERROU IMMÉDIAT : le bouton se coupe dès le 1er clic (plus de double validation)
+    socket.emit('player:answer', { text: guess.trim() }, (res: any) => { if (res?.error) setSubmitted(false); }); // ré-ouvre seulement si refusé (ex. brouillé). Résultat à la révélation.
+  }
   function doBuzz() { socket.emit('player:buzz', {}, (res: any) => { if (res?.winner) setBuzz('mine'); }); }
   function submitQuiz(i: number) {
     if (quizPick !== null || phase !== 'playing') return;
     setQuizPick(i);
-    socket.emit('quiz:answer', { choice: i }, (res: any) => {
-      if (res?.error) { setQuizPick(null); return; }
-      setFeedback({ correct: res.correct, points: res.points, answer: res.answer });
-    });
+    // On enregistre le choix mais on NE révèle PAS si c'est bon (pas de vert/rouge, pas de points) — le
+    // résultat tombe à la révélation, pour garder le suspense et l'attention.
+    socket.emit('quiz:answer', { choice: i }, (res: any) => { if (res?.error) setQuizPick(null); });
   }
   function submitBuzzerAnswer(e?: any) { e?.preventDefault(); if (!guess.trim()) return; socket.emit('buzzer:answer', { text: guess.trim() }, (res: any) => { if (res?.correct) { setFeedback({ points: res.points, titleHit: true, artistHit: true }); } else if (res?.ok) { setFeedback({ points: 0 }); setGuess(''); } }); }
   function usePower() {
@@ -223,7 +248,7 @@ export default function Player() {
     });
   }
   function passPower() { socket.emit('player:ready', {}); setPrepDone(true); }
-  function sendReaction(id: number) { socket.emit('player:reaction', { id }); } // taunt affiché sur l'écran hôte (anti-spam serveur)
+  function sendReaction(id: number, end = false) { socket.emit('player:reaction', { id, end }); } // taunt affiché sur l'écran hôte (anti-spam serveur). end = jeu de réactions de fin de partie.
 
   function mjAward(pid: string, points = 10000) { socket.emit('mj:award', { playerId: pid, points }); }
   function mjReveal() { socket.emit('mj:reveal'); }
@@ -235,6 +260,7 @@ export default function Player() {
   const me = players.find((p) => p.id === meId.current);
   const myRank = players.findIndex((p) => p.id === meId.current) + 1;
   const myResult = reveal?.results?.find((r: any) => r.id === meId.current);
+  const myPts = myResult?.points || 0; // peut être NÉGATIF (pari perdu : SCH/Kaaris/Freeze…)
   const av = avatarById(avatarId);
   const takenIds = new Set(players.filter((p) => p.connected && p.id !== meId.current).map((p) => p.avatar)); // persos déjà pris
 
@@ -297,7 +323,8 @@ export default function Player() {
     // taille du nom adaptée à sa longueur → ne déborde jamais sur les stats
     const nameFs = nmU.length > 11 ? 'clamp(17px,5vw,24px)' : nmU.length > 8 ? 'clamp(20px,6vw,29px)' : 'clamp(24px,7.5vw,35px)';
     return (
-      <div className={`cs${isLegend(sel.cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[sel.cat] }}>
+      <><GrungeBg />
+      <div className={`cs${isLegend(sel.cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[sel.cat], position: 'relative', zIndex: 1 }}>
         <svg width="0" height="0" style={{ position: 'absolute' }}><defs>
           <g id="bust"><path d="M22,240 C22,168 58,146 100,146 C142,146 178,168 178,240 Z" fill="#0d0917" /><ellipse cx="100" cy="96" rx="40" ry="44" fill="#0d0917" /><path d="M60,70 Q100,22 140,70 Q140,44 100,42 Q60,44 60,70 Z" fill="#0d0917" /><path d="M138,80 C150,120 150,180 150,240 L178,240 C178,168 160,146 138,80 Z" fill="rgba(255,255,255,.10)" /></g>
           {/* filtre VHS : wobble analogique (displacement) + séparation des canaux R/B (aberration
@@ -418,26 +445,28 @@ export default function Player() {
               ? <button className="btn warm big" style={{ width: '100%', maxWidth: 460 }} onClick={changeChar} disabled={!avatarId || takenIds.has(avatarId)}>{takenIds.has(avatarId) ? 'Déjà pris' : 'Valider ce rappeur'}</button>
               : <button className="btn warm big" onClick={join} disabled={!avatarId || joining || takenIds.has(avatarId)}>{joining ? 'Connexion…' : takenIds.has(avatarId) ? 'Déjà pris — choisis un autre' : `Entrer avec ${sel.name}`}</button>}
         </div>
-      </div>
+      </div></>
     );
   }
 
   /* ---- salle d'attente : arrivé en pleine partie, rejoint à la prochaine ---- */
   if (joined && waiting) {
     return (
-      <div className="wrap">
+      <><GrungeBg />
+      <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
         <div className="topbar">
           <span className="row" style={{ gap: 9 }}>{av && <RMed id={av.id} size={34} />}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17 }}>{name}</span></span>
           <span className="gpill" style={{ color: 'var(--muted)' }}>En attente</span>
         </div>
         {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
         <div className="center" style={{ gap: 16 }}>
-          <span className="dot" style={{ width: 12, height: 12 }} />
+          <span className="sonar"><span className="dot" style={{ width: 12, height: 12 }} /></span>
           <h2 className="title-xl">Partie en cours</h2>
           <p className="muted" style={{ maxWidth: 380 }}>Tu es dans le cercle, {name}. Une partie tourne déjà — tu entres <b style={{ color: 'var(--txt)' }}>dès la prochaine</b>. Reste chaud.</p>
           {av && <p className="muted">Ton perso : <b style={{ color: 'var(--txt)' }}>{av.name}</b> · pouvoir <b style={{ color: 'var(--ember)' }}>{av.power.name}</b></p>}
+          <span className="waitdots" aria-hidden="true"><i /><i /><i /></span>
         </div>
-      </div>
+      </div></>
     );
   }
 
@@ -446,7 +475,8 @@ export default function Player() {
     const others = players.filter((p) => !p.isMJ).sort((a, b) => b.score - a.score);
     const answer = phase === 'reveal' ? reveal?.track : mjTrack;
     return (
-      <div className="wrap">
+      <><GrungeBg />
+      <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
         <div className="topbar">
           <span className="row" style={{ gap: 9 }}>
             <span className="med" style={{ width: 30, height: 30, background: 'var(--surf3)', color: 'var(--fluo)', fontSize: 12 }}>MJ</span>
@@ -499,32 +529,38 @@ export default function Player() {
         {phase === 'final' && (
           <div className="center"><span className="eyebrow">Terminé</span><div style={{ color: 'var(--fluo)' }}><svg width="96" height="96" viewBox="0 0 24 24" fill="none"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" stroke="currentColor" strokeWidth="1.3" /><path d="M7 5H4v1.6A3.4 3.4 0 0 0 7.3 10M17 5h3v1.6A3.4 3.4 0 0 1 16.7 10" stroke="currentColor" strokeWidth="1.3" /><path d="M9.5 13v3.3h5V13M8 20.5h8M10.4 16.8h3.2v3.7h-3.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></div><h2 className="title-xl">{others[0]?.name} gagne</h2><div className="gpill" style={{ marginTop: 6, color: 'var(--fluo)', borderColor: 'var(--fluo)' }}>{certif(others[0]?.score ?? 0, round.total).label}</div></div>
         )}
-      </div>
+      </div></>
     );
   }
 
   /* ---- en jeu ---- */
+  const powerMode = round.mode !== 'quiz' && !round.mj; // charges visibles seulement quand les pouvoirs sont actifs
   return (
-    <div className="wrap">
+    <><GrungeBg />
+    <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
       <div className="topbar">
-        <span className="row" style={{ gap: 9 }}>{av && <RMed id={av.id} size={34} />}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17 }}>{name}</span></span>
-        {me && <span className="gpill" style={{ color: 'var(--ember)' }}>{fmtAud(me.score)} aud.</span>}{/* on montre TOUJOURS ses propres auditeurs ; le suspense porte sur le RANG, masqué ailleurs */}
+        <span className="row" style={{ gap: 9, minWidth: 0, flex: 1 }}>{av && <RMed id={av.id} size={34} />}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{name}</span></span>
+        {/* auditeurs retirés du bandeau (blazes longs → ça débordait) ; les charges suffisent ici */}
+        {powerMode && phase !== 'lobby' && <span style={{ flex: '0 0 auto' }}><Charges n={charges} charge={charge} /></span>}
       </div>
       {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
 
       {phase === 'lobby' && (
-        <div className="center" style={{ gap: 16 }}><span className="dot" style={{ width: 12, height: 12 }} /><h2 className="title-xl">Tu es dans le cercle</h2>
+        <div className="center" style={{ gap: 16 }}><span className="sonar"><span className="dot" style={{ width: 12, height: 12 }} /></span><h2 className="title-xl">Tu es dans le cercle</h2>
           {av && (
             <div className="glass pad" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, maxWidth: 340, width: '100%' }}>
-              {av.img
-                ? <img src={`/avatars/${av.id}.png`} alt="" onError={hideOnErr} style={{ width: 122, height: 122, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--fluo)', boxShadow: '0 0 26px -8px var(--fluo)', ...(av.crop?.y != null ? { objectPosition: `50% ${av.crop.y}%` } : {}) }} />
-                : <RMed id={av.id} size={122} />}
+              {/* anneau = couleur de la CATÉGORIE du rappeur (iridescent pour les Légendes) */}
+              <div className={`lobby-av${isLegend(av.cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[av.cat] }}>
+                {av.img
+                  ? <img src={`/avatars/${av.id}.png`} alt="" onError={hideOnErr} style={av.crop?.y != null ? { objectPosition: `50% ${av.crop.y}%` } : undefined} />
+                  : <RMed id={av.id} size={116} />}
+              </div>
               <div style={{ fontFamily: 'var(--disp)', fontSize: 26, fontWeight: 700, textTransform: 'uppercase', lineHeight: 1 }}>{av.name}</div>
-              <div className="eyebrow" style={{ color: 'var(--ember)' }}>Pouvoir · {av.power.name}</div>
-              <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.45 }}>{av.power.effect}</div>
+              <div className="eyebrow" style={{ color: 'var(--ember)', fontSize: 14 }}>{av.power.name}</div>
+              <div className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>{av.power.effect}</div>
             </div>
           )}
-          <p className="muted">En attente… l'hôte va lancer la partie.</p>
+          <p className="muted">En attente… l'hôte va lancer la partie<span className="waitdots inline" aria-hidden="true"><i /><i /><i /></span></p>
           <button className="btn" style={{ marginTop: 2 }} onClick={() => setChanging(true)}>Changer de rappeur</button></div>
       )}
 
@@ -545,14 +581,17 @@ export default function Player() {
             <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div className="powerbar">
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="eyebrow" style={{ fontSize: 10 }}>{av.power.name}{charges > 0 ? ` · ×${charges}` : ''}</div>
-                  <div style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.3, margin: '2px 0 5px' }}>{av.power.effect}</div>
-                  <div className="gauge"><i style={{ width: `${Math.min(100, charge)}%` }} /></div>
+                  <div className="row" style={{ justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                    <span className="eyebrow" style={{ fontSize: 12, color: 'var(--ember)' }}>{av.power.name}</span>
+                    <Charges n={charges} charge={charge} />
+                  </div>
+                  <div style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.42, margin: '7px 0 0' }}>{av.power.effect}</div>
                 </div>
               </div>
+              {charges < 1 && <p className="trashtalk">{TRASH_TALK[round.index % TRASH_TALK.length]}</p>}
               <div className="row" style={{ gap: 10 }}>
-                <button className="btn" style={{ flex: 1 }} onClick={passPower}>Passer</button>
-                <button className="btn warm" style={{ flex: 1 }} onClick={usePower} disabled={charges < 1}>{charges >= 1 ? 'Activer' : `Charge ${Math.round(charge)}%`}</button>
+                <button className="btn" style={{ flex: 1 }} onClick={passPower}>{charges >= 1 ? 'Passer' : 'Prêt'}</button>
+                <button className="btn warm" style={{ flex: 1 }} onClick={usePower} disabled={charges < 1}>{charges >= 1 ? `Activer (${charges})` : 'Aucune charge'}</button>
               </div>
               {powerMsg && <p className="feedback bad">{powerMsg}</p>}
             </div>
@@ -572,10 +611,11 @@ export default function Player() {
               <div className="qz-grid">
                 {round.quiz?.choices.map((c: string, i: number) => {
                   const answered = quizPick !== null;
-                  const cls = 'qz-opt' + (answered && feedback?.answer === i ? ' right' : answered && quizPick === i ? ' wrong' : '');
+                  const cls = 'qz-opt' + (quizPick === i ? ' pick' : ''); // choix retenu = neutre (pas de bon/mauvais avant la révélation)
                   return <button key={i} className={cls} disabled={answered} onClick={() => submitQuiz(i)}>{c}</button>;
                 })}
               </div>
+              {quizPick !== null && <p className="muted">Réponse enregistrée — résultat à la révélation.</p>}
             </>
           ) : round.mj ? (
             <><h2 className="title-xl">Crie ta réponse !</h2><p className="muted" style={{ maxWidth: 380 }}>Le Maître du jeu écoute et distribue les points. Sois le plus rapide à balancer le bon titre / artiste à voix haute.</p></>
@@ -587,7 +627,13 @@ export default function Player() {
           ) : jamMs > 0 ? (
             <><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti — tu peux répondre dans un instant.</p></>
           ) : submitted ? (
-            <><h2 className="title-xl">Réponse envoyée ✓</h2><p className="muted">Le résultat tombe à la révélation… reste chaud.</p></>
+            <div className="sent">
+              <span className="sent-check">
+                <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12.5l5 5L20 6.5" /></svg>
+              </span>
+              <h2 className="title-xl">Réponse envoyée</h2>
+              <p className="muted" style={{ maxWidth: 320 }}>Le résultat tombe à la révélation. Reste chaud — écoute bien la suite.</p>
+            </div>
           ) : (
             <><h2 className="title-xl">À toi de jouer</h2><form onSubmit={submitAnswer} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}><input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre et/ou artiste…" autoFocus /><div className="bar"><i style={{ width: `${frac * 100}%` }} /></div><button className="btn warm big send" type="submit">Valider</button></form></>
           )}
@@ -607,17 +653,20 @@ export default function Player() {
             </>
           ) : (
             <>
-              {reveal.track.cover && <img className="cover" src={reveal.track.cover} alt="" style={{ width: 120, height: 120 }} />}
-              <h2 className="title-xl">{reveal.track.title}</h2><p className="reveal-artist" style={{ fontFamily: 'var(--disp)', fontSize: 22, margin: 0 }}>{reveal.track.artist}</p>
+              {reveal.track.cover && <img className="cover" src={reveal.track.cover} alt="" style={{ width: 128, height: 128 }} />}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                <h2 className="title-xl" style={{ margin: 0 }}>{reveal.track.title}</h2>
+                <p className="reveal-artist" style={{ fontFamily: 'var(--disp)', fontSize: 22, margin: 0 }}>{reveal.track.artist}</p>
+              </div>
             </>
           )}
-          <div className="gpill" style={{ fontSize: 18, padding: '14px 24px', fontWeight: 800, color: myResult?.points ? 'var(--green)' : 'var(--muted)', borderColor: myResult?.points ? 'rgba(166,255,0,.5)' : 'var(--line)' }}>{myResult?.points ? `🎧 +${fmtAud(myResult.points)} auditeurs` : 'Zéro auditeur cette fois'}</div>
-          {reveal.hideBoard
-            ? <p className="muted">Ton total : <b style={{ color: 'var(--txt)' }}>{fmtAud(me?.score ?? 0)}</b> auditeurs · <b style={{ color: 'var(--fluo)' }}>position secrète 🔒</b></p>
-            : <p className="muted">Ton total : <b style={{ color: 'var(--txt)' }}>{fmtAud(me?.score ?? 0)}</b> auditeurs · {myRank}<sup>{myRank === 1 ? 'er' : 'e'}</sup></p>}
+          {myResult?.answer && <p className="muted" style={{ fontSize: 13.5, margin: 0 }}>Ta réponse : <b style={{ color: 'var(--txt)' }}>« {myResult.answer} »</b></p>}
+          <div className={`gainbadge ${myPts > 0 ? 'win' : myPts < 0 ? 'loss' : 'zero'}`}>
+            {myPts > 0 ? <>+{fmtAud(myPts)} <span>auditeurs</span></> : myPts < 0 ? <>{fmtAud(myPts)} <span>auditeurs · pari perdu</span></> : 'Zéro auditeur'}
+          </div>
           {/* réactions/taunts — s'affichent sur l'écran hôte ; le joueur reste actif entre les manches */}
           <div className="reactbar">{REACTIONS.map((r, i) => <button key={i} type="button" className="reactbtn" onClick={() => sendReaction(i)}><span className="re">{r.e}</span>{r.t}</button>)}</div>
-          {av && <p className="muted" style={{ fontSize: 12, margin: '2px 0 0', maxWidth: 400, lineHeight: 1.4 }}>Ton pouvoir — <b style={{ color: 'var(--ember)' }}>{av.power.name}</b> : {av.power.effect}</p>}
+          {av && <p className="muted" style={{ fontSize: 13, margin: '2px 0 0', maxWidth: 400, lineHeight: 1.45 }}>Ton pouvoir — <b style={{ color: 'var(--ember)' }}>{av.power.name}</b> : {av.power.effect}</p>}
           </div>
       )}
 
@@ -634,6 +683,9 @@ export default function Player() {
           <h2 className="title-xl">{myRank === 1 ? 'Tu as gagné !' : `${myRank}ᵉ place`}</h2>
           <p className="muted">{fmtAud(me?.score ?? 0)} auditeurs</p>
           <div className="gpill" style={{ marginTop: 6, color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 14, padding: '10px 16px' }}>{certif(me?.score ?? 0, finalRounds || round.total).label}</div>
+
+          {/* réagir sur la TV au moment du podium/trophées (jeu de réactions de fin, différent des taunts de manche) */}
+          <div className="reactbar">{END_REACTIONS.map((r, i) => <button key={i} type="button" className="reactbtn" onClick={() => sendReaction(i, true)}><span className="re">{r.e}</span>{r.t}</button>)}</div>
 
           {myAwards.length > 0 && (
             <div className="awards" style={{ marginTop: 4 }}>
@@ -670,6 +722,6 @@ export default function Player() {
         </div>
         );
       })()}
-    </div>
+    </div></>
   );
 }

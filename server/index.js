@@ -7,13 +7,42 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { Server } from 'socket.io';
 import { SEED_TRACKS } from './tracks.js';
-import { gradeAnswer, speedMult, normalize } from './match.js';
+import { gradeAnswer, speedMult, normalize, extractFeats } from './match.js';
 import { POWERS, firstLetters } from './powers.js';
 import { pickQuiz, buildQuizRound } from './quiz.js';
 import { computeAwards } from './awards.js';
 
 // format auditeurs (fr-FR) — utilisé pour les textes des trophées
 const fmtAud = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+// Résumé COURT et lisible d'un pouvoir activé (nom + portée), affiché sur l'écran hôte (prep + reveal)
+// pour qu'on comprenne CE QUE fait le pouvoir sans connaître tout le cast par cœur.
+function powerNote(type, pw, detail) {
+  const A = (n) => fmtAud(n);
+  switch (type) {
+    case 'steal':      return detail?.stoleFrom ? `vole ${A(detail.amount)} auditeurs à ${detail.stoleFrom}` : 'vol raté';
+    case 'sabotage':   return detail?.mutedName ? `muselle ${detail.mutedName} (0 auditeur pour lui)` : 'sabotage';
+    case 'tax':        return detail?.amount ? `dîme : +${A(detail.amount)} auditeurs pris à ${detail.count} joueur${detail.count > 1 ? 's' : ''}` : 'dîme (personne à taxer)';
+    case 'allin':      return detail ? `tapis : ${detail.spent} charge${detail.spent > 1 ? 's' : ''} → +${A(detail.gain)} auditeurs` : 'tapis';
+    case 'comeback':   return detail ? `remontada : +${A(detail.gain)} auditeurs` : 'remontée';
+    case 'combo':      return detail ? `enchaînement armé ×${detail.mult}` : 'combo armé';
+    case 'sustain':    return detail ? `+${A(detail.amount)} auditeurs garantis (${detail.rounds} manches)` : 'revenu armé';
+    case 'draft':      return 'aspire une part du meilleur score de la manche';
+    case 'hint':       return 'a décrypté les indices (titre + artiste)';
+    case 'safety':     return 'filet posé : plancher garanti cette manche';
+    case 'veteran':    return detail ? `increvable pendant ${detail.rounds} manches` : 'increvable';
+    case 'freeze':     return 'hors du temps : score au max même en dernier';
+    case 'nofault':    return 'zéro faute : l’orthographe passe cette manche';
+    case 'ace':        return 'sans-faute + prochaine réponse ×2';
+    case 'jam':        return detail ? `brouille les autres pendant ${Math.round((detail.ms || 4000) / 1000)} s` : 'brouillage';
+    case 'firstblood': return `prime au 1er qui trouve (+${A(pw.first || 0)})`;
+    case 'momentum':   return detail ? `en feu : +${A(detail.amount)} armé` : 'momentum armé';
+    case 'decay':      return detail ? `+${A(detail.amount)} auditeurs armés` : 'armé';
+    case 'double':     return `prochaine bonne réponse ×${pw.mult || 2}`;
+    case 'wager':      return `quitte ou double ×${pw.mult || 2} (ou -${A(pw.penalty || 20000)})`;
+    case 'bonus':      return `+${A(pw.amount || 10000)} auditeurs sur ta réponse${pw.refuel ? ' (charge rendue)' : ''}`;
+    default:           return pw?.name || 'pouvoir';
+  }
+}
 // stats de partie d'un joueur (remises à zéro à chaque partie) → servent aux trophées de fin
 const newStat = () => ({ att: 0, scored: 0, perfect: 0, firsts: 0, best: 0, zeros: 0, powers: 0, denial: false, gamble: false, solo: 0, firstHalf: 0, secondHalf: 0, worstRank: 1 });
 
@@ -45,6 +74,32 @@ const io = new Server(httpServer, { cors: { origin: '*' } });
 /* Pool de morceaux (Deezer)                                           */
 /* ------------------------------------------------------------------ */
 let POOL = [];
+const previewCache = new Map(); // id -> Buffer mp3 (extrait Deezer rapatrié chez NOUS → URL stable, jamais expirée)
+// Rapatrie chaque extrait pendant que l'URL Deezer est valide, met en cache, et NE GARDE que les
+// morceaux dont l'extrait est réellement téléchargeable (fini les URL mortes/expirées en pleine partie).
+async function cachePreviews() {
+  const original = [...POOL]; // repli si le cache échoue en masse (ex. Deezer bloque le fetch serveur)
+  const keep = [];
+  for (let i = 0; i < POOL.length; i += 6) {
+    await Promise.allSettled(POOL.slice(i, i + 6).map(async (t) => {
+      try {
+        const r = await fetch(t.preview, { headers: { 'User-Agent': 'punchline-party-game' } });
+        if (!r.ok) throw new Error('http ' + r.status);
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.length < 2000) throw new Error('extrait vide');
+        previewCache.set(String(t.id), buf); // clé en STRING (l'URL /api/preview/:id arrive en string)
+        t.deezer = t.preview;                  // on garde l'URL d'origine (repli/debug)
+        t.preview = `/api/preview/${t.id}`;    // le client jouera l'extrait SERVI PAR NOUS
+        keep.push(t);
+      } catch { /* extrait injouable → on retire ce morceau du pool */ }
+    }));
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  // Sécurité : si (presque) rien n'a pu être mis en cache, on repart sur les URL Deezer d'origine
+  // (comportement précédent) plutôt que de se retrouver avec un pool vide et un jeu injouable.
+  POOL = keep.length >= Math.min(6, Math.ceil(original.length * 0.5)) ? keep : original;
+  console.log(`[preview] ${previewCache.size} extraits en cache · ${POOL.length} morceaux jouables${POOL === keep ? ' (URL stables)' : ' (REPLI URL Deezer — cache indisponible)'}.`);
+}
 async function resolveTrack(seed) {
   const tryFetch = async (q) => {
     const r = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=4`, { headers: { 'User-Agent': 'punchline-party-game' } });
@@ -57,7 +112,9 @@ async function resolveTrack(seed) {
   let hit = pick(await tryFetch(`artist:"${seed.artist}" track:"${seed.title}"`));
   if (!hit) hit = pick(await tryFetch(`artist:"${seed.artist}" ${seed.title}`));
   if (!hit) return null;
-  return { id: hit.id, title: hit.title_short || hit.title, artist: hit.artist?.name || seed.artist, cover: hit.album?.cover_medium || hit.album?.cover || '', preview: hit.preview, rank: hit.rank || 0 };
+  // feats extraits du titre COMPLET (title_short l'enlève) → une réponse "Booba" en feat sera acceptée
+  const feats = extractFeats({ title: hit.title, artist: hit.artist?.name });
+  return { id: hit.id, title: hit.title_short || hit.title, artist: hit.artist?.name || seed.artist, cover: hit.album?.cover_medium || hit.album?.cover || '', preview: hit.preview, rank: hit.rank || 0, feats };
 }
 async function loadPool() {
   console.log(`[deezer] résolution de ${SEED_TRACKS.length} morceaux…`);
@@ -68,7 +125,10 @@ async function loadPool() {
     await new Promise((r) => setTimeout(r, 350));
   }
   POOL = out;
-  console.log(`[deezer] ${POOL.length}/${SEED_TRACKS.length} morceaux jouables.`);
+  console.log(`[deezer] ${POOL.length}/${SEED_TRACKS.length} morceaux résolus.`);
+  await cachePreviews(); // rapatrie les extraits chez nous (URL stables) + retire les morts
+  // pool prêt → on rafraîchit les hôtes déjà connectés (sinon leur bouton "Configurer" reste grisé)
+  for (const room of rooms.values()) { if (room.hostConnected) emitLobby(room); }
 }
 // Sous-ensemble du pool selon la popularité voulue (rank Deezer trié décroissant)
 function poolForTier(tier) {
@@ -95,6 +155,16 @@ const makeCode = () => {
   return c;
 };
 const genId = () => crypto.randomBytes(8).toString('hex');
+// Fabrique un salon neuf (utilisé par create / new / reclaim) — une seule source de vérité.
+function newRoom(code, hostId, hostToken) {
+  return {
+    code, hostId, hostToken, hostConnected: true, hostGrace: null,
+    phase: 'lobby', players: new Map(), playlist: [], roundIndex: 0, totalRounds: 8,
+    settings: { difficulty: 'normal', mode: 'multi', mj: false, rebalance: 'comeback' },
+    current: null, answers: new Map(), timer: null, buzzTimer: null, lastReveal: null, createdAt: Date.now(),
+    gamesPlayed: 0, lastFinal: null, usedQuiz: new Set(),
+  };
+}
 
 // Joueurs ACTIFS (les « en attente » — arrivés en pleine partie — sont exclus des scores/écrans de jeu).
 function publicPlayers(room) {
@@ -110,7 +180,7 @@ function emitLobby(room) {
   io.to(room.code).emit('lobby', {
     code: room.code, phase: room.phase, players: publicPlayers(room),
     round: room.roundIndex + 1, totalRounds: room.totalRounds, settings: room.settings,
-    waiting: waitingCount(room), gamesPlayed: room.gamesPlayed || 0,
+    waiting: waitingCount(room), gamesPlayed: room.gamesPlayed || 0, poolSize: POOL.length,
   });
 }
 
@@ -145,6 +215,7 @@ function beginRound(room) {
   room.ready = new Set();
   room.firstScorerId = null; // 1er à trouver cette manche (pour firstblood)
   room.jam = null;           // brouillage (pouvoir jam) posé pour cette manche
+  room.roundPowers = new Map(); // pouvoirs activés cette manche (pid → {name,type,note}) → affichés au reveal
   for (const pl of room.players.values()) { pl.armed = null; pl.safety = false; pl.nofault = false; pl.selfBonus = 0; } // veteranUntil / streak / decayUses persistent
   clearTimeout(room.cdTimer);
   const diffLabel = (DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal).label;
@@ -170,15 +241,9 @@ function beginRound(room) {
   }
 }
 
-// La fenêtre pouvoirs se ferme dès que tout le monde a activé ou passé.
-function checkPrepDone(room) {
-  if (!room || room.phase !== 'prep') return;
-  const active = [...room.players.values()].filter((p) => p.connected && !p.isMJ);
-  if (active.length && active.every((p) => room.ready.has(p.id))) {
-    clearTimeout(room.cdTimer);
-    startRound(room);
-  }
-}
+// La fenêtre pouvoirs va TOUJOURS jusqu'au bout de ses 10 s, même si tout le monde est prêt : on a le
+// temps de LIRE qui a lancé quel pouvoir (et son effet) sur la TV. (Avant : elle se fermait d'un coup.)
+function checkPrepDone(_room) { /* no-op volontaire — le décompte complet est conservé */ }
 
 function startRound(room) {
   if (room.phase !== 'countdown' && room.phase !== 'prep') return; // annulé pendant décompte / fenêtre pouvoirs
@@ -230,11 +295,15 @@ function fillCharges(room) {
   const sorted = [...room.players.values()].filter((p) => !p.isMJ && !p.waiting).sort((a, b) => b.score - a.score);
   const N = sorted.length;
   sorted.forEach((p, rank) => {
-    let add = 30;
+    // Accrual RALENTI (~1 charge toutes les ~3 manches) pour que les pouvoirs restent un temps fort,
+    // pas un réflexe à chaque manche.
+    let add = 18;
     if (N > 1 && rule !== 'off') {
       const fromBottom = (N - 1 - rank) / (N - 1); // dernier = 1, premier = 0
       const t = rule === 'comeback' ? fromBottom : 1 - fromBottom;
-      add = 18 + t * 44; // ~18 (favorisé) → ~62 (à la traîne, en comeback)
+      // Écart RESSERRÉ + plus lent : ~14 (favorisé, ≈7 manches/charge) → ~28 (à la traîne, ≈3,5 manches).
+      // Avant, le dernier rechargeait ~toutes les 2 manches → ça paraissait buggé/trop rapide.
+      add = 14 + t * 14;
     }
     p.charge = (p.charge || 0) + Math.round(add);
     while (p.charge >= 100 && (p.charges || 0) < 5) { p.charges = (p.charges || 0) + 1; p.charge -= 100; }
@@ -292,7 +361,15 @@ function endRound(room) {
       if (points > p.stat.best) p.stat.best = points;
       p.stat[half] += Math.max(0, points);
     }
-    results.push({ id: p.id, name: p.name, avatar: p.avatar, points, titleHit, artistHit });
+    // ce que le joueur a RÉELLEMENT répondu (texte libre, ou l'intitulé du choix en quiz) + son pouvoir de la manche
+    const ansEntry = room.answers.get(p.id);
+    let answerText = null;
+    if (!room.settings.mj) {
+      if (room.settings.mode === 'quiz') answerText = (ansEntry && typeof ansEntry.choice === 'number' && room.quiz) ? room.quiz.choices[ansEntry.choice] : null;
+      else answerText = ansEntry?.text || null;
+    }
+    const usedPower = room.roundPowers ? room.roundPowers.get(p.id) : null;
+    results.push({ id: p.id, name: p.name, avatar: p.avatar, isMJ: !!p.isMJ, points, titleHit, artistHit, answer: answerText, power: usedPower || null });
   }
   if (roundScorers.length === 1) { const w = room.players.get(roundScorers[0]); if (w?.stat) w.stat.solo++; } // seul à trouver cette manche
   results.sort((a, b) => b.points - a.points);
@@ -307,11 +384,13 @@ function endRound(room) {
   });
   room.prevRanks = newRank;
   const isQuiz = room.settings.mode === 'quiz';
+  const isLastRound = room.roundIndex + 1 >= room.totalRounds; // dernière manche → on garde le classement pour le podium
   room.lastReveal = {
     roundIndex: room.roundIndex, total: room.totalRounds,
     track: isQuiz ? null : { title: room.current.title, artist: room.current.artist, cover: room.current.cover },
     quiz: isQuiz ? room.quiz : null,
-    hideBoard: suspenseActive(room), // manche de fin serrée : on cache le classement pour garder le suspense
+    hideBoard: suspenseActive(room) || isLastRound, // manche de fin serrée OU dernière manche : on cache le classement (podium = la révélation)
+    lastRound: isLastRound,
     results, scores,
   };
   io.to(room.code).emit('round:reveal', room.lastReveal);
@@ -340,7 +419,7 @@ function finishGame(room) {
   const standings = active
     .map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, total: p.total || 0, gameWins: p.gameWins || 0, totalRounds: p.totalRounds || 0 }))
     .sort((a, b) => b.total - a.total);
-  const payload = { scores: publicPlayers(room), rounds: room.totalRounds, awards, series: { gamesPlayed: room.gamesPlayed, standings, leaderId: standings[0]?.id || null } };
+  const payload = { scores: publicPlayers(room), rounds: room.totalRounds, awards, settings: { difficulty: room.settings.difficulty, mode: room.settings.mode, mj: room.settings.mj, rounds: room.totalRounds }, series: { gamesPlayed: room.gamesPlayed, standings, leaderId: standings[0]?.id || null } };
   room.lastFinal = payload;
   io.to(room.code).emit('game:final', payload);
 }
@@ -354,13 +433,7 @@ io.on('connection', (socket) => {
   socket.on('host:create', (_p, cb) => {
     const code = makeCode();
     const hostToken = genId();
-    rooms.set(code, {
-      code, hostId: socket.id, hostToken, hostConnected: true, hostGrace: null,
-      phase: 'lobby', players: new Map(), playlist: [], roundIndex: 0, totalRounds: 8,
-      settings: { difficulty: 'normal', mode: 'multi', mj: false, rebalance: 'comeback' },
-      current: null, answers: new Map(), timer: null, buzzTimer: null, lastReveal: null, createdAt: Date.now(),
-      gamesPlayed: 0, lastFinal: null,
-    });
+    rooms.set(code, newRoom(code, socket.id, hostToken));
     socket.join(code);
     socket.data = { roomCode: code, role: 'host', playerId: null };
     cb?.({ ok: true, code, hostToken, poolSize: POOL.length, difficulties: Object.fromEntries(Object.entries(DIFFICULTY).map(([k, v]) => [k, v.label])), maxRounds: POOL.length });
@@ -368,13 +441,22 @@ io.on('connection', (socket) => {
   });
 
   socket.on('host:reclaim', ({ code, hostToken }, cb) => {
-    const room = rooms.get(String(code || '').toUpperCase());
-    if (!room || room.hostToken !== hostToken) return cb?.({ error: 'Salon introuvable.' });
-    clearTimeout(room.hostGrace); room.hostGrace = null;
-    room.hostId = socket.id; room.hostConnected = true;
-    socket.join(room.code);
-    socket.data = { roomCode: room.code, role: 'host', playerId: null };
-    cb?.({ ok: true, code: room.code, poolSize: POOL.length, state: snapshot(room, true) });
+    code = String(code || '').toUpperCase().trim();
+    let room = rooms.get(code);
+    if (room && room.hostToken !== hostToken) return cb?.({ error: 'Salon introuvable.' });
+    if (!room) {
+      // Serveur redémarré (dev) : on RECRÉE le salon avec le MÊME code → le code ne change JAMAIS sous
+      // les joueurs. Les joueurs se reconnectent avec ce même code (leur session est conservée).
+      if (!code || !hostToken) return cb?.({ error: 'Salon introuvable.' });
+      room = newRoom(code, socket.id, hostToken);
+      rooms.set(code, room);
+    } else {
+      clearTimeout(room.hostGrace); room.hostGrace = null;
+      room.hostId = socket.id; room.hostConnected = true;
+    }
+    socket.join(code);
+    socket.data = { roomCode: code, role: 'host', playerId: null };
+    cb?.({ ok: true, code, poolSize: POOL.length, state: snapshot(room, true) });
     emitLobby(room);
   });
 
@@ -389,13 +471,7 @@ io.on('connection', (socket) => {
     }
     const code = makeCode();
     const hostToken = genId();
-    rooms.set(code, {
-      code, hostId: socket.id, hostToken, hostConnected: true, hostGrace: null,
-      phase: 'lobby', players: new Map(), playlist: [], roundIndex: 0, totalRounds: 8,
-      settings: { difficulty: 'normal', mode: 'multi', mj: false, rebalance: 'comeback' },
-      current: null, answers: new Map(), timer: null, buzzTimer: null, lastReveal: null, createdAt: Date.now(),
-      gamesPlayed: 0, lastFinal: null,
-    });
+    rooms.set(code, newRoom(code, socket.id, hostToken));
     socket.join(code);
     socket.data = { roomCode: code, role: 'host', playerId: null };
     cb?.({ ok: true, code, hostToken, poolSize: POOL.length });
@@ -491,7 +567,8 @@ io.on('connection', (socket) => {
       if (animator) { animator.isMJ = true; room.mjId = animator.id; }
     }
     if (isQuiz) {
-      room.playlist = pickQuiz(rounds || 8);
+      if (!room.usedQuiz) room.usedQuiz = new Set(); // salons créés avant l'ajout du champ
+      room.playlist = pickQuiz(rounds || 8, room.settings.difficulty, room.usedQuiz); // filtre par difficulté + anti-répétition salon
     } else {
       const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
       room.playlist = pickPlaylist(rounds || 8, diff.tier);
@@ -503,8 +580,9 @@ io.on('connection', (socket) => {
     beginRound(room);
   });
 
-  // Réactions/taunts : le joueur balance une réaction préréglée → relayée à l'écran hôte (façon Meet)
-  socket.on('player:reaction', ({ id }) => {
+  // Réactions/taunts : le joueur balance une réaction préréglée → relayée à l'écran hôte (façon Meet).
+  // `end` = jeu de réactions de fin de partie (podium) ; l'hôte mappe le texte sur le bon set.
+  socket.on('player:reaction', ({ id, end } = {}) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
     const p = room.players.get(socket.data.playerId);
@@ -512,7 +590,7 @@ io.on('connection', (socket) => {
     const t = Date.now();
     if (p._lastReact && t - p._lastReact < 700) return; // anti-spam léger
     p._lastReact = t;
-    io.to(room.hostId).emit('reaction', { id: Number(id) || 0, name: p.name, avatar: p.avatar });
+    io.to(room.hostId).emit('reaction', { id: Number(id) || 0, name: p.name, avatar: p.avatar, end: !!end });
   });
 
   // Mode multi : chacun soumet sa réponse quand il veut
@@ -541,7 +619,7 @@ io.on('connection', (socket) => {
     if (room.muted.has(p.id)) points = 0; // muselé cette manche (sabotage)
     if (points > 0 && p.selfBonus) points += p.selfBonus; // gain perso des pouvoirs utilitaires (hint/jam/freeze/nofault)
     const prev = room.answers.get(p.id);
-    if (!prev || points > prev.points) room.answers.set(p.id, { points, titleHit: g.titleHit, artistHit: g.artistHit });
+    if (!prev || points > prev.points) room.answers.set(p.id, { points, titleHit: g.titleHit, artistHit: g.artistHit, text: String(text || '').slice(0, 60) });
     cb?.({ ok: true, points, titleHit: g.titleHit, artistHit: g.artistHit });
     io.to(room.hostId).emit('player:answered', { id: p.id, name: p.name });
     // le son continue de tourner : on ne coupe plus la manche dès que tout le monde a répondu
@@ -561,8 +639,8 @@ io.on('connection', (socket) => {
     room.answers.set(p.id, { points, choice: idx, correct });
     io.to(room.hostId).emit('player:answered', { id: p.id, name: p.name });
     cb?.({ ok: true, correct, points, answer: room.quiz.answer });
-    // tout le monde a répondu → on révèle sans attendre le chrono
-    const active = [...room.players.values()].filter((x) => x.connected && !x.isMJ);
+    // tout le monde a répondu → on révèle sans attendre le chrono (les "en attente" ne comptent pas)
+    const active = [...room.players.values()].filter((x) => x.connected && !x.isMJ && !x.waiting);
     if (active.length && active.every((x) => room.answers.has(x.id))) endRound(room);
   });
 
@@ -602,7 +680,7 @@ io.on('connection', (socket) => {
       }
       if (room.muted.has(p.id)) points = 0;
       if (points > 0 && p.selfBonus) points += p.selfBonus;
-      room.answers.set(p.id, { points, titleHit: g.titleHit, artistHit: g.artistHit });
+      room.answers.set(p.id, { points, titleHit: g.titleHit, artistHit: g.artistHit, text: String(text || '').slice(0, 60) });
       cb?.({ ok: true, correct: true, points });
       endRound(room);
     } else {
@@ -616,8 +694,8 @@ io.on('connection', (socket) => {
     room.buzz.lockedOut.add(pid);
     room.buzz.winnerId = null; room.buzz.winnerName = null; room.buzz.open = true;
     io.to(room.code).emit('buzz:open', { lockedOut: [...room.buzz.lockedOut] });
-    // tout le monde a raté → fin de manche
-    const active = [...room.players.values()].filter((p) => p.connected && !room.buzz.lockedOut.has(p.id));
+    // tout le monde a raté → fin de manche (hors MJ / en attente)
+    const active = [...room.players.values()].filter((p) => p.connected && !p.isMJ && !p.waiting && !room.buzz.lockedOut.has(p.id));
     if (active.length === 0) endRound(room);
   }
 
@@ -631,14 +709,16 @@ io.on('connection', (socket) => {
     if (room.settings.mode === 'quiz') return cb?.({ error: 'Pas de pouvoirs en mode Quiz.' });
     // On active les pouvoirs AVANT la manche (fenêtre "prep"), pas en écoutant le son.
     if (room.phase !== 'prep') return cb?.({ error: 'On active les pouvoirs entre les manches.' });
+    // UN SEUL pouvoir (ou passe) par fenêtre : bloque le double-clic / la ré-activation après reconnexion.
+    if (room.ready.has(p.id)) return cb?.({ error: 'Tu as déjà joué cette fenêtre de pouvoirs.' });
     if ((p.charges || 0) < 1) return cb?.({ error: 'Aucune charge de pouvoir.' });
     const pw = POWERS[p.avatar];
     if (!pw) return cb?.({ error: 'Ce perso n\'a pas de pouvoir.' });
     // cohérence : un pouvoir qui ne peut RIEN faire ne consomme PAS la charge.
     // protégé = filet (safety) OU vétéran increvable → ni volable ni musclable
     const protectedNow = (x) => !!x.safety || (x.veteranUntil != null && room.roundIndex <= x.veteranUntil);
-    const topOther = () => [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ).sort((a, b) => b.score - a.score)[0];
-    const topAttackable = () => [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !protectedNow(x)).sort((a, b) => b.score - a.score)[0];
+    const topOther = () => [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting).sort((a, b) => b.score - a.score)[0];
+    const topAttackable = () => [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting && !protectedNow(x)).sort((a, b) => b.score - a.score)[0];
     let detail = null;
     if (pw.type === 'steal') {
       const leader = topAttackable();
@@ -647,13 +727,13 @@ io.on('connection', (socket) => {
       leader.score -= amt; p.score += amt;
       detail = { stoleFrom: leader.name, amount: amt };
     } else if (pw.type === 'sabotage') {
-      const targets = [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !protectedNow(x)).sort((a, b) => b.score - a.score).slice(0, pw.targets || 1);
+      const targets = [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting && !protectedNow(x)).sort((a, b) => b.score - a.score).slice(0, pw.targets || 1);
       if (!targets.length) return cb?.({ error: 'Aucun leader à museler (les meneurs sont blindés).' });
       targets.forEach((t) => { room.muted.add(t.id); if (pw.grab) { const amt = Math.min(pw.grab, t.score); t.score -= amt; p.score += amt; } }); // muselle + rafle une part
       detail = { mutedName: targets.map((t) => t.name).join(' & ') };
     } else if (pw.type === 'tax') {
       // prélève une petite dîme sur CHAQUE adversaire attaquable
-      const others = [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !protectedNow(x));
+      const others = [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting && !protectedNow(x));
       let grabbed = 0;
       others.forEach((t) => { const amt = Math.min(pw.amount || 2500, t.score); t.score -= amt; p.score += amt; grabbed += amt; });
       detail = { amount: grabbed, count: others.length };
@@ -725,9 +805,12 @@ io.on('connection', (socket) => {
     if (p.stat) { p.stat.powers++; if (['steal', 'sabotage', 'tax'].includes(pw.type)) p.stat.denial = true; if (['wager', 'allin'].includes(pw.type)) p.stat.gamble = true; } // trophées (braqueur / kamikaze / sage)
     p.charges -= 1;
     room.ready.add(p.id); // activer = prêt pour la fenêtre pouvoirs
-    io.to(room.hostId).emit('power:used', { name: p.name, avatar: p.avatar, power: pw.name });
+    const note = powerNote(pw.type, pw, detail);
+    if (!room.roundPowers) room.roundPowers = new Map();
+    room.roundPowers.set(p.id, { name: pw.name, type: pw.type, note }); // rappelé au reveal (qui a fait quoi)
+    io.to(room.hostId).emit('power:used', { name: p.name, avatar: p.avatar, power: pw.name, effect: note });
     io.to(room.code).emit('scores:update', { scores: publicPlayers(room) });
-    const nbActive = [...room.players.values()].filter((x) => x.connected && !x.isMJ).length;
+    const nbActive = [...room.players.values()].filter((x) => x.connected && !x.isMJ && !x.waiting).length;
     io.to(room.hostId).emit('prep:ready', { count: room.ready.size, total: nbActive });
     cb?.({ ok: true, type: pw.type, power: pw.name, detail, charges: p.charges, charge: p.charge });
     checkPrepDone(room);
@@ -739,7 +822,7 @@ io.on('connection', (socket) => {
     if (!room || room.phase !== 'prep') return cb?.({ error: 'Pas le moment.' });
     room.ready.add(socket.data.playerId);
     cb?.({ ok: true });
-    const nbActive = [...room.players.values()].filter((x) => x.connected && !x.isMJ).length;
+    const nbActive = [...room.players.values()].filter((x) => x.connected && !x.isMJ && !x.waiting).length;
     io.to(room.hostId).emit('prep:ready', { count: room.ready.size, total: nbActive });
     checkPrepDone(room);
   });
@@ -840,7 +923,25 @@ io.on('connection', (socket) => {
 /* ------------------------------------------------------------------ */
 /* HTTP                                                                */
 /* ------------------------------------------------------------------ */
-app.get('/api/health', (_req, res) => res.json({ ok: true, pool: POOL.length, rooms: rooms.size }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, pool: POOL.length, rooms: rooms.size, previews: previewCache.size }));
+// Extraits servis PAR NOUS (mp3 en cache) → URL stables, jamais expirées. Range-request pour le seek.
+app.get('/api/preview/:id', (req, res) => {
+  const buf = previewCache.get(req.params.id);
+  if (!buf) return res.status(404).end();
+  res.set('Content-Type', 'audio/mpeg');
+  res.set('Accept-Ranges', 'bytes');
+  res.set('Cache-Control', 'public, max-age=86400');
+  const range = req.headers.range;
+  if (range) {
+    const m = /bytes=(\d+)-(\d*)/.exec(range);
+    const start = m ? parseInt(m[1], 10) : 0;
+    const end = m && m[2] ? Math.min(parseInt(m[2], 10), buf.length - 1) : buf.length - 1;
+    if (start >= buf.length) return res.status(416).set('Content-Range', `bytes */${buf.length}`).end();
+    res.status(206).set('Content-Range', `bytes ${start}-${end}/${buf.length}`).set('Content-Length', String(end - start + 1));
+    return res.end(buf.subarray(start, end + 1));
+  }
+  res.set('Content-Length', String(buf.length)).end(buf);
+});
 function lanIp() {
   const cands = [];
   for (const list of Object.values(os.networkInterfaces())) for (const ni of list || []) if (ni.family === 'IPv4' && !ni.internal) cands.push(ni.address);
@@ -854,7 +955,7 @@ app.get('/api/dev/room', (_req, res) => {
   const room = list.find((r) => r.phase === 'lobby') || list[0];
   res.json({ code: room?.code || null });
 });
-app.get('/api/pool', (_req, res) => res.json(POOL.map((t) => ({ artist: t.artist, title: t.title, rank: t.rank })).sort((a, b) => b.rank - a.rank)));
+app.get('/api/pool', (_req, res) => res.json(POOL.map((t) => ({ id: t.id, artist: t.artist, title: t.title, rank: t.rank })).sort((a, b) => b.rank - a.rank)));
 // Test uniquement : révèle la réponse de la manche en cours (pour scripter des réponses correctes dans test-games.mjs).
 app.get('/api/dev/answer', (req, res) => {
   const room = rooms.get(String(req.query.code || '').toUpperCase().trim());

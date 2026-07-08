@@ -1,4 +1,13 @@
-@import './fonts.css';
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PUNCHLINR — Mock fin de partie + déblocage</title>
+<link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=clash-display@600,700&f[]=satoshi@400,700,800,900&display=swap" rel="stylesheet">
+<style>
+/* fonts via Fontshare */
 
 /* =====================================================================
    PUNCHLINE — DA STREET (gris anthracite crade + fluo jaune/vert)
@@ -890,3 +899,409 @@ button, input { font-family: inherit; }
 .gmeta-round b i { font-style: normal; color: var(--muted); font-size: .62em; }
 .gmeta-chip { font-family: var(--disp); font-weight: 700; font-size: clamp(12px, 1.3vw, 16px); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
   background: rgba(255,255,255,.05); border: 1px solid var(--line2); border-radius: 3px; padding: 5px 11px; }
+
+
+/* ====================================================================
+   STYLES SPÉCIFIQUES À LA MAQUETTE (podium, nav d'étapes, overlay déblocage)
+   Le reste = le vrai styles.css de l'app injecté ci-dessus.
+   ==================================================================== */
+body{overflow-x:hidden}
+.mock-tag{position:fixed;top:8px;left:8px;z-index:70;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);background:rgba(0,0,0,.45);border:1px solid var(--line);padding:4px 9px;border-radius:3px}
+/* étapes : une seule visible à la fois (les stages sont aussi .center → flex colonne) */
+.stage{display:none}
+.stage.on{display:flex}
+.final{gap:22px}
+
+/* PODIUM (top 3) */
+.podium{display:flex;justify-content:center;align-items:flex-end;gap:clamp(10px,2vw,26px);width:100%;max-width:760px;margin:6px auto 4px}
+.pod{display:flex;flex-direction:column;align-items:center;gap:9px;flex:0 0 auto;animation:podin .55s cubic-bezier(.2,.8,.3,1.15) both}
+.pod.p2{animation-delay:.1s}.pod.p1{animation-delay:.25s}.pod.p3{animation-delay:0s}
+@keyframes podin{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+.pod .p-cert{margin-bottom:2px}
+.pod .p-name{font-family:var(--disp);font-weight:700;text-transform:uppercase;line-height:1;letter-spacing:-.01em}
+.pod .p-aud{font-family:var(--disp);font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.pod .p-aud small{font-family:var(--ui);font-weight:700;font-size:.42em;color:var(--muted2)}
+.pod .ped{width:100%;min-width:96px;border-radius:6px 6px 0 0;background:linear-gradient(180deg,var(--surf2),var(--surf));border:1px solid var(--line2);border-bottom:0;display:grid;place-items:center;font-family:var(--disp);font-weight:700;color:var(--muted2)}
+.pod.p1 .ped{height:132px;border-color:var(--fluo);background:linear-gradient(180deg,rgba(228,255,26,.14),rgba(228,255,26,.03));color:var(--fluo);font-size:52px}
+.pod.p2 .ped{height:96px;font-size:40px}.pod.p3 .ped{height:70px;font-size:36px}
+.pod.p1 .p-name{font-size:clamp(22px,3vw,30px)}.pod.p2 .p-name,.pod.p3 .p-name{font-size:20px}
+.pod.p1 .p-aud{font-size:clamp(22px,3vw,28px);color:var(--fluo)}.pod.p2 .p-aud,.pod.p3 .p-aud{font-size:20px}
+.pod .med{border:2px solid rgba(255,255,255,.25)}
+.pod.p1 .med{border-color:var(--fluo);box-shadow:0 0 24px -6px var(--fluo)}
+
+/* seuil de certif ajouté sous le short (le "pourquoi") */
+.cc-thresh{display:block;font-family:var(--ui);font-weight:700;font-size:11px;color:var(--muted2);letter-spacing:.02em;margin-top:3px;text-transform:none}
+.cc-thresh b{color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* récap */
+.recap{width:100%;max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.rcard{background:var(--surf);border:1px solid var(--line2);border-radius:10px;padding:18px 20px}
+.rrow{display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px solid var(--line)}
+.rrow:last-child{border:0}
+.rrow .n{font-family:var(--disp);font-weight:700;text-transform:uppercase;font-size:17px}
+.rrow .n small{font-family:var(--ui);font-weight:700;color:var(--muted2);font-size:.7em;margin-left:6px}
+.rrow .v{font-family:var(--disp);font-weight:700;color:var(--fluo);font-variant-numeric:tabular-nums;font-size:17px}
+
+/* barre de contrôle (maquette uniquement) */
+.controls{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;align-items:center;
+  padding:11px;background:linear-gradient(0deg,rgba(0,0,0,.8),rgba(0,0,0,.25));border-top:1px solid var(--line2);backdrop-filter:blur(6px)}
+.controls .seg{display:flex;gap:6px}
+.controls .seg button{font-family:var(--ui);font-size:13px;font-weight:800;padding:9px 14px;border-radius:3px;background:var(--surf2);border:1px solid var(--line2);color:var(--muted);cursor:pointer}
+.controls .seg button.on{background:rgba(228,255,26,.1);border-color:var(--fluo);color:var(--fluo)}
+.controls .auto{font-size:12px;color:var(--muted2);font-weight:700}.controls .auto b{color:var(--fluo);font-variant-numeric:tabular-nums}
+.trig{font-family:var(--disp);font-weight:700;letter-spacing:.05em;text-transform:uppercase;font-size:16px;padding:11px 20px;border-radius:4px;cursor:pointer;
+  color:#fff;background:linear-gradient(90deg,#c0182b,#ff5a1f);border:0;box-shadow:0 0 24px -6px #ff5a1f;animation:tp 1.5s ease-in-out infinite}
+@keyframes tp{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+
+/* ====================== OVERLAY DÉBLOCAGE ÉPIQUE ====================== */
+.uk{position:fixed;inset:0;z-index:200;display:none;place-items:center;overflow:hidden}
+.uk.on{display:grid}
+.uk .dim{position:absolute;inset:0;background:#050506;opacity:0;transition:opacity .25s}
+.uk.on .dim{opacity:.92}
+/* --- alarme --- */
+.uk .alarm{position:absolute;inset:0;pointer-events:none;opacity:0}
+.uk[data-phase="alarm"] .alarm,.uk[data-phase="build"] .alarm{opacity:1}
+.uk .alarm .scan{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,50,50,.07) 0 2px,transparent 2px 4px);mix-blend-mode:screen}
+.uk .alarm .vig{position:absolute;inset:0;box-shadow:inset 0 0 240px 60px rgba(230,30,30,.6);animation:blink .5s steps(2) infinite}
+@keyframes blink{0%,100%{opacity:.2}50%{opacity:.95}}
+.uk .warn{position:absolute;top:8%;left:0;right:0;text-align:center;font-family:var(--disp);font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#ff5a5a;font-size:clamp(14px,2.4vw,24px);animation:blink .5s steps(2) infinite}
+.uk .qm{position:absolute;top:38%;left:0;right:0;text-align:center;font-family:var(--disp);font-weight:700;text-transform:uppercase;font-size:clamp(34px,9vw,96px);color:#fff;opacity:0}
+.uk[data-phase="alarm"] .qm{animation:qmslam .45s cubic-bezier(.2,.8,.3,1.4) .3s both,glitchx .12s steps(2) 6 .35s}
+.uk[data-phase="build"] .qm{opacity:0;transition:opacity .25s}
+@keyframes qmslam{0%{opacity:0;transform:scale(1.6) rotate(-3deg)}70%{opacity:1;transform:scale(.94)}100%{opacity:1;transform:none}}
+@keyframes glitchx{0%{text-shadow:-4px 0 #ff2b5e,4px 0 #29eaff;clip-path:inset(0 0 55% 0)}50%{text-shadow:4px 0 #ff2b5e,-4px 0 #29eaff;clip-path:inset(60% 0 0 0)}100%{text-shadow:none;clip-path:inset(0)}}
+/* build : lueur qui grossit + lignes de vitesse + tremblement */
+.uk .glow{position:absolute;left:50%;top:50%;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);
+  background:radial-gradient(circle,rgba(255,255,255,.95),rgba(255,207,63,.6) 38%,transparent 70%);opacity:0}
+.uk[data-phase="build"] .glow{animation:glow 3s cubic-bezier(.65,0,.9,1) forwards}
+@keyframes glow{0%{opacity:.25;width:20px;height:20px}82%{opacity:.95}100%{opacity:1;width:1700px;height:1700px}}
+.uk .speed{position:absolute;inset:0;opacity:0;background:
+  repeating-conic-gradient(from 0deg at 50% 50%,transparent 0 6deg,rgba(255,255,255,.05) 6deg 6.6deg,transparent 6.6deg 12deg)}
+.uk[data-phase="build"] .speed{animation:speedin 3s ease-in forwards}
+@keyframes speedin{0%{opacity:0;transform:scale(2)}100%{opacity:.8;transform:scale(.4)}}
+.uk[data-phase="build"]{animation:shakeup 3s ease-in forwards}
+@keyframes shakeup{0%{transform:translate(0,0)}15%{transform:translate(-1px,1px)}30%{transform:translate(2px,-2px)}45%{transform:translate(-2px,2px)}60%{transform:translate(3px,-3px)}75%{transform:translate(-4px,3px)}88%{transform:translate(5px,-4px)}100%{transform:translate(-6px,5px)}}
+/* --- BOOM --- */
+.uk .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.uk[data-phase="reveal"] .flash{animation:flash .55s ease-out}
+@keyframes flash{0%{opacity:1}100%{opacity:0}}
+.uk .shock{position:absolute;left:50%;top:44%;width:20px;height:20px;border-radius:50%;transform:translate(-50%,-50%);border:6px solid #fff;opacity:0}
+.uk[data-phase="reveal"] .shock{animation:shock .6s ease-out}
+@keyframes shock{0%{opacity:.9;width:20px;height:20px;border-width:14px}100%{opacity:0;width:1200px;height:1200px;border-width:1px}}
+.uk[data-phase="reveal"] .stage-uk{animation:bang .5s cubic-bezier(.2,.9,.3,1.1)}
+@keyframes bang{0%{transform:scale(1.06)}30%{transform:scale(.985) translateX(4px)}50%{transform:translateX(-4px)}70%{transform:translateX(2px)}100%{transform:none}}
+/* --- reveal : Disiz débarque --- */
+.uk .stage-uk{position:relative;z-index:2;width:100%;height:100%;display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:clamp(8px,1.6vh,18px);padding:clamp(12px,3vh,32px) 0;opacity:0}
+.uk .stage-uk::before{content:'';position:absolute;inset:0;z-index:-2;background:radial-gradient(120% 100% at 50% 0%,#171019,#0a0b0e 60%,#060608)}
+.uk .stage-uk .kchip{align-self:center}
+.uk[data-phase="reveal"] .tvros-name{animation:nameslam .5s cubic-bezier(.2,.9,.3,1.3) .1s both}
+.uk[data-phase="reveal"] .stage-uk{animation:revin .55s cubic-bezier(.15,.85,.3,1.2) forwards}
+@keyframes revin{0%{opacity:0;transform:scale(1.45)}62%{opacity:1;transform:scale(.97)}100%{opacity:1;transform:scale(1)}}
+.uk .rays{position:absolute;width:1100px;height:1100px;left:50%;top:46%;transform:translate(-50%,-50%);z-index:-1;
+  background:conic-gradient(from 0deg,transparent 0 7deg,rgba(255,207,63,.16) 8deg 10deg,transparent 11deg 20deg);animation:spin 16s linear infinite}
+.uk .halo{position:absolute;width:560px;height:560px;left:50%;top:44%;transform:translate(-50%,-50%);z-index:-1;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,207,63,.3),transparent 62%);animation:halo 2.4s ease-in-out infinite}
+@keyframes halo{0%,100%{opacity:.55;transform:translate(-50%,-50%) scale(.95)}50%{opacity:.9;transform:translate(-50%,-50%) scale(1.06)}}
+.uk .kchip{font-family:var(--disp);font-weight:700;letter-spacing:.26em;text-transform:uppercase;color:var(--fluo);font-size:13px;
+  border:1px solid rgba(228,255,26,.4);padding:6px 16px;border-radius:2px;background:rgba(0,0,0,.4)}
+/* grain grunge par-dessus l'overlay (les dégradés étaient trop lisses) */
+.uk .grain{position:absolute;inset:0;pointer-events:none;opacity:.15;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:160px}
+/* FICHE complète (façon roster) : portrait + infos (stats + pouvoir) */
+.uk .fiche{display:flex;align-items:center;gap:clamp(16px,3vw,42px);max-width:840px;flex-wrap:wrap;justify-content:center;padding:0 16px}
+.uk .portrait{width:clamp(180px,32vw,248px);aspect-ratio:3/4;border-radius:10px;position:relative;overflow:hidden;flex:0 0 auto;
+  border:2px solid var(--cc);box-shadow:0 0 70px -8px var(--cc),0 30px 80px -22px #000}
+.uk .portrait img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 10%;filter:contrast(1.06) saturate(1.05)}
+.uk .portrait .grad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 42%,rgba(8,8,10,.5) 82%,#08080a),repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 2px)}
+.uk .portrait .vhs{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.32) 0 1px,transparent 1px 3px);mix-blend-mode:soft-light;opacity:.5}
+.uk .portrait .cat{position:absolute;top:10px;right:10px;font-family:var(--disp);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--cc);background:rgba(0,0,0,.6);border:1px solid var(--cc);padding:4px 9px;border-radius:2px}
+.uk .finfo{text-align:left;display:flex;flex-direction:column;gap:9px;min-width:250px;max-width:380px}
+.uk .kname{font-family:var(--disp);font-weight:700;text-transform:uppercase;font-size:clamp(42px,7vw,74px);line-height:.84;color:#fff;text-shadow:0 4px 24px rgba(0,0,0,.7);letter-spacing:-.01em}
+.uk[data-phase="reveal"] .kname{animation:nameslam .5s cubic-bezier(.2,.9,.3,1.3) .12s both}
+@keyframes nameslam{0%{opacity:0;transform:scale(1.4) translateY(-8px);letter-spacing:.08em}70%{opacity:1;transform:scale(.97)}100%{opacity:1;transform:none;letter-spacing:-.01em}}
+.uk .epi{font-family:var(--disp);font-weight:700;font-style:italic;text-transform:uppercase;font-size:clamp(18px,2.4vw,26px);color:var(--cc);margin-top:-2px}
+.uk .frow-from{font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--muted2);text-transform:uppercase}
+.uk .fstats{display:flex;flex-direction:column;gap:6px;margin-top:3px}
+.uk .frow{display:flex;align-items:center;gap:12px}
+.uk .flab{width:60px;font-family:var(--disp);font-weight:700;font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.uk .fbar{display:flex;gap:5px}
+.uk .fbar i{width:22px;height:9px;background:rgba(255,255,255,.14);transform:skewX(-16deg)}
+.uk .fbar i.on{background:var(--cc);box-shadow:0 0 8px color-mix(in srgb,var(--cc) 45%,transparent)}
+.uk .fpow{margin-top:5px;border-top:1px solid var(--line2);padding-top:9px}
+.uk .fpow .k{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted2)}
+.uk .fpow .nm{font-family:var(--disp);font-weight:700;font-size:19px;text-transform:uppercase;color:var(--cc);margin:2px 0 4px}
+.uk .fpow .fx{font-size:12.5px;color:var(--muted);line-height:1.42}
+.uk .tagline{font-family:var(--disp);font-weight:700;text-transform:uppercase;letter-spacing:.05em;font-size:clamp(16px,2.4vw,24px);color:var(--txt);opacity:0}
+.uk .tagline.show{animation:up .45s ease forwards}
+.uk .tagline b{color:var(--cc)}
+.uk .close{opacity:0}.uk .close.show{animation:up .4s ease forwards}
+@keyframes up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.uk *{animation-duration:.001s!important}}
+</style>
+</head>
+<body>
+<canvas class="grungebg"></canvas>
+<div class="mock-tag">MOCK — fin de partie & déblocage (vrai CSS de l'app injecté)</div>
+
+<div class="wrap" style="position:relative;z-index:1">
+  <div class="topbar"><h1 class="wm" style="font-size:24px">PUNCHLIN<span class="d">R</span></h1>
+    <span class="eyebrow" id="stageLabel">Podium</span></div>
+
+  <!-- ÉTAPE 1 : PODIUM + CLASSEMENT -->
+  <section class="stage on center final" id="s-podium" style="justify-content:flex-start;padding-top:clamp(12px,3vh,34px)">
+    <span class="eyebrow">Partie terminée — Podium</span>
+    <div class="podium" id="podEl"></div>
+    <div class="eyebrow" style="margin-top:6px" id="restLabel">Le reste du classement</div>
+    <div class="certgrid" id="gridEl"></div>
+  </section>
+
+  <!-- ÉTAPE 2 : TROPHÉES -->
+  <section class="stage center final" id="s-trophies" style="justify-content:flex-start;padding-top:clamp(14px,4vh,50px);gap:20px">
+    <div class="awards-stage">
+      <span class="eyebrow awards-eyebrow">Trophées de la soirée · <span id="awShown">0</span>/<span id="awTotal">0</span></span>
+      <div class="awards" id="awEl"></div>
+      <button class="btn warm" id="awNext" style="max-width:340px">Révéler le 1ᵉʳ trophée →</button>
+    </div>
+  </section>
+
+  <!-- ÉTAPE 3 : RÉCAP -->
+  <section class="stage center final" id="s-recap" style="justify-content:flex-start;padding-top:clamp(14px,4vh,50px);gap:18px">
+    <span class="eyebrow">Récap de la partie</span>
+    <div class="recap">
+      <div class="rcard"><div class="eyebrow" style="margin-bottom:8px">Classement final</div><div id="recapBoard"></div></div>
+      <div class="rcard"><div class="eyebrow" style="margin-bottom:8px">Trophées décernés</div><div id="recapAw"></div></div>
+    </div>
+    <div class="row" style="gap:12px;flex-wrap:wrap;justify-content:center;margin-top:4px">
+      <button class="btn warm">Relancer une partie →</button>
+      <button class="btn">Retour au salon</button>
+    </div>
+  </section>
+</div>
+
+<div class="controls">
+  <div class="seg" id="nav">
+    <button data-s="podium" class="on">Podium</button>
+    <button data-s="trophies">Trophées</button>
+    <button data-s="recap">Récap</button>
+  </div>
+  <span class="auto">auto dans <b id="autoT">30</b>s</span>
+  <button class="trig" id="unlockBtn">🔓 Simuler le déblocage de Disiz</button>
+</div>
+
+<!-- OVERLAY DÉBLOCAGE -->
+<div class="uk" id="uk" style="--cc:#ffcf3f;--c:#45607C;--lp:clamp(24px,4vw,64px)">
+  <div class="dim"></div>
+  <div class="grain"></div>
+  <div class="alarm"><div class="scan"></div><div class="vig"></div>
+    <div class="warn">⚠ Signal brouillé ⚠</div></div>
+  <div class="qm">INTRUSION<br>DANS LE CERCLE</div>
+  <div class="glow"></div><div class="speed"></div>
+  <div class="flash"></div><div class="shock"></div>
+  <div class="stage-uk">
+    <div class="rays"></div>
+    <div class="kchip">Nouveau challenger débloqué</div>
+    <div class="tvros-hero">
+      <div class="tvros-fig" id="ukFig">
+        <div class="tvros-figglow"></div>
+        <img class="tvros-portrait" src="client/public/avatars/disiz.png" alt="">
+        <img class="tvros-portrait tear" src="client/public/avatars/disiz.png" alt="" aria-hidden="true">
+      </div>
+      <div class="tvros-side">
+        <div class="tvros-nameblock">
+          <div class="tvros-catchip"><span>Conscient</span></div>
+          <div class="tvros-name" style="font-size:clamp(50px,6vw,86px)">DISIZ</div>
+          <div class="tvros-epi">« La Peste »</div>
+        </div>
+        <div class="tvros-bio">
+          <div class="tvros-tags"><span>Évry (91)</span><span>Depuis 2000</span><span class="sales">« L'Amour » (2022) encensé</span></div>
+          <div class="tvros-bionote">La Peste. De « J'pète les plombs » à « L'Amour », il se réinvente sans fin.</div>
+        </div>
+        <div class="tvros-divider"></div>
+        <div class="tvros-statpow">
+          <div class="tvros-block tvros-stats">
+            <div class="tvros-blabel">Statistiques</div>
+            <div class="tvros-srow"><span class="tvros-slab">Flow</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+            <div class="tvros-srow"><span class="tvros-slab">Punch</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+            <div class="tvros-srow"><span class="tvros-slab">Tech</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+            <div class="tvros-srow"><span class="tvros-slab">Aura</span><span class="tvros-sbar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+          </div>
+          <div class="tvros-block tvros-pow">
+            <div class="tvros-blabel">Pouvoir signature</div>
+            <div class="tvros-pname">J'pète les plombs</div>
+            <div class="tvros-pfx">Il pète les plombs et remonte : récupère la moitié de ton retard sur le n°1 (si tu es à la traîne).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="btn close" id="ukClose" style="align-self:center;margin-top:4px">Fermer</button>
+  </div>
+  <audio id="disizTrack" src="client/public/music/disiz-toussa-toussa.mp3" preload="auto"></audio>
+</div>
+
+<!-- filtres VHS (aberration chromatique) pour le portrait fondu, comme le roster -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <filter id="vhs" x="-6%" y="-3%" width="112%" height="106%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.001 0.021" numOctaves="1" seed="5" result="w"/>
+    <feDisplacementMap in="SourceGraphic" in2="w" scale="2.4" xChannelSelector="R" yChannelSelector="G" result="d"/>
+    <feColorMatrix in="d" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cr"/>
+    <feOffset in="cr" dx="-3" dy="0.6" result="cro"/>
+    <feColorMatrix in="d" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cg"/>
+    <feColorMatrix in="d" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cb"/>
+    <feOffset in="cb" dx="3" dy="-0.6" result="cbo"/>
+    <feBlend in="cro" in2="cg" mode="screen" result="crg"/>
+    <feBlend in="crg" in2="cbo" mode="screen"/>
+  </filter>
+  <filter id="vhs-strong" x="-10%" y="-5%" width="120%" height="110%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.002 0.03" numOctaves="1" seed="9" result="w2"/>
+    <feDisplacementMap in="SourceGraphic" in2="w2" scale="5" xChannelSelector="R" yChannelSelector="G" result="d2"/>
+    <feColorMatrix in="d2" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cr2"/>
+    <feOffset in="cr2" dx="-8" dy="1.4" result="cro2"/>
+    <feColorMatrix in="d2" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cg2"/>
+    <feColorMatrix in="d2" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cb2"/>
+    <feOffset in="cb2" dx="8" dy="-1.4" result="cbo2"/>
+    <feBlend in="cro2" in2="cg2" mode="screen" result="crg2"/>
+    <feBlend in="crg2" in2="cbo2" mode="screen"/>
+  </filter>
+</defs></svg>
+
+<script>
+/* ===== FOND GRUNGE (réplique de GrungeBg.tsx) ===== */
+(function(){const cv=document.querySelector('.grungebg'),ctx=cv.getContext('2d');
+  function paint(){const W=innerWidth,H=innerHeight;if(W<2||H<2)return;const dpr=Math.min(devicePixelRatio||1,2);
+    cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+    for(let i=0;i<26;i++){const x=Math.random()*W,y=Math.random()*H,r=120+Math.random()*360,g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,Math.random()<.5?'rgba(255,255,255,.02)':'rgba(0,0,0,.10)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,6.29);ctx.fill();}
+    const d=Math.min(90000,Math.floor(W*H/26));for(let i=0;i<d;i++){const x=Math.random()*W,y=Math.random()*H,k=Math.random()<.62;ctx.fillStyle=k?`rgba(0,0,0,${.1+Math.random()*.35})`:`rgba(255,255,255,${.03+Math.random()*.1})`;ctx.fillRect(x,y,Math.random()<.85?1:2,Math.random()<.85?1:2);}
+    ctx.lineCap='round';for(let i=0;i<40;i++){const x=Math.random()*W,y=Math.random()*H*.6,l=40+Math.random()*260;ctx.strokeStyle=`rgba(0,0,0,${.04+Math.random()*.08})`;ctx.lineWidth=.6+Math.random()*1.6;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+(Math.random()*4-2),y+l);ctx.stroke();}
+    for(let i=0;i<22;i++){const x=Math.random()*W,y=Math.random()*H,l=20+Math.random()*90,a=Math.random()*.6-.3;ctx.strokeStyle=`rgba(255,255,255,${.02+Math.random()*.05})`;ctx.lineWidth=.5+Math.random();ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l);ctx.stroke();}}
+  paint();addEventListener('resize',paint);})();
+
+/* ===== DONNÉES MOCK ===== */
+const ROUNDS=16;
+const CERTIFS=[{min:50000,label:'Disque de Diamant',short:'Diamant',t:5},{min:35000,label:'Triple Platine',short:'3× Platine',t:4},{min:25000,label:'Double Platine',short:'2× Platine',t:3},{min:16000,label:'Disque de Platine',short:'Platine',t:2},{min:8500,label:"Disque d'Or",short:'Or',t:1},{min:0,label:'Espoir du rap',short:'Espoir',t:0}];
+const certif=s=>CERTIFS.find(c=>s/ROUNDS>=c.min);
+const fmt=n=>Math.round(n).toLocaleString('fr-FR');
+const PLAYERS=[
+  {name:'Alexandre',rap:'Nekfeu',avId:'nekfeu',ini:'AL',color:'#E9703C',score:624000},
+  {name:'Moka',rap:'Rohff',avId:'rohff',ini:'MO',color:'#932F2F',score:412000},
+  {name:'Sacha',rap:'SCH',avId:'sch',ini:'SA',color:'#44405A',score:298000},
+  {name:'Lina',rap:'Jul',avId:'jul',ini:'LI',color:'#2E9E8F',score:184000},
+  {name:'Tom',rap:'PNL',avId:'pnl',ini:'TO',color:'#4C6BE0',score:96000},
+].sort((a,b)=>b.score-a.score);
+const AWARDS=[
+  {ic:'crown',t:'La Ceinture',w:PLAYERS[0],d:'Champion de la partie.'},
+  {ic:'target',t:'Le Sniper',w:PLAYERS[1],d:'Presque toutes ses réponses font mouche.'},
+  {ic:'up',t:'Comeback King',w:PLAYERS[4],d:'Bon dernier à un moment… puis remonte tout le monde.'},
+];
+const AWARD_ICONS={crown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l3.5 4 4.5-6 4.5 6L20 8l-1.6 10.5H5.6z"/><path d="M6 18.5h12"/></svg>',target:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>',up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V6"/><path d="M6 12l6-6 6 6"/></svg>'};
+
+/* ===== HELPERS RENDU (fidèles à l'app) ===== */
+const med=(p,size)=>`<span class="med" style="width:${size}px;height:${size}px;font-size:${Math.round(size*.37)}px;background:radial-gradient(80% 70% at 50% 22%,${p.color},#111)">${p.ini}<img src="client/public/avatars/${p.avId}.png" alt="" onerror="this.remove()"></span>`;
+const disc=(tier,size,p)=>`<span class="certdisc certdisc-t${tier}" style="width:${size}px;height:${size}px"><span class="cd-sheen"></span><span class="cd-grooves"></span><span class="cd-shine"></span><span class="cd-label">${med(p,Math.round(size*.4))}</span></span>`;
+
+function renderPodium(){
+  const [p1,p2,p3]=PLAYERS;
+  const col=(p,pos)=>{const c=certif(p.score);return `<div class="pod p${pos}">
+    <div class="p-cert certlabel tier-${c.t}" style="font-size:${pos===1?'clamp(15px,1.8vw,20px)':'13px'};padding:${pos===1?'7px 14px':'5px 11px'}">${c.short}</div>
+    ${disc(c.t,pos===1?66:48,p)}${med(p,pos===1?86:60)}
+    <div class="p-name">${p.name}</div>
+    <div class="p-aud">${fmt(p.score)}<small> aud.</small></div>
+    <div class="ped">${pos}</div></div>`;};
+  document.getElementById('podEl').innerHTML=col(p2,2)+col(p1,1)+col(p3,3);
+  // le classement en bas = LES AUTRES (4e et +), le top 3 est déjà sur le podium
+  document.getElementById('gridEl').innerHTML=PLAYERS.slice(3).map((p,i)=>{const c=certif(p.score),min=CERTIFS.find(x=>x.t===c.t).min;
+    return `<div class="certcard">
+      <span class="cc-rk">${i+4}</span>${disc(c.t,72,p)}
+      <div class="cc-info"><div class="cc-name">${p.name}</div><div class="cc-cert tier-${c.t}">${c.short}<span class="cc-thresh">≥ <b>${fmt(min)}</b> aud./manche</span></div></div>
+      <div class="cc-score">${fmt(p.score)}<span> aud.</span></div></div>`;}).join('');
+  document.getElementById('restLabel').style.display=PLAYERS.length>3?'':'none';
+}
+let awShown=0;
+function renderAwards(){
+  document.getElementById('awTotal').textContent=AWARDS.length;
+  const all=awShown>=AWARDS.length;
+  document.getElementById('awEl').innerHTML=AWARDS.slice(0,awShown).map(a=>`<div class="award pop">
+    <span class="aw-ic">${AWARD_ICONS[a.ic]}</span><div class="aw-title">${a.t}</div>
+    <div class="aw-who">${med(a.w,32)}<span>${a.w.name}</span></div><div class="aw-desc">${a.d}</div></div>`).join('')
+    +(!all?`<div class="award pending"><span class="aw-drum">🥁</span><div class="aw-title">Trophée ${awShown+1}</div><div class="aw-desc">roulement de tambour…</div></div>`:'');
+  document.getElementById('awShown').textContent=Math.min(awShown,AWARDS.length);
+  const b=document.getElementById('awNext');b.style.display=all?'none':'';b.textContent=awShown===0?'Révéler le 1ᵉʳ trophée →':awShown+1>=AWARDS.length?'Dernier trophée →':'Trophée suivant →';
+}
+document.getElementById('awNext').onclick=()=>{awShown=Math.min(awShown+1,AWARDS.length);renderAwards();};
+function renderRecap(){
+  document.getElementById('recapBoard').innerHTML=PLAYERS.map((p,i)=>{const c=certif(p.score);
+    return `<div class="rrow"><span class="n">${i+1}. ${p.name} <small>${c.short}</small></span><span class="v">${fmt(p.score)}</span></div>`;}).join('');
+  document.getElementById('recapAw').innerHTML=AWARDS.map(a=>`<div class="rrow"><span class="n">${a.t}</span><span class="v">${a.w.name}</span></div>`).join('');
+}
+
+/* ===== NAV + AUTO 30s ===== */
+const STAGES=['podium','trophies','recap'];let cur='podium',autoLeft=30;
+function show(s){cur=s;STAGES.forEach(x=>document.getElementById('s-'+x).classList.toggle('on',x===s));
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));
+  document.getElementById('stageLabel').textContent={podium:'Podium',trophies:'Trophées',recap:'Récap'}[s];
+  if(s==='podium')renderPodium();if(s==='trophies')renderAwards();if(s==='recap'){awShown=AWARDS.length;renderRecap();}
+  autoLeft=30;}
+document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>show(b.dataset.s));
+setInterval(()=>{autoLeft--;document.getElementById('autoT').textContent=Math.max(0,autoLeft);
+  if(autoLeft<=0){const i=STAGES.indexOf(cur);if(i<STAGES.length-1)show(STAGES[i+1]);else autoLeft=30;}},1000);
+renderPodium();
+
+/* ===== AUDIO (Web Audio synthétisé — placeholder du vrai son de Disiz) ===== */
+let AC;const ac=()=>{AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();return AC;};
+const nb=(c,d)=>{const n=Math.floor(c.sampleRate*d),b=c.createBuffer(1,n,c.sampleRate),ch=b.getChannelData(0);for(let i=0;i<n;i++)ch[i]=Math.random()*2-1;return b;};
+function beep(f,t,d,g=.06,ty='sine'){const c=ac(),o=c.createOscillator(),ga=c.createGain();o.type=ty;o.frequency.value=f;ga.gain.setValueAtTime(0,t);ga.gain.linearRampToValueAtTime(g,t+.03);ga.gain.linearRampToValueAtTime(0,t+d);o.connect(ga).connect(c.destination);o.start(t);o.stop(t+d+.05);}
+function riser(t,d){const c=ac(),o=c.createOscillator(),ga=c.createGain(),f=c.createBiquadFilter();o.type='sawtooth';o.frequency.setValueAtTime(60,t);o.frequency.exponentialRampToValueAtTime(620,t+d);f.type='lowpass';f.frequency.setValueAtTime(280,t);f.frequency.exponentialRampToValueAtTime(5200,t+d);ga.gain.setValueAtTime(.001,t);ga.gain.exponentialRampToValueAtTime(.3,t+d);ga.gain.linearRampToValueAtTime(0,t+d+.06);o.connect(f).connect(ga).connect(c.destination);o.start(t);o.stop(t+d+.1);
+  const n=c.createBufferSource();n.buffer=nb(c,d+.2);const nf=c.createBiquadFilter();nf.type='highpass';nf.frequency.setValueAtTime(200,t);nf.frequency.exponentialRampToValueAtTime(9000,t+d);const ng=c.createGain();ng.gain.setValueAtTime(.001,t);ng.gain.exponentialRampToValueAtTime(.16,t+d);ng.gain.linearRampToValueAtTime(0,t+d+.06);n.connect(nf).connect(ng).connect(c.destination);n.start(t);n.stop(t+d+.1);}
+function snareRoll(t,d){const c=ac();let x=0,step=.2;while(x<d){const tt=t+x;const s=c.createBufferSource();s.buffer=nb(c,.05);const f=c.createBiquadFilter();f.type='bandpass';f.frequency.value=1800;const g=c.createGain();const gain=.05+.16*(x/d);g.gain.setValueAtTime(gain,tt);g.gain.exponentialRampToValueAtTime(.001,tt+.05);s.connect(f).connect(g).connect(c.destination);s.start(tt);s.stop(tt+.06);x+=step;step=Math.max(.05,step*.9);}}/* pas PLANCHER à .05 → la boucle termine (avant: step*=.88 => x plafonnait, boucle infinie) */
+function impact(t){const c=ac();const o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.setValueAtTime(180,t);o.frequency.exponentialRampToValueAtTime(38,t+.22);g.gain.setValueAtTime(1,t);g.gain.exponentialRampToValueAtTime(.001,t+.6);o.connect(g).connect(c.destination);o.start(t);o.stop(t+.65);
+  const n=c.createBufferSource();n.buffer=nb(c,.9);const f=c.createBiquadFilter();f.type='highpass';f.frequency.value=1200;const ng=c.createGain();ng.gain.setValueAtTime(.5,t);ng.gain.exponentialRampToValueAtTime(.001,t+.9);n.connect(f).connect(ng).connect(c.destination);n.start(t);n.stop(t+.95);}
+function kick(t){const c=ac(),o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(48,t+.11);g.gain.setValueAtTime(.8,t);g.gain.exponentialRampToValueAtTime(.001,t+.3);o.connect(g).connect(c.destination);o.start(t);o.stop(t+.32);}
+function snare(t){const c=ac(),n=c.createBufferSource();n.buffer=nb(c,.2);const f=c.createBiquadFilter();f.type='highpass';f.frequency.value=1500;const g=c.createGain();g.gain.setValueAtTime(.4,t);g.gain.exponentialRampToValueAtTime(.001,t+.2);n.connect(f).connect(g).connect(c.destination);n.start(t);n.stop(t+.22);}
+function hat(t){const c=ac(),n=c.createBufferSource();n.buffer=nb(c,.04);const f=c.createBiquadFilter();f.type='highpass';f.frequency.value=8000;const g=c.createGain();g.gain.setValueAtTime(.1,t);g.gain.exponentialRampToValueAtTime(.001,t+.04);n.connect(f).connect(g).connect(c.destination);n.start(t);n.stop(t+.05);}
+function stab(t){const c=ac();[0,3,7,10].forEach(s=>{const o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();o.type='sawtooth';o.frequency.value=98*Math.pow(2,s/12);f.type='lowpass';f.frequency.value=1400;g.gain.setValueAtTime(.1,t);g.gain.exponentialRampToValueAtTime(.001,t+.5);o.connect(f).connect(g).connect(c.destination);o.start(t);o.stop(t+.55);});}
+function beat(start,bars){const spb=60/94;for(let b=0;b<bars;b++){const t=start+b*4*spb;kick(t);kick(t+.5*spb);snare(t+spb);snare(t+3*spb);for(let i=0;i<8;i++)hat(t+i*.5*spb);if(b%2===0)stab(t);}}
+/* ALARME = sirène « wail » (fréquence qui monte/descend) passée dans un lowpass → chaude, pas stridente.
+   Synchro avec l'animation rouge. Si tu veux un VRAI son d'alarme précis : donne-moi un lien mp3 direct
+   ou dépose un fichier (ex. client/public/sfx/alarme.mp3) et je le câble comme la musique. */
+function alarm(t,dur){const c=ac(),o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();
+  o.type='sawtooth';f.type='lowpass';f.frequency.value=1300;f.Q.value=.7;
+  const P=.82;o.frequency.setValueAtTime(430,t);
+  for(let x=0;x<dur;x+=P){o.frequency.linearRampToValueAtTime(690,t+x+P/2);o.frequency.linearRampToValueAtTime(430,t+Math.min(dur,x+P));}
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.055,t+.12);g.gain.setValueAtTime(.055,t+Math.max(.2,dur-.2));g.gain.linearRampToValueAtTime(0,t+dur);
+  o.connect(f).connect(g).connect(c.destination);o.start(t);o.stop(t+dur+.05);
+  // + un léger "bip" d'alerte par-dessus, en rythme avec le clignotement rouge (0.5s)
+  for(let i=0;i*.5<dur;i++)beep(880,t+.05+i*.5,.12,.03,'square');}
+/* joue le VRAI morceau de Disiz au drop (repli sur le beat synthé si le fichier est absent) */
+function dropTrack(){const a=document.getElementById('disizTrack');try{a.currentTime=0;}catch(e){}a.volume=0;
+  a.play().then(()=>{let v=0;const f=setInterval(()=>{v=Math.min(.85,v+.1);a.volume=v;if(v>=.85)clearInterval(f);},50);})
+   .catch(()=>{beat(ac().currentTime+.02,10);});}
+
+/* ===== SÉQUENCE ÉPIQUE ===== */
+const uk=document.getElementById('uk');let busy=false;let glxTimer=null;
+/* déchirures VHS sur le portrait fondu (comme le roster) — plus fréquentes = plus épique */
+function fireGlitch(){const fig=document.getElementById('ukFig');if(!fig||!uk.classList.contains('on'))return;
+  const r=Math.random(),strong=r<.5,big=r<.2;
+  fig.style.setProperty('--gy',(Math.random()*82).toFixed(1)+'%');
+  fig.style.setProperty('--gh',(big?12+Math.random()*22:strong?5+Math.random()*12:2+Math.random()*7).toFixed(1)+'%');
+  fig.style.setProperty('--gx',((Math.random()*2-1)*(big?28:strong?15:6)).toFixed(1)+'px');
+  fig.classList.add(strong?'glx-strong':'glx');
+  setTimeout(()=>fig.classList.remove('glx','glx-strong'),(strong?100:55)+Math.random()*(strong?240:100));
+  glxTimer=setTimeout(fireGlitch,140+Math.random()*700);}
+function trigger(){if(busy)return;busy=true;const c=ac(),now=c.currentTime;
+  uk.classList.add('on');uk.setAttribute('data-phase','alarm');
+  document.getElementById('ukClose').classList.remove('show');
+  // ALARME pendant l'animation rouge (0 → 1.8s)
+  alarm(now+.05,1.7);
+  // 1.8s : la montée qui ACCÉLÈRE (riser aigu + roulement de caisse qui s'emballe)
+  riser(now+1.8,3);snareRoll(now+1.8,3);
+  setTimeout(()=>uk.setAttribute('data-phase','build'),1800);
+  // 4.8s : BOOM + Disiz débarque + le VRAI son de Disiz tombe
+  impact(now+4.8);
+  setTimeout(()=>{uk.setAttribute('data-phase','reveal');clearTimeout(glxTimer);fireGlitch();},4800);
+  setTimeout(dropTrack,4820);
+  setTimeout(()=>document.getElementById('ukClose').classList.add('show'),6200);
+}
+document.getElementById('unlockBtn').onclick=trigger;
+document.getElementById('ukClose').onclick=()=>{uk.classList.remove('on');uk.removeAttribute('data-phase');busy=false;clearTimeout(glxTimer);try{const a=document.getElementById('disizTrack');a.pause();a.currentTime=0;}catch(e){}try{AC&&AC.close();AC=null;}catch(e){}};
+</script>
+</body>
+</html>

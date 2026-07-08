@@ -36,14 +36,18 @@ export const isGenie = (cat: string) => cat === 'Génies incompris'; // cartes �
 export const fmtAud = (n: number) => Math.round(n || 0).toLocaleString('fr-FR');
 export function certif(score: number, rounds: number) {
   const per = (score || 0) / Math.max(1, rounds || 1); // auditeurs / manche → indépendant de la longueur de partie
-  // Paliers DURCIS (gagner ne doit plus donner du 3× Platine trop facilement ; Diamant = exceptionnel). À affiner en playtest.
-  if (per >= 42000) return { label: 'Disque de Diamant', short: 'Diamant' };
-  if (per >= 29000) return { label: 'Triple Platine', short: '3× Platine' };
-  if (per >= 20000) return { label: 'Double Platine', short: '2× Platine' };
-  if (per >= 13000) return { label: 'Disque de Platine', short: 'Platine' };
-  if (per >= 7000) return { label: "Disque d'Or", short: 'Or' };
+  // Paliers DURCIS (2e passe) : gagner une partie ne doit PAS donner du 3× Platine par défaut. Diamant =
+  // quasi sans-faute en difficulté élevée. Le Platine reste atteignable sur une belle partie.
+  if (per >= 50000) return { label: 'Disque de Diamant', short: 'Diamant' };
+  if (per >= 35000) return { label: 'Triple Platine', short: '3× Platine' };
+  if (per >= 25000) return { label: 'Double Platine', short: '2× Platine' };
+  if (per >= 16000) return { label: 'Disque de Platine', short: 'Platine' };
+  if (per >= 8500) return { label: "Disque d'Or", short: 'Or' };
   return { label: 'Espoir du rap', short: 'Espoir' };
 }
+
+// Niveau de certif → matière du "CD" affiché sur le podium (dégradé + halo). Ordre du plus bas au plus haut.
+export const CERTIF_TIER: Record<string, number> = { 'Espoir': 0, 'Or': 1, 'Platine': 2, '2× Platine': 3, '3× Platine': 4, 'Diamant': 5 };
 
 export const AVATARS: Avatar[] = [
   // ---- Légende (pionniers) — tier S ----
@@ -119,12 +123,16 @@ export const isLockedSlot = (id: string) => LOCKED_SLOTS.some((s) => s.id === id
 // Déblocage des rappeurs verrouillés : objectif affiché + condition testée en fin de partie
 // (côté joueur, façon trophées → persisté dans localStorage `pl_unlocked`). Conditions PROVISOIRES,
 // à affiner. `check` reçoit le résultat perso de la partie qui vient de se terminer.
-export type UnlockCtx = { won: boolean; rank: number; certifShort: string; awardIds: string[] };
+// Conditions RÉPARTIES sur des réglages DIFFÉRENTS (difficulté / mode / format) → impossible de tout
+// débloquer en une seule partie : il faut varier les configs. (Affichage des déblocages désactivé pour
+// l'instant — voir Player.tsx : on ne montre pas encore les challengers.)
+export type UnlockCtx = { won: boolean; rank: number; certifShort: string; awardIds: string[]; difficulty: string; mode: string; rounds: number };
+const PLATINE_PLUS = ['Platine', '2× Platine', '3× Platine', 'Diamant'];
 export const UNLOCKS: { id: string; objective: string; check: (c: UnlockCtx) => boolean }[] = [
-  { id: 'caballerojeanjass', objective: 'Termine une partie complète.', check: () => true },
-  { id: 'freezecorleone', objective: 'Gagne une partie.', check: (c) => c.won },
-  { id: 'diams', objective: 'Termine une partie sur le podium (1er ou 2ᵉ).', check: (c) => c.rank <= 2 },
-  { id: 'lino', objective: 'Finis une partie avec au moins un Disque de Platine.', check: (c) => ['Platine', '2× Platine', '3× Platine', 'Diamant'].includes(c.certifShort) },
+  { id: 'caballerojeanjass', objective: 'Termine une partie en mode Quiz.', check: (c) => c.mode === 'quiz' },
+  { id: 'freezecorleone', objective: 'Gagne une partie en difficulté Puriste.', check: (c) => c.won && c.difficulty === 'puriste' },
+  { id: 'diams', objective: 'Finis sur le podium (1er/2ᵉ) d’une partie de 24 manches ou plus.', check: (c) => c.rank <= 2 && c.rounds >= 24 },
+  { id: 'lino', objective: 'Décroche un Platine ou mieux en mode Buzzer.', check: (c) => c.mode === 'buzzer' && PLATINE_PLUS.includes(c.certifShort) },
   { id: 'disiz', objective: 'Décroche le trophée « Comeback King ».', check: (c) => c.awardIds.includes('comeback') },
 ];
 export const unlockObjective = (id: string) => UNLOCKS.find((u) => u.id === id)?.objective || 'À débloquer.';
@@ -213,6 +221,32 @@ export const REACTIONS = [
   { e: '💀', t: 'La honte' },
   { e: '🤡', t: 'Petit joueur' },
   { e: '🐐', t: 'GOAT' },
+];
+
+// Réactions de FIN DE PARTIE (podium/trophées) — un ton différent des taunts de manche : on félicite,
+// on rage, on relance. Envoyées avec le flag `end` → l'hôte les mappe sur ce set (pas REACTIONS).
+export const END_REACTIONS = [
+  { e: '🏆', t: 'La ceinture' },
+  { e: '🤝', t: 'GG' },
+  { e: '🐐', t: 'GOAT' },
+  { e: '😭', t: 'Rageant' },
+  { e: '🔁', t: 'On remet ça' },
+  { e: '🫡', t: 'Respect' },
+  { e: '😮‍💨', t: 'Dégoûté' },
+  { e: '🎤', t: 'Trop fort' },
+];
+
+// Punchlines de chambrage affichées quand le joueur n'a AUCUNE charge de pouvoir (jauge à sec).
+// On en pioche une différente à chaque fois → ça pique un peu, ça motive à marquer pour recharger.
+export const TRASH_TALK = [
+  'Jauge à sec. Le talent, pas les pouvoirs.',
+  'Zéro charge — va falloir mériter la prochaine.',
+  'Rien dans le chargeur. Trouve, ça remplira.',
+  'À poil, aucune charge. On rappe à l’ancienne.',
+  'Pouvoir en PLS. Marque des points pour recharger.',
+  '0 charge : prouve que t’as le niveau sans triche.',
+  'Le barillet est vide. Reconnais des sons, pas des excuses.',
+  'Pas de pouvoir. Juste toi, tes oreilles et ta fierté.',
 ];
 
 export const initials = (s: string) =>

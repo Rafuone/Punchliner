@@ -10,8 +10,8 @@
     },
     {
       "name": "mockup",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["C:/Users/rafuo/AppData/Local/Temp/claude/C--Users-rafuo-Desktop-Claude-Blindtest/152efbea-058e-40dd-8bd7-03e6d900e14a/scratchpad/static-server.mjs"],
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "4599"],
       "port": 4599,
       "autoPort": true
     }

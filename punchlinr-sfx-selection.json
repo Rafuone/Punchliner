@@ -1,0 +1,208 @@
+[
+  {
+    "name": "Fast tape rewind cinematic transition",
+    "url": "https://assets.mixkit.co/active_storage/sfx/1092/1092-preview.mp3",
+    "section": "vol",
+    "moment": "Rewind / annulation",
+    "slug": "rewind"
+  },
+  {
+    "name": "Tape rewind cinematic transition",
+    "url": "https://assets.mixkit.co/active_storage/sfx/1088/1088-preview.mp3",
+    "section": "vol",
+    "moment": "Rewind / annulation",
+    "slug": "rewind"
+  },
+  {
+    "name": "Fast rocket whoosh",
+    "url": "https://assets.mixkit.co/active_storage/sfx/1714/1714-preview.mp3",
+    "section": "action",
+    "moment": "Transition de manche",
+    "slug": "transition"
+  },
+  {
+    "name": "Dagger woosh",
+    "url": "https://assets.mixkit.co/active_storage/sfx/1487/1487-preview.mp3",
+    "section": "action",
+    "moment": "Swoosh",
+    "slug": "swoosh"
+  },
+  {
+    "name": "Magic sparkle whoosh",
+    "url": "https://assets.mixkit.co/active_storage/sfx/2350/2350-preview.mp3",
+    "section": "action",
+    "moment": "Whoosh / passage",
+    "slug": "whoosh"
+  },
+  {
+    "name": "Simple countdown",
+    "url": "https://assets.mixkit.co/active_storage/sfx/922/922-preview.mp3",
+    "section": "action",
+    "moment": "Decompte 3-2-1",
+    "slug": "countdown"
+  },
+  {
+    "name": "Score casino counter",
+    "url": "https://assets.mixkit.co/active_storage/sfx/1998/1998-preview.mp3",
+    "section": "action",
+    "moment": "Decompte 3-2-1",
+    "slug": "countdown"
+  },
+  {
+    "name": "8-bit explosion gun",
+    "url": "https://assets.mixkit.co/active_storage/sfx/2779/2779-preview.mp3",
+    "section": "action",
+    "moment": "Boom / impact lourd",
+    "slug": "boom"
+  },
+  {
+    "name": "Retro game notification",
+    "url": "https://assets.mixkit.co/active_storage/sfx/212/212-preview.mp3",
+    "section": "fin",
+    "moment": "Victoire",
+    "slug": "win"
+  },
+  {
+    "name": "Cheering crowd loud whistle",
+    "url": "https://assets.mixkit.co/active_storage/sfx/610/610-preview.mp3",
+    "section": "fin",
+    "moment": "Victoire",
+    "slug": "win"
+  },
+  {
+    "name": "Fantasy game success notification",
+    "url": "https://assets.mixkit.co/active_storage/sfx/270/270-preview.mp3",
+    "section": "fin",
+    "moment": "Victoire",
+    "slug": "win"
+  },
+  {
+    "name": "Huge crowd cheering victory",
+    "url": "https://assets.mixkit.co/active_storage/sfx/462/462-preview.mp3",
+    "section": "fin",
+    "moment": "Victoire",
+    "slug": "win"
+  },
+  {
+    "name": "Small crowd laugh and applause",
+    "url": "https://assets.mixkit.co/active_storage/sfx/422/422-preview.mp3",
+    "section": "fin",
+    "moment": "Applaudissements / hype",
+    "slug": "applause"
+  },
+  {
+    "name": "Wrong answer bass buzzer",
+    "url": "https://assets.mixkit.co/active_storage/sfx/948/948-preview.mp3",
+    "section": "ui",
+    "moment": "Buzzer",
+    "slug": "buzzer"
+  },
+  {
+    "name": "Airhorn",
+    "url": "https://cdn.freesound.org/previews/414/414208_6938106-lq.mp3",
+    "section": "horn",
+    "moment": "Air horn",
+    "by": "jacksonacademyashmore",
+    "page": "https://freesound.org/s/414208/",
+    "dur": 1.6
+  },
+  {
+    "name": "MACHINE GUN",
+    "url": "https://cdn.freesound.org/previews/629/629029_6512938-lq.mp3",
+    "section": "tag",
+    "moment": "Tag DJ / hype",
+    "by": "commercialkings",
+    "page": "https://freesound.org/s/629029/",
+    "dur": 3.2
+  },
+  {
+    "name": "scratch310",
+    "url": "https://cdn.freesound.org/previews/32/32186_128404-lq.mp3",
+    "section": "tag",
+    "moment": "Vocal chop",
+    "by": "junggle",
+    "page": "https://freesound.org/s/32186/",
+    "dur": 2.2
+  },
+  {
+    "name": "HotLips86",
+    "url": "https://cdn.freesound.org/previews/591/591229_13307195-lq.mp3",
+    "section": "tag",
+    "moment": "Boom bap",
+    "by": "sub33",
+    "page": "https://freesound.org/s/591229/",
+    "dur": 5.6
+  },
+  {
+    "name": "Scratch Sample",
+    "url": "https://cdn.freesound.org/previews/151/151822_1587289-lq.mp3",
+    "section": "scratch",
+    "moment": "Scratch DJ",
+    "by": "templeofhades",
+    "page": "https://freesound.org/s/151822/",
+    "dur": 2
+  },
+  {
+    "name": "Record Scratch #5",
+    "url": "https://cdn.freesound.org/previews/431/431780_817038-lq.mp3",
+    "section": "scratch",
+    "moment": "Vinyl scratch",
+    "by": "musicvision31",
+    "page": "https://freesound.org/s/431780/",
+    "dur": 1.9
+  },
+  {
+    "name": "KickAC",
+    "url": "https://cdn.freesound.org/previews/0/808_797-lq.mp3",
+    "section": "bass",
+    "moment": "808",
+    "by": "bdu",
+    "page": "https://freesound.org/s/808/",
+    "dur": 0.2
+  },
+  {
+    "name": "LCHZ 140 Bass 06",
+    "url": "https://cdn.freesound.org/previews/484/484632_10392137-lq.mp3",
+    "section": "bass",
+    "moment": "Trap 808",
+    "by": "Loop_Cult",
+    "page": "https://freesound.org/s/484632/",
+    "dur": 6.9
+  },
+  {
+    "name": "Button click",
+    "url": "https://cdn.freesound.org/previews/629/629020_12471724-lq.mp3",
+    "section": "ui",
+    "moment": "Bouton",
+    "by": "Kolombooo",
+    "page": "https://freesound.org/s/629020/",
+    "dur": 0.3
+  },
+  {
+    "name": "Switch - 6",
+    "url": "https://cdn.freesound.org/previews/484/484083_6150892-lq.mp3",
+    "section": "ui",
+    "moment": "Toggle / switch",
+    "by": "SpaceJoe",
+    "page": "https://freesound.org/s/484083/",
+    "dur": 1.4
+  },
+  {
+    "name": "GASP UI Notification 1",
+    "url": "https://cdn.freesound.org/previews/542/542043_6856600-lq.mp3",
+    "section": "ui",
+    "moment": "Notification",
+    "by": "Rob_Marion",
+    "page": "https://freesound.org/s/542043/",
+    "dur": 1.1
+  },
+  {
+    "name": "UI, Mechanical, Notification, 01, FX",
+    "url": "https://cdn.freesound.org/previews/458/458586_5121236-lq.mp3",
+    "section": "ui",
+    "moment": "Notification",
+    "by": "InspectorJ",
+    "page": "https://freesound.org/s/458586/",
+    "dur": 3
+  }
+]
