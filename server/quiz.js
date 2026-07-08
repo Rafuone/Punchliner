@@ -14,16 +14,17 @@ const DIFFS = ['facile', 'normal', 'difficile', 'puriste'];
 let QUIZ = [];
 try {
   const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'quiz-bank.json'), 'utf8'));
-  // garde-fou : on ne garde que des entrées bien formées (q + correct + 3 distracteurs)
+  // garde-fou : QCM (q + correct + 3 distracteurs) OU Vrai/Faux (format:'vf', correct = 'Vrai'|'Faux')
   QUIZ = (Array.isArray(raw) ? raw : []).filter((q) =>
-    q && q.q && q.correct && Array.isArray(q.distractors) && q.distractors.length >= 3
+    q && q.q && q.correct && (q.format === 'vf' || (Array.isArray(q.distractors) && q.distractors.length >= 3))
   ).map((q, i) => ({
     id: q.id || `q${i}`,
     cat: q.cat || 'Culture',
     diff: DIFFS.includes(q.diff) ? q.diff : 'normal',
     q: q.q,
+    format: q.format === 'vf' ? 'vf' : 'qcm',
     correct: q.correct,
-    distractors: q.distractors.slice(0, 3),
+    distractors: q.format === 'vf' ? [] : q.distractors.slice(0, 3),
   }));
   console.log(`[quiz] ${QUIZ.length} questions chargées (` +
     DIFFS.map((d) => `${d}:${QUIZ.filter((x) => x.diff === d).length}`).join(' · ') + ')');
@@ -55,8 +56,11 @@ export function pickQuiz(n, difficulty = 'normal', usedSet = null) {
 
 // Prépare une manche : mélange les 4 choix et calcule l'index de la bonne réponse.
 export function buildQuizRound(item) {
-  const choices = shuffle([item.correct, ...item.distractors]).slice(0, 4);
-  return { id: item.id, cat: item.cat, q: item.q, choices, answer: choices.indexOf(item.correct) };
+  // Vrai/Faux : deux choix fixes. QCM : la bonne réponse + jusqu'à 3 distracteurs, mélangés.
+  const choices = item.format === 'vf'
+    ? shuffle(['Vrai', 'Faux'])
+    : shuffle([item.correct, ...item.distractors]).slice(0, 4);
+  return { id: item.id, cat: item.cat, q: item.q, format: item.format, choices, answer: choices.indexOf(item.correct) };
 }
 
 export const quizCount = () => QUIZ.length;
