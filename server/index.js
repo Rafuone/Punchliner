@@ -94,6 +94,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SKIT_RE = /\b(intro|outro|interlude|skit)\b/i; // on écarte les pistes non-jouables en blind-test
 const DZ = 'https://api.deezer.com';
 const POOL_CACHE = path.join(__dirname, '.pool-cache.json');
+// Cache disque PERSISTANT des extraits mp3 (survit aux redémarrages → musique fiable même hors ligne une
+// fois préchauffée) + liste des morceaux INJOUABLES (extrait Deezer mort) pour ne jamais les tirer.
+const PREVIEW_DIR = path.join(__dirname, '.preview-cache');
+const DEAD_FILE = path.join(__dirname, '.preview-dead.json');
+try { fs.mkdirSync(PREVIEW_DIR, { recursive: true }); } catch { /* rien */ }
+let DEAD = new Set();
+try { const d = JSON.parse(fs.readFileSync(DEAD_FILE, 'utf8')); if (Array.isArray(d)) DEAD = new Set(d.map(String)); } catch { /* pas de liste */ }
+const saveDead = () => { try { fs.writeFileSync(DEAD_FILE, JSON.stringify([...DEAD])); } catch { /* rien */ } };
+const previewPath = (id) => path.join(PREVIEW_DIR, `${id}.mp3`);
+const onDisk = (id) => { try { return fs.statSync(previewPath(id)).size > 2000; } catch { return false; } };
+const isDead = (t) => DEAD.has(String(t.id));
+const livePool = () => POOL.filter((t) => !isDead(t)); // pool jouable (extraits morts écartés)
+let warm = { total: 0, done: 0, dead: 0, running: false }; // progression du préchauffage (exposée /api/health)
 // tags par artiste, clés NORMALISÉES → lookup sur l'artiste Deezer (casse/accents variables)
 const TAGMAP = new Map(Object.entries(ARTIST_TAGS).map(([k, v]) => [normalize(k), v]));
 // v2 dans le hash : le cache stocke maintenant année + tags → on force une reconstruction quand ce format/les tags changent
@@ -131,10 +144,13 @@ function writePoolCache() {
 
 // Rapatrie l'extrait d'UN morceau (à la demande). Si l'URL Deezer a expiré, on redemande un extrait frais
 // via /track/{id}. Renvoie true si l'extrait est en cache (donc jouable via /api/preview/:id).
+// cache mémoire borné (les extraits vivent surtout sur DISQUE ; la mémoire ne garde que les récents)
+function rememberBuf(id, buf) { previewCache.set(id, buf); if (previewCache.size > 500) previewCache.delete(previewCache.keys().next().value); }
 async function cacheTrack(t) {
   if (!t) return false;
   const id = String(t.id);
   if (previewCache.has(id)) return true;
+  if (onDisk(id)) return true;                       // déjà rapatrié sur disque (persistant) → jouable
   const dl = async (url) => {
     if (!url) return null;
     try { const r = await fetch(url, UA); if (!r.ok) return null; const b = Buffer.from(await r.arrayBuffer()); return b.length >= 2000 ? b : null; } catch { return null; }
@@ -143,13 +159,37 @@ async function cacheTrack(t) {
   if (!buf) { // URL périmée → on redemande un extrait frais à Deezer
     try { const jr = await fetch(`${DZ}/track/${id}`, UA); const fresh = (await jr.json())?.preview; if (fresh) { t.deezer = fresh; buf = await dl(fresh); } } catch { /* injouable */ }
   }
-  if (buf) { previewCache.set(id, buf); return true; }
+  if (buf) { try { fs.writeFileSync(previewPath(id), buf); } catch { /* disque RO */ } rememberBuf(id, buf); if (DEAD.delete(id)) saveDead(); return true; }
   return false;
 }
 // Rapatrie une liste (une playlist de partie) par petits paquets — best-effort, non bloquant pour le jeu
 // (au pire /api/preview rapatriera le morceau au moment où il tombe).
 async function cacheTracks(list) {
   for (let i = 0; i < list.length; i += 6) await Promise.allSettled(list.slice(i, i + 6).map(cacheTrack));
+}
+// PRÉCHAUFFAGE : au boot (en tâche de fond, non bloquant), on garantit TOUT le pool en cache disque et on
+// écarte définitivement les extraits injouables → après le 1er préchauffage, la musique marche même hors ligne,
+// survit aux redémarrages, et aucun morceau muet ne peut tomber. Relancé à chaque boot (rapide si déjà en cache).
+async function prewarmPool() {
+  if (FAST || warm.running || !POOL.length) return; // jamais en mode test
+  const need = POOL.filter((t) => !onDisk(String(t.id)));
+  warm = { total: POOL.length, done: POOL.length - need.length, dead: DEAD.size, running: true };
+  if (!need.length) { warm.running = false; console.log(`[prewarm] cache disque déjà complet (${POOL.length} extraits).`); return; }
+  console.log(`[prewarm] ${need.length} extraits à rapatrier (${warm.done} déjà en cache)…`);
+  let deadNew = false;
+  for (let i = 0; i < need.length; i += 5) {
+    await Promise.allSettled(need.slice(i, i + 5).map(async (t) => {
+      const id = String(t.id);
+      const ok = await cacheTrack(t);
+      if (!ok && !DEAD.has(id)) { DEAD.add(id); deadNew = true; }
+      warm.done++;
+    }));
+    if (warm.done % 250 < 5) { console.log(`[prewarm] ${warm.done}/${warm.total} (${DEAD.size} injouables)`); if (deadNew) { saveDead(); deadNew = false; } }
+    await sleep(180); // throttle (respecte Deezer)
+  }
+  if (deadNew) saveDead();
+  warm.dead = DEAD.size; warm.running = false;
+  console.log(`[prewarm] terminé : ${warm.total - DEAD.size} extraits en cache, ${DEAD.size} injouables écartés.`);
 }
 
 // Tout le catalogue populaire d'un artiste (top ~50 Deezer) → nos morceaux, filtrés (extrait dispo, durée
@@ -198,7 +238,7 @@ async function enrichYears() {
 async function loadPool() {
   // 1) Cache disque → boot instantané tant que la liste de graines ne bouge pas
   const cached = readPoolCache();
-  if (cached) { POOL = cached; buildPoolIndex(); console.log(`[pool] ${POOL.length} morceaux (cache disque, extraits à la volée).`); refreshHosts(); return; }
+  if (cached) { POOL = cached; buildPoolIndex(); console.log(`[pool] ${POOL.length} morceaux (cache disque, extraits à la volée).`); refreshHosts(); prewarmPool(); return; }
   // 2) Construction : catalogues d'artistes (le gros du pool) + quelques classiques garantis
   console.log(`[deezer] construction du pool : ${SEED_ARTISTS.length} artistes + ${SEED_TRACKS.length} classiques…`);
   const byId = new Map();
@@ -220,6 +260,7 @@ async function loadPool() {
   if (POOL.length > 50) writePoolCache(); // on ne fige pas un pool anémique (réseau KO)
   console.log(`[pool] prêt · ${yr.dated}/${yr.albums} albums datés · extraits rapatriés à la volée.`);
   refreshHosts();
+  prewarmPool();
 }
 // ÉPOQUE : sur l'ANNÉE RÉELLE du morceau (release_date), jamais l'artiste (qui traverse les décennies).
 function inEra(year, era) {
@@ -236,7 +277,7 @@ function matchTheme(t, theme) {
   return (t.tags || []).includes(theme);
 }
 function selectPool(era, theme) {
-  let s = POOL;
+  let s = livePool(); // exclut les extraits injouables (repérés au préchauffage) → jamais de manche muette
   if (era && era !== 'all') s = s.filter((t) => t.year && inEra(t.year, era));
   if (theme && theme !== 'all') s = s.filter((t) => matchTheme(t, theme));
   return s;
@@ -250,7 +291,7 @@ function tierSlice(arr, tier) {
   if (tier === 'deep') return s.slice(Math.floor(N * 0.45));               // le fond du bac
   return s;                                                                // high = tout
 }
-function poolForTier(tier) { return tierSlice(POOL, tier); } // compat (Cypher recycle)
+function poolForTier(tier) { return tierSlice(livePool(), tier); } // compat (Cypher recycle)
 // Tire n morceaux : ÉPOQUE + THÈME → DIFFICULTÉ → aléatoire. Repli PROGRESSIF si le combo est trop restrictif
 // (on lâche d'abord la difficulté, puis époque/thème) → le jeu reste TOUJOURS jouable, jamais 0 morceau.
 function pickPlaylist(n, tier, era = 'all', theme = 'all') {
@@ -259,8 +300,9 @@ function pickPlaylist(n, tier, era = 'all', theme = 'all') {
   let src;
   if (tiered.length >= n) src = tiered;              // idéal : époque + thème + difficulté
   else if (base.length >= n) src = base;             // assez en époque+thème mais pas au bon tier → on garde le filtre
-  else src = tierSlice(POOL, tier);                  // filtre trop restrictif → on le lâche, on garde la difficulté
-  if (src.length < Math.min(n, 3)) src = POOL;       // ultime filet
+  else src = tierSlice(livePool(), tier);            // filtre trop restrictif → on le lâche, on garde la difficulté
+  if (src.length < Math.min(n, 3)) src = livePool(); // ultime filet (morts exclus)
+  if (src.length < Math.min(n, 3)) src = POOL;       // réseau/préchauffage KO → au pire tout le pool
   return [...src].sort(() => Math.random() - 0.5).slice(0, Math.min(n, src.length));
 }
 
@@ -1178,12 +1220,13 @@ io.on('connection', (socket) => {
 /* ------------------------------------------------------------------ */
 /* HTTP                                                                */
 /* ------------------------------------------------------------------ */
-app.get('/api/health', (_req, res) => res.json({ ok: true, pool: POOL.length, rooms: rooms.size, previews: previewCache.size }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, pool: POOL.length, playable: POOL.length - DEAD.size, rooms: rooms.size, previews: previewCache.size, warmup: { ...warm, pct: warm.total ? Math.round((warm.done / warm.total) * 100) : 100 } }));
 // Extraits servis PAR NOUS (mp3 en cache) → URL stables, jamais expirées. Range-request pour le seek.
 app.get('/api/preview/:id', async (req, res) => {
   const id = String(req.params.id);
   let buf = previewCache.get(id);
-  if (!buf) { const t = poolIndex.get(id); if (t) { await cacheTrack(t); buf = previewCache.get(id); } } // pas encore rapatrié → on le fait maintenant
+  if (!buf && onDisk(id)) { try { buf = fs.readFileSync(previewPath(id)); rememberBuf(id, buf); } catch { /* lecture KO */ } } // cache disque persistant
+  if (!buf) { const t = poolIndex.get(id); if (t) { await cacheTrack(t); buf = previewCache.get(id) || (onDisk(id) ? fs.readFileSync(previewPath(id)) : null); } } // pas encore rapatrié → maintenant
   if (!buf) return res.status(404).end();
   res.set('Content-Type', 'audio/mpeg');
   res.set('Accept-Ranges', 'bytes');
