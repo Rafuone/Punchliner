@@ -10,6 +10,8 @@ server/.pool-cache.json
 # cache disque des EXTRAITS audio (mp3 rapatriés + préchauffés) + liste des injouables — runtime, lourd
 server/.preview-cache/
 server/.preview-dead.json
+# fichier de relecture du quiz (régénéré depuis quiz-bank.json) — pas versionné
+quiz-review.md
 
 # Originaux bruts (réserve perso) — pas versionnés, restent en local.
 # La musique servie par l'app (client/public/music/*.mp3) est versionnée via Git LFS.
