@@ -202,7 +202,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     isRush
       ? { step: 3, k: 'Chrono', v: rushStartSec + ' s' }
       : { step: 3, k: isQuiz ? 'Questions' : 'Format', v: rounds === 'inf' ? 'Sans fin' : rounds + (isQuiz ? ' questions' : ' manches') },
-    ...(isRush ? [] : [{ step: 4, k: 'Réglages', v: showRebalance ? (ORCHESTRATION.find((o) => o.key === orch)!.name + ' · ' + REBALANCE.find((r) => r.key === rebalance)!.name) : (orch === 'mj' && mjAllowed ? 'Maître du jeu' : 'Automatique') }]),
+    { step: 4, k: isRush ? 'Le joueur' : 'Réglages', v: isRush ? (playerList.find((p) => p.id === rushPlayerId)?.name || 'À choisir') : showRebalance ? (ORCHESTRATION.find((o) => o.key === orch)!.name + ' · ' + REBALANCE.find((r) => r.key === rebalance)!.name) : (orch === 'mj' && mjAllowed ? 'Maître du jeu' : 'Automatique') },
   ];
   const visibleSteps = rows.map((r) => r.step);       // étapes réellement présentes pour ce mode
   const stepPos = Math.max(0, visibleSteps.indexOf(step)); // position visible (0-based) de l'étape courante
@@ -223,12 +223,13 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     STEP_SUB[4],
   ];
   function launch() {
+    if (isRush && !rushPlayerId) return; // Survivor SOLO : l'hôte DOIT choisir qui joue (jamais au hasard ni le 1er entré)
     const r = rounds === 'inf' ? Math.min(poolSize, 50) : Math.min(rounds, poolSize);
     const isMj = orch === 'mj' && mjAllowed;
     const mode = game === 'buzz' ? 'buzzer' : game === 'quiz' ? 'quiz' : game === 'rush' ? 'rush' : 'multi';
     onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance, era, themes,
       rushStartSec: isRush ? rushStartSec : undefined, quizNoVf: isQuiz ? quizNoVf : undefined,
-      rushPlayerId: isRush ? (rushPlayerId || playerList[0]?.id) : undefined });
+      rushPlayerId: isRush ? rushPlayerId : undefined });
   }
 
   // vidéo « diffusion télé » de la carte sélectionnée (Blind/Buzzer/Quiz) : couleur + lecture + déchirures de
@@ -575,11 +576,11 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                   <div className="setblock">
                     <div className="set-lbl"><span className="axis-chip"><span>Qui joue ?</span></span></div>
                     {playerList.length === 0
-                      ? <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '4px 2px 0' }}>Le Survivor est <b style={{ color: 'var(--txt)' }}>solo</b> : un seul joueur relève le défi. Personne n'a rejoint — le 1er à entrer jouera (ou reviens ici le choisir).</p>
+                      ? <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '4px 2px 0' }}>Le Survivor est <b style={{ color: 'var(--txt)' }}>solo</b> : un seul joueur relève le défi. <b style={{ color: 'var(--txt)' }}>Attends qu'un joueur rejoigne</b>, puis choisis-le ici — obligatoire pour lancer.</p>
                       : <><div className="opt-stack">{playerList.map((p) => (
                           <button key={p.id} className={`opt ${rushPlayerId === p.id ? 'sel' : ''}`} onClick={() => setRushPlayerId(p.id)}><span className="ol"><b>{p.name}</b><small>{avatarById(p.avatar)?.name || 'Au contre-la-montre'}</small></span></button>
                         ))}</div>
-                        <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '10px 2px 0' }}>Choisis <b style={{ color: 'var(--txt)' }}>qui joue</b> — les autres regardent.{rushPlayerId ? '' : ' (à défaut, ce sera le 1er entré.)'}</p></>}
+                        <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '10px 2px 0' }}>Choisis <b style={{ color: 'var(--txt)' }}>qui joue</b> parmi les connectés — les autres regardent. <b style={{ color: 'var(--txt)' }}>Obligatoire</b> (pas de choix au hasard).</p></>}
                   </div>
                 )}
                 {isQuiz && (
@@ -643,7 +644,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 </button>
               </div>
             </div>
-            <button className="btn launch-full" onClick={launch}><span {...H(play)} /> LANCER LA PARTIE</button>
+            <button className="btn launch-full" onClick={launch} disabled={isRush && !rushPlayerId} style={isRush && !rushPlayerId ? { opacity: .55, cursor: 'not-allowed' } : undefined} title={isRush && !rushPlayerId ? 'Survivor est solo : choisis qui joue à l\'étape « Le joueur »' : undefined}><span {...H(play)} /> {isRush && !rushPlayerId ? 'CHOISIS QUI JOUE' : 'LANCER LA PARTIE'}</button>
           </div>
         </aside>
       </div>

@@ -240,7 +240,9 @@ export default function Host() {
     socket.on('round:prep', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
     socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
-    socket.on('round:host', (d: any) => { setReveal(null); setAnswered([]); setBuzzWinner(null); setRound(d); setPhase('playing'); playRound(d); });
+    socket.on('round:host', (d: any) => { setReveal(null); setAnswered([]); setBuzzWinner(null); setRound(d); setPhase('playing');
+      if (d.mode === 'quiz') { wantAudioRef.current = false; clearTimeout(audioRetryRef.current); previewRef.current = { url: '', clipMs: 30000, startAt: 0 }; try { audioRef.current?.pause(); } catch {} spotifyPause(); } // QUIZ = pas d'extrait de jeu ; on garde l'instru de menu (Alpha Wann) en fond
+      else playRound(d); });
     // Mode Survivor (contre-la-montre) : le son s'enchaîne automatiquement à chaque nouveau morceau
     socket.on('rush:host', (d: any) => { setError(''); setRound(d); if (d.scores) setPlayers(d.scores); setPhase('playing'); playRound(d); });
     socket.on('rush:state', (d: any) => { setRound(d); if (d.scores) setPlayers(d.scores); });
@@ -424,8 +426,10 @@ export default function Host() {
   }, [configuring]);
   // hors lobby (en jeu) : on coupe tout le menu ; sur le lobby (hors config) : on (ré)essaie l'instru
   useEffect(() => {
-    if (phase !== 'lobby') { menuAudioRef.current?.pause(); const la = lobbyAudioRef.current; if (la && !la.paused) fadeTo(la, 0, 500, true); }
-    else if (!configuring && musicOnRef.current) playLobby();
+    const quiz = round.mode === 'quiz';
+    if (phase !== 'lobby' && !quiz) { menuAudioRef.current?.pause(); const la = lobbyAudioRef.current; if (la && !la.paused) fadeTo(la, 0, 500, true); }
+    else if (phase === 'lobby' && !configuring && musicOnRef.current) playLobby();
+    else if (quiz && musicOnRef.current) { playLobby(); const la = lobbyAudioRef.current; if (la) la.volume = 0.22; } // QUIZ : instru Alpha Wann en fond DOUX (pas de distraction)
   }, [phase]);
 
   // Lecture de l'extrait — AUTO-RÉPARANTE, sans aucun bouton ni geste. La page est déjà "déverrouillée"
@@ -562,7 +566,7 @@ export default function Host() {
               {round.mode === 'rush'
                 ? <span className="gmeta-round"><span className="gl">Survivor</span><b>{round.trackNo || 1}<i> morceau</i></b></span>
                 : <span className="gmeta-round"><span className="gl">Manche</span><b>{round.index + 1}<i>/{round.total}</i></b></span>}
-              <span className="gmeta-chip">{round.difficulty}</span>
+              {round.mode !== 'quiz' && <span className="gmeta-chip">{round.difficulty}</span>}
               <span className="gmeta-chip">{players.length} j.{waiting > 0 ? ` · ${waiting} att.` : ''}</span>
             </span>
             <span className="salontag"><span className="lbl">Salon</span><b className="cd">{code}</b></span>
@@ -843,7 +847,6 @@ export default function Host() {
           {revealStep < 1
             ? <button className="btn warm" onClick={() => setRevealStep(1)}>Voir les scores →</button>
             : <button className="btn warm" onClick={() => socket.emit('host:next')}>{round.index + 1 >= round.total ? 'Voir le podium' : 'Manche suivante'}</button>}
-          {(import.meta as any).env?.DEV && <button className="btn ghost" style={{ fontSize: 11, padding: '5px 11px', opacity: .5 }} title="DEV — déclenche un clash entre les 2 premiers" onClick={() => socket.emit('host:forceBattle', {}, (r: any) => r?.error && setError(r.error))}>⚔ Forcer un clash (test)</button>}
         </div>
       )}
 
@@ -981,7 +984,7 @@ export default function Host() {
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'center', margin: '15px 0 16px' }}>
-              <button className="btn warm big" onClick={() => socket.emit('host:start', { ...(lastWizRef.current || { difficulty: settings.difficulty }), mode: 'rush' }, (r: any) => r?.error && setError(r.error))}>Rejouer →</button>
+              <button className="btn warm big" onClick={() => relance(true)}>Rejouer → <span style={{ opacity: .7, fontWeight: 600, fontSize: 13 }}>(re-choisir le joueur)</span></button>
             </div>
             <div className="muted" style={{ textAlign: 'center', fontSize: 12, letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8 }}>Classement mondial · Top 10</div>
             <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', width: '100%', maxWidth: 540, margin: '0 auto' }}>
