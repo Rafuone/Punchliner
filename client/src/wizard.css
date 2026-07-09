@@ -250,7 +250,9 @@
 .wz .badge-live .dot {width:6px; height:6px; background:var(--green); box-shadow:0 0 5px rgba(166,255,0,.6);}
 /* Oscilloscope de la carte choisie : canvas qui DÉBORDE (inset négatif) → la forme d'onde oscille de part et d'autre
    du vrai contour arrondi de la carte (pas un rectangle inséré). */
-.wz .keycard .scope {position:absolute; inset:-30px; z-index:4; width:calc(100% + 60px); height:calc(100% + 60px); pointer-events:none;}
+.wz .keycard .scope, .wz .diff-tile .scope, .wz .fmt-tile .scope {position:absolute; inset:-30px; z-index:6; width:calc(100% + 60px); height:calc(100% + 60px); pointer-events:none;}
+/* la carte sélectionnée doit pouvoir laisser DÉBORDER l'oscilloscope (30px) → pas de clip sur les tuiles */
+.wz .diff-tile, .wz .fmt-tile {overflow:visible;}
 .wz .keycard.sel {overflow:visible;} /* laisse la vague sortir du cadre de la carte sélectionnée */
 /* Accès au classement mondial — SPÉCIFIQUE à la carte Survivor (bas-droite). Clic isolé (stopPropagation) : n'ouvre
    pas la sélection de la carte, juste la page classement. S'allume en fluo au survol. */

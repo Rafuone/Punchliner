@@ -294,7 +294,6 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   // audio-réactif : le glow du sélectionné suit le beat (basses) + l'égaliseur suit le spectre réel.
   const wzRef = useRef<HTMLDivElement | null>(null);
   const npEqRef = useRef<HTMLDivElement | null>(null);
-  const scopeRef = useRef<HTMLCanvasElement | null>(null); // oscilloscope de la carte sélectionnée
   useEffect(() => {
     let raf = 0, cur = 0;
     const loop = () => {
@@ -302,8 +301,8 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
       wzRef.current?.style.setProperty('--pulse', cur.toFixed(3));
       const eq = npEqRef.current, bands = music.barsRef?.current;
       if (eq && bands) { const k = eq.children, n = k.length; for (let i = 0; i < n; i++) (k[i] as HTMLElement).style.height = (12 + (bands[Math.floor((i / n) * bands.length)] || 0) * 88) + '%'; }
-      const cv = scopeRef.current, wave = music.waveRef?.current;
-      if (cv && wave) drawScope(cv, wave); // oscilloscope sur la bordure de la carte choisie
+      const wave = music.waveRef?.current;
+      if (wave) { const cvs = document.querySelectorAll<HTMLCanvasElement>('.wz canvas.scope'); for (let i = 0; i < cvs.length; i++) drawScope(cvs[i], wave); } // oscilloscope sur la bordure de CHAQUE carte sélectionnée (jeu / difficulté / format)
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -463,7 +462,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                       <span {...H(leaderIco)} /> Classement
                     </span>
                   )}
-                  {game === g.id && <canvas className="scope" ref={scopeRef} aria-hidden="true" />}
+                  {game === g.id && <canvas className="scope" aria-hidden="true" />}
                 </button>
               );
               return (
@@ -510,6 +509,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
             {step === 2 && !isRush && (
               <div className="grid-diff">{DIFFS.map((d, i) => (
                 <button key={d.key} className={`diff-tile pick ${diff === d.key ? 'sel on' : ''}`} onClick={() => setDiff(d.key)}>
+                  {diff === d.key && <canvas className="scope" aria-hidden="true" />}
                   <div className="diff-illu"><img src={`/difficulty/${d.key}.png`} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /><span className="diff-illu-svg" {...H(DIFF_ILLU[i])} /></div>
                   <div className="diff-idx">Signal {d.signal}/4</div>
                   <div className="diff-name">{d.name}</div>
@@ -526,6 +526,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 return (
                   <button key={String(f.rounds)} className={`fmt-tile pick ${inf ? 'inf warm' : ''} ${rounds === f.rounds ? 'sel on' : ''} ${disabled ? 'disabled' : ''}`} onClick={() => !disabled && setRounds(f.rounds)}>
                     <span {...H(bracketsSvg)} />
+                    {rounds === f.rounds && <canvas className="scope" aria-hidden="true" />}
                     <div className="fmt-count">{inf ? '∞' : f.rounds}</div>
                     <div className="fmt-unit">{inf ? 'sans limite' : (isQuiz ? 'questions' : 'manches')}</div>
                     <div className="fmt-label">{f.label}</div>
@@ -539,6 +540,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 <div className="grid-fmt">{RUSH_STARTS.map((s) => (
                   <button key={s.sec} className={`fmt-tile pick ${rushStartSec === s.sec ? 'sel on' : ''}`} onClick={() => setRushStartSec(s.sec)}>
                     <span {...H(bracketsSvg)} />
+                    {rushStartSec === s.sec && <canvas className="scope" aria-hidden="true" />}
                     <div className="fmt-count">{s.sec}</div>
                     <div className="fmt-unit">secondes</div>
                     <div className="fmt-label">{s.label}</div>
