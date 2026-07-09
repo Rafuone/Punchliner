@@ -84,7 +84,9 @@ export function gradeAnswer(answer, track, lenient = false) {
   return { titleHit, artistHit, base };
 }
 
-// Multiplicateur de vitesse : de ×1.0 (dernière seconde) à ×2.0 (instantané) — creuse l'écart.
+// Multiplicateur de vitesse : de ×1.0 (dernière seconde) à ×2.5 (instantané), courbe CONVEXE (frac^1.7)
+// → le bonus CHUTE VITE quand on tarde (mi-temps ≈ ×1.46 au lieu de ×1.5 linéaire) : la rapidité paie bien plus.
 export function speedMult(timeLeftMs, windowMs) {
-  return 1 + Math.max(0, Math.min(1, timeLeftMs / windowMs)) * 1.0;
+  const frac = Math.max(0, Math.min(1, timeLeftMs / windowMs));
+  return 1 + Math.pow(frac, 1.7) * 1.5;
 }

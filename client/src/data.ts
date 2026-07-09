@@ -127,13 +127,14 @@ export const isLockedSlot = (id: string) => LOCKED_SLOTS.some((s) => s.id === id
 // débloquer en une seule partie : il faut varier les configs. (Affichage des déblocages désactivé pour
 // l'instant — voir Player.tsx : on ne montre pas encore les challengers.)
 export type UnlockCtx = { won: boolean; rank: number; certifShort: string; awardIds: string[]; difficulty: string; mode: string; rounds: number };
-const PLATINE_PLUS = ['Platine', '2× Platine', '3× Platine', 'Diamant'];
+// Conditions ATTEIGNABLES et VARIÉES (une par CONFIG) → en variant mode/difficulté sur 3-4 parties, on
+// débloque un challenger par partie (un SEUL à la fois : computeUnlock renvoie le 1er non encore débloqué).
 export const UNLOCKS: { id: string; objective: string; check: (c: UnlockCtx) => boolean }[] = [
-  { id: 'caballerojeanjass', objective: 'Termine une partie en mode Quiz.', check: (c) => c.mode === 'quiz' },
-  { id: 'freezecorleone', objective: 'Termine une partie en difficulté Puriste.', check: (c) => c.difficulty === 'puriste' }, // pas de « gagner » : jeu multi, un seul gagne → on débloque à la PARTICIPATION
-  { id: 'diams', objective: 'Finis sur le podium (1er/2ᵉ) d’une partie de 24 manches ou plus.', check: (c) => c.rank <= 2 && c.rounds >= 24 },
-  { id: 'lino', objective: 'Décroche un Platine ou mieux en mode Buzzer.', check: (c) => c.mode === 'buzzer' && PLATINE_PLUS.includes(c.certifShort) },
-  { id: 'disiz', objective: 'Décroche le trophée « Comeback King ».', check: (c) => c.awardIds.includes('comeback') },
+  { id: 'diams', objective: 'Termine une partie de Blind Test.', check: (c) => c.mode === 'multi' },
+  { id: 'caballerojeanjass', objective: 'Termine une partie de Quiz.', check: (c) => c.mode === 'quiz' },
+  { id: 'lino', objective: 'Termine une partie en mode Buzzer.', check: (c) => c.mode === 'buzzer' },
+  { id: 'freezecorleone', objective: 'Termine une partie en difficulté Puriste.', check: (c) => c.difficulty === 'puriste' },
+  { id: 'disiz', objective: 'Termine une partie en Grand public (facile).', check: (c) => c.difficulty === 'facile' },
 ];
 export const unlockObjective = (id: string) => UNLOCKS.find((u) => u.id === id)?.objective || 'À débloquer.';
 

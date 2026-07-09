@@ -949,7 +949,7 @@ export default function Player() {
             <div className="awards" style={{ marginTop: 4 }}>
               {myAwards.map((a: any) => (
                 <div className="award" key={a.id}>
-                  <span className="aw-ic" dangerouslySetInnerHTML={{ __html: awardIcon(a.icon) }} />
+                  <span className="aw-ic" style={{ position: 'relative' }}><img src={`/trophies/${a.id}.png`} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 1 }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /><span dangerouslySetInnerHTML={{ __html: awardIcon(a.icon) }} /></span>
                   <div className="aw-title">{a.title}</div>
                   <div className="aw-desc">{a.desc}</div>
                 </div>

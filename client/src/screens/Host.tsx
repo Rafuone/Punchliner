@@ -28,7 +28,7 @@ function fitName(el: HTMLDivElement | null, maxW: number, base: number, min: num
 }
 
 // Un rappeur a-t-il été DÉBLOQUÉ cette partie ? (conditions UNLOCKS, testées par joueur) → id du perso, sinon null.
-function computeUnlock(d: any): string | null {
+function computeUnlock(d: any, already: Set<string>): string | null {
   const activeBoard = (d.scores || []).filter((p: any) => !p.isMJ);
   const rounds = d.rounds || 0;
   const diff = d.settings?.difficulty; const mode = d.settings?.mode;
@@ -36,7 +36,7 @@ function computeUnlock(d: any): string | null {
     const p = activeBoard[i];
     const myAwards = (d.awards || []).filter((a: any) => a.playerId === p.id).map((a: any) => a.id);
     const ctx = { won: i === 0, rank: i + 1, certifShort: certif(p.score, rounds).short, awardIds: myAwards, difficulty: diff, mode, rounds };
-    const hit = UNLOCKS.find((u) => u.check(ctx as any));
+    const hit = UNLOCKS.find((u) => !already.has(u.id) && u.check(ctx as any)); // JAMAIS un déjà débloqué → il ne réapparaît pas
     if (hit) return hit.id;
   }
   return null;
@@ -114,6 +114,7 @@ export default function Host() {
   const troTimer = useRef<any>(null);
   const troCdRef = useRef<any>(null);
   const [series, setSeries] = useState<any>(null);       // cumul de la série (multi-parties)
+  const unlockedRef = useRef<Set<string>>(new Set((() => { try { return JSON.parse(localStorage.getItem('pl_unlocked') || '[]'); } catch { return []; } })())); // challengers DÉJÀ débloqués (persistés) → on ne les redéclenche jamais
   const [pendingUnlock, setPendingUnlock] = useState<string | null>(null); // rappeur débloqué cette partie (arrivée du Challenger)
   const [showReveal, setShowReveal] = useState(false);   // l'overlay d'arrivée est en cours
   const [finalRounds, setFinalRounds] = useState(0);     // nb de manches de la partie (pour la certif)
@@ -254,7 +255,7 @@ export default function Host() {
     // sinon on relancerait une piste Spotify périmée EN PLUS de Deezer = double son)
     socket.on('buzz:open', () => { wantAudioRef.current = true; if (usingSpotifyRef.current) spotifyTogglePlay(); else try { audioRef.current?.play().catch(() => {}); } catch {} setBuzzWinner(null); }); // reprend la source RÉELLE de la manche (pas la simple capacité Spotify) → plus de piste périmée / double son sur une manche tombée sur Deezer
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // le son continue de tourner ; plus de "scratch" (jugé désagréable)
-    socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(computeUnlock(d)); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées
+    socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); const u = computeUnlock(d, unlockedRef.current); if (u) { unlockedRef.current.add(u); try { localStorage.setItem('pl_unlocked', JSON.stringify([...unlockedRef.current])); } catch {} } setPendingUnlock(u); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées ; un challenger déjà débloqué ne réapparaît plus
     socket.on('power:used', (d: any) => { setPowerFeed((f) => [...f.slice(-4), { ...d, key: powerKeyRef.current++ }]); sfx('scratch'); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('reaction', (d: any) => {
@@ -1086,13 +1087,13 @@ export default function Host() {
             <div className="tro-card">
               {troBusy && troSlot ? (
                 <div className="tro-trophy">
-                  <div className="tro-ill"><span dangerouslySetInnerHTML={{ __html: awardIcon(troSlot.icon) }} /></div>
+                  <div className="tro-ill" style={{ position: 'relative' }}><img src={`/trophies/${troSlot.id}.png`} alt="" style={{ position: 'absolute', inset: '5%', width: '90%', height: '90%', objectFit: 'contain', zIndex: 1 }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /><span dangerouslySetInnerHTML={{ __html: awardIcon(troSlot.icon) }} /></div>
                   <div className="tro-name">{troSlot.title}</div>
                   <div className="tro-desc">&nbsp;</div>
                 </div>
               ) : (troIdx >= 0 && awards[troIdx]) ? (
                 <div className="tro-trophy pop" key={troIdx}>
-                  <div className="tro-ill"><span dangerouslySetInnerHTML={{ __html: awardIcon(awards[troIdx].icon) }} /></div>
+                  <div className="tro-ill" style={{ position: 'relative' }}><img src={`/trophies/${awards[troIdx].id}.png`} alt="" style={{ position: 'absolute', inset: '5%', width: '90%', height: '90%', objectFit: 'contain', zIndex: 1 }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /><span dangerouslySetInnerHTML={{ __html: awardIcon(awards[troIdx].icon) }} /></div>
                   <div className="tro-name">{awards[troIdx].title}</div>
                   <div className="tro-desc">{awards[troIdx].desc}</div>
                   <div className="tro-winner"><span className="tro-wlabel">Remporté par</span><Med avatarId={awards[troIdx].avatar} size={54} /><span className="tro-wname">{awards[troIdx].playerName}</span></div>
