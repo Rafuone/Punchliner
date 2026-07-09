@@ -204,9 +204,8 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
         <div style={{ position: 'relative', zIndex: 1, padding: '62px clamp(24px,4vw,64px) 40px' }}>
           <div className="tro-head">
             <h1 className="wm tro-title">LES <span className="d">TROPHÉES</span></h1>
-            <span className="gpill">{AWARDS_INFO.length} à décrocher</span>
           </div>
-          <p className="muted tro-sub">Décernés en fin de partie, selon ce qui s'est passé sur la table.</p>
+          <p className="muted tro-sub">Décernés en fin de partie selon tes exploits (et tes plantages). <b style={{ color: 'var(--txt)' }}>{AWARDS_INFO.length}</b> à décrocher.</p>
           <div className="troph-grid big">
             {AWARDS_INFO.map((t) => (
               <div className={`troph ${t.salty ? 'salty' : ''}`} key={t.id}>
