@@ -7,7 +7,7 @@ import HubBrowse from './HubBrowse';
 import ChallengerReveal from './ChallengerReveal';
 import GrungeBg from '../GrungeBg';
 import { sfx, sfxLoopStop, playAirhorns } from '../sfx';
-import { handleSpotifyRedirect, hasSpotifySession, initSpotifyPlayer, spotifyPlay, spotifyPause, spotifyTogglePlay, spotifyLogin, spotifyLogout } from '../spotify';
+import { handleSpotifyRedirect, hasSpotifySession, initSpotifyPlayer, spotifyPlay, spotifyPause, spotifyTogglePlay, spotifyLogin, spotifyLogout, listenSpotifyAuth } from '../spotify';
 
 // Démo (?revealdemo) : sélectionner n'importe quel challenger déblocable et rejouer son arrivée épique (vérif visuelle).
 const REVEAL_DEMO = typeof location !== 'undefined' && new URLSearchParams(location.search).has('revealdemo');
@@ -183,6 +183,15 @@ export default function Host() {
     })();
   }, []);
 
+  // Auth Spotify en POPUP : la fenêtre principale reçoit le code (postMessage) → on init le lecteur SANS
+  // recharger l'app (l'hôte reste dans sa partie). Corrige aussi l'incohérence "hub déconnecté / radio connectée".
+  useEffect(() => listenSpotifyAuth((ok) => {
+    if (!ok) return;
+    setSpState('connecting');
+    initSpotifyPlayer((s) => { setSpState(s); spReadyRef.current = (s === 'ready'); });
+    window.dispatchEvent(new Event('pl-spotify-connected')); // notifie la radio (si ouverte)
+  }), []);
+
   function applyState(state: any) {
     setPlayers(state.players || []);
     setSettings((s) => ({ ...s, difficulty: state.settings?.difficulty || s.difficulty, mode: state.settings?.mode || s.mode }));
@@ -357,12 +366,12 @@ export default function Host() {
     const a = lobbyAudioRef.current; if (!a || !musicOnRef.current) return;
     if (!a.src || a.src.indexOf(LOBBY_TRACK) < 0) a.src = LOBBY_TRACK;
     a.loop = true;
-    if (a.paused) { a.volume = 0; a.play().then(() => fadeTo(a, 0.42, 1100)).catch(() => {}); }
-    else fadeTo(a, 0.42, 700);
+    if (a.paused) { a.volume = 0; a.play().then(() => fadeTo(a, 0.32, 1100)).catch(() => {}); }
+    else fadeTo(a, 0.32, 700);
   }
   function playMenuTrack(i: number, pushHist = true) {
     const a = menuAudioRef.current; if (!a) return;
-    a.src = MENU_TRACKS[i].src; a.volume = 0.5;
+    a.src = MENU_TRACKS[i].src; a.volume = 0.38;
     a.play().then(() => { ensureAnalyser(); acRef.current?.ctx?.resume?.(); curRef.current = i; setNowPlaying(i); if (pushHist) { histRef.current = histRef.current.slice(0, posRef.current + 1); histRef.current.push(i); posRef.current = histRef.current.length - 1; } }).catch(() => {});
   }
   function nextTrack() {
@@ -396,7 +405,7 @@ export default function Host() {
     configuringRef.current = configuring;
     if (configuring) {
       fadeTo(lobbyAudioRef.current, 0, 1100, true);               // fond sortant : l'instru du lobby
-      if (musicOnRef.current) { startMenu(); const ma = menuAudioRef.current; if (ma) { ma.volume = 0; fadeTo(ma, 0.5, 1100); } } // entrant : Bishok
+      if (musicOnRef.current) { startMenu(); const ma = menuAudioRef.current; if (ma) { ma.volume = 0; fadeTo(ma, 0.38, 1100); } } // entrant : Bishok
     } else {
       fadeTo(menuAudioRef.current, 0, 800, true);                 // sortant : la playlist
       startedRef.current = false; curRef.current = -1; setNowPlaying(-1);

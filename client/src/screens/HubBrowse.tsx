@@ -105,7 +105,10 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
       setSelPl(radioMem.selPl); setTracks(radioMem.tracks); setTrkInfo(radioMem.trkInfo); setRadioActiveUri(radioMem.activeUri);
       if (radioMem.nowPlaying) { setNowPlaying({ ...radioMem.nowPlaying, paused: true }); posRef.current = { base: radioMem.posBase, at: Date.now() }; }
     } else if (rdy) { loadMine(); } // à l'arrivée : MES playlists (les seules lisibles + le plus utile)
-    return () => { off(); spotifyPause(); onRadioStop?.(); }; // quitter la radio → stop radio + reprise musique du menu
+    // connexion Spotify via popup pendant qu'on est dans la radio → on passe "connecté" + on charge Mes playlists
+    const onConnected = () => { setSpReady(true); loadMine(); };
+    window.addEventListener('pl-spotify-connected', onConnected);
+    return () => { off(); window.removeEventListener('pl-spotify-connected', onConnected); spotifyPause(); onRadioStop?.(); }; // quitter la radio → stop
   }, [mode]);
   // sauvegarde live de la session radio → restaurable au prochain retour (cf. radioMem)
   useEffect(() => {

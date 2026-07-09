@@ -13,7 +13,7 @@ const URLS: Record<string, string> = {
   recap: 'https://cdn.freesound.org/previews/484/484632_10392137-lq.mp3',   // LCHZ 140 Bass 06 (boucle sur le récap)
   airhorn: 'https://cdn.freesound.org/previews/414/414208_6938106-lq.mp3',  // "Airhorn" (sélection d'Alexandre) — cheat code
 };
-const VOL: Record<string, number> = { hover: 0.22, click: 0.35, confirm: 0.5, error: 0.5, scratch: 0.55, horn: 0.6, countdown: 0.4, launch: 0.5, recap: 0.4, airhorn: 0.65 };
+const VOL: Record<string, number> = { hover: 0.34, click: 0.5, confirm: 0.6, error: 0.58, scratch: 0.62, horn: 0.6, countdown: 0.5, launch: 0.62, recap: 0.4, airhorn: 0.65 };
 const cache: Record<string, HTMLAudioElement> = {};
 const off = () => { try { return localStorage.getItem('pl_sfx_off') === '1'; } catch { return false; } };
 

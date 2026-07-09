@@ -65,7 +65,27 @@ export async function spotifyLogin() {
     client_id: CLIENT_ID, response_type: 'code', redirect_uri: REDIRECT_URI,
     code_challenge_method: 'S256', code_challenge: challenge, scope: SCOPES,
   });
-  window.location.href = 'https://accounts.spotify.com/authorize?' + p.toString();
+  const url = 'https://accounts.spotify.com/authorize?' + p.toString();
+  // POPUP au lieu d'une redirection pleine page → l'app (et la partie en cours) ne se rechargent PAS.
+  // Le code revient via postMessage (voir listenSpotifyAuth + main.tsx). Repli redirection si la popup est bloquée.
+  const w = 480, h = 720;
+  const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+  const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+  const popup = window.open(url, 'pl-spotify-auth', `width=${w},height=${h},left=${left},top=${top}`);
+  if (!popup) { window.location.href = url; } // popup bloquée → repli sur l'ancien comportement
+}
+
+// À appeler dans la fenêtre PRINCIPALE : reçoit le code renvoyé par la popup (postMessage) et échange le token
+// SANS rechargement. onDone(true) = session prête → l'appelant réinitialise le lecteur (SDK).
+export function listenSpotifyAuth(onDone: (ok: boolean) => void) {
+  const h = async (e: MessageEvent) => {
+    if (e.origin !== window.location.origin || !e.data || !e.data.__spotify_auth) return;
+    const { code, error } = e.data.__spotify_auth;
+    if (error) { setErr('Spotify a refusé l’autorisation : ' + error); onDone(false); return; }
+    if (code) { try { await exchangeCode(code); onDone(true); } catch { onDone(false); } }
+  };
+  window.addEventListener('message', h);
+  return () => window.removeEventListener('message', h);
 }
 
 async function exchangeCode(code: string) {
