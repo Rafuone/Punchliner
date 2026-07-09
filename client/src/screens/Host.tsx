@@ -970,45 +970,34 @@ export default function Host() {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
             RETOUR
           </button>
-          <div style={{ position: 'relative', zIndex: 1, padding: 'clamp(52px,7vh,84px) clamp(24px,4vw,64px) 40px', maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
-          <div className="tro-head"><h1 className="wm tro-title">CLASSEMENT <span className="d">SURVIVOR</span></h1></div>
-          <p className="muted tro-sub" style={{ margin: '0 0 6px' }}>Contre-la-montre terminé — ton record au classement mondial.</p>
-          {res[0] && (
-            <div className="champ">
-              <Med avatarId={res[0].avatar} size={120} />
-              <h2 className="title-xl champ-name">{res[0].name} <span className="champ-tag">{fmtAud(res[0].score)} aud.</span></h2>
-              <div className="certlabel">{res[0].tracks} morceaux trouvés · record #{res[0].rank} au classement mondial</div>
-            </div>
-          )}
-          {res.length > 1 && (
-            <div className="board tvbig" style={{ maxWidth: 620 }}>
-              {res.map((r: any, i: number) => (
-                <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={r.id} style={{ animation: `rowin .32s ease ${i * 0.05}s both` }}>
-                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={r.avatar} size={46} />{r.name}</span>
-                  <span className="row" style={{ gap: 16, alignItems: 'baseline' }}>
-                    <span className="gain zero">{r.tracks} ✓</span>
-                    <span className="pts">{fmtAud(r.score)}</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          <span className="eyebrow" style={{ marginTop: 8 }}>Classement mondial — Top 10</span>
-          <div className="board" style={{ maxWidth: 560 }}>
-            {top.length === 0 && <p className="feedback" style={{ color: 'var(--muted)' }}>Premier score enregistré — le classement démarre !</p>}
-            {top.map((t: any, i: number) => (
-              <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={i}>
-                <span className="who"><span className="rk">{i + 1}</span><Med avatarId={t.avatar} size={30} />{t.name}</span>
-                <span className="row" style={{ gap: 12, alignItems: 'baseline' }}>
-                  <span className="gain zero">{t.tracks} ✓</span>
-                  <span className="pts">{fmtAud(t.score)}</span>
-                </span>
+          <div style={{ position: 'relative', zIndex: 1, height: '100vh', maxWidth: 720, margin: '0 auto', padding: 'clamp(44px,6vh,68px) clamp(24px,4vw,56px) 26px', display: 'flex', flexDirection: 'column' }}>
+            <h1 style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 'clamp(22px,2.8vw,34px)', letterSpacing: '.02em', margin: 0, textAlign: 'center', textTransform: 'uppercase' }}>Classement <span className="d">Survivor</span></h1>
+            <p className="muted" style={{ textAlign: 'center', margin: '5px 0 16px', fontSize: 15 }}>Contre-la-montre terminé — ton record mondial.</p>
+            {res[0] && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <Med avatarId={res[0].avatar} size={86} />
+                <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 'clamp(20px,2.4vw,28px)', textAlign: 'center' }}>{res[0].name} <span className="d">{fmtAud(res[0].score)} aud.</span></div>
+                <div className="muted" style={{ fontSize: 14, textAlign: 'center' }}>{res[0].tracks} morceau{res[0].tracks > 1 ? 'x' : ''} trouvé{res[0].tracks > 1 ? 's' : ''} · record #{res[0].rank} au monde</div>
               </div>
-            ))}
-          </div>
-          <div className="row" style={{ gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
-            <button className="btn warm" onClick={() => socket.emit('host:start', { ...(lastWizRef.current || { difficulty: settings.difficulty }), mode: 'rush' }, (r: any) => r?.error && setError(r.error))}>Rejouer →</button>
-          </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '15px 0 16px' }}>
+              <button className="btn warm big" onClick={() => socket.emit('host:start', { ...(lastWizRef.current || { difficulty: settings.difficulty }), mode: 'rush' }, (r: any) => r?.error && setError(r.error))}>Rejouer →</button>
+            </div>
+            <div className="muted" style={{ textAlign: 'center', fontSize: 12, letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8 }}>Classement mondial · Top 10</div>
+            <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', width: '100%', maxWidth: 540, margin: '0 auto' }}>
+              {top.length === 0 && <p className="muted" style={{ textAlign: 'center' }}>Premier score enregistré — le classement démarre !</p>}
+              <div className="board">
+                {top.map((t: any, i: number) => (
+                  <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={i}>
+                    <span className="who"><span className="rk">{i + 1}</span><Med avatarId={t.avatar} size={30} />{t.name}</span>
+                    <span className="row" style={{ gap: 12, alignItems: 'baseline' }}>
+                      <span className="gain zero">{t.tracks} ✓</span>
+                      <span className="pts">{fmtAud(t.score)}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
         );

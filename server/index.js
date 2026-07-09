@@ -123,7 +123,7 @@ const saveDead = () => { try { fs.writeFileSync(DEAD_FILE, JSON.stringify([...DE
 const previewPath = (id) => path.join(PREVIEW_DIR, `${id}.mp3`);
 const onDisk = (id) => { try { return fs.statSync(previewPath(id)).size > 2000; } catch { return false; } };
 const isDead = (t) => DEAD.has(String(t.id));
-const livePool = () => POOL.filter((t) => !isDead(t)); // pool jouable (extraits morts écartés)
+const livePool = () => POOL.filter((t) => !isDead(t) && !isOffTopic(t)); // pool jouable (extraits morts + non-rap écartés)
 let warm = { total: 0, done: 0, dead: 0, running: false }; // progression du préchauffage (exposée /api/health)
 // tags par artiste, clés NORMALISÉES → lookup sur l'artiste Deezer (casse/accents variables)
 const TAGMAP = new Map(Object.entries(ARTIST_TAGS).map(([k, v]) => [normalize(k), v]));
@@ -340,34 +340,27 @@ function recoScore(t, peaks) {
   const depth = 0.15 + 0.85 * rel * rel;     // courbe CONVEXE : un deep cut (rel bas) plonge vraiment vers les tiers durs ; un hit (rel~1) reste en haut
   return (t.rank || 0) * eraMult * depth;
 }
-// ── DIFFICULTÉ PAR NOTORIÉTÉ « GRAND PUBLIC » (liste curée + vérifiée) — remplace le rank brut, trop faux pour le facile ──
-// server/difficulty-labels.json : { "artiste|titre" normalisé → 'gp'|'connu'|'niche'|'obscur' }. Jugement humain sur les
-// VRAIS titres du pool (radio/tubes que même les non-fans connaissent, PAS le streaming) ; le stream ajusté à l'époque
-// (percentile dans la décennie) ne sert QU'à l'ORDRE au sein d'un niveau. gp→facile, connu→normal, niche/obscur→difficile/puriste.
-let DIFF_LABELS = {};
+// ── DIFFICULTÉ PAR NOTORIÉTÉ « GRAND PUBLIC » (bandes curées + vérifiées) — remplace le rank brut, trop faux pour le facile ──
+// server/difficulty-labels.json : { "artiste|titre" normalisé → 'top'|'high'|'mid'|'deep' } (facile/normal/difficile/puriste).
+// Construit par jugement humain sur les VRAIS titres (radio/tubes, PAS le streaming) : facile = top ~350 par notoriété
+// (streams AJUSTÉS À L'ÉPOQUE) + plafond par artiste (variété). difficulty-exclude.json : titres NON-RAP à écarter du jeu.
+let DIFF_LABELS = {}, DIFF_EXCLUDE = new Set();
 try { DIFF_LABELS = JSON.parse(fs.readFileSync(path.join(__dirname, 'difficulty-labels.json'), 'utf8')); } catch { DIFF_LABELS = {}; }
+try { DIFF_EXCLUDE = new Set(JSON.parse(fs.readFileSync(path.join(__dirname, 'difficulty-exclude.json'), 'utf8'))); } catch { DIFF_EXCLUDE = new Set(); }
 function dnorm(s) { return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\(.*?\)|\[.*?\]/g, '').replace(/\b(feat|ft|featuring|avec)\b\.?/g, '').replace(/,.*$/, '').replace(/[^a-z0-9]+/g, ''); }
-function notoTier(t) { return DIFF_LABELS[dnorm(t.artist) + '|' + dnorm(t.title)] || null; }
+function dkey(t) { return dnorm(t.artist) + '|' + dnorm(t.title); }
+function isOffTopic(t) { return DIFF_EXCLUDE.has(dkey(t)); } // pas du rap (variété/pop qui a fuité dans le catalogue) → jamais en jeu
+function trackBand(t) { return DIFF_LABELS[dkey(t)] || 'mid'; } // hors liste (titre ajouté après) → difficile par défaut, JAMAIS facile
 let _bandCache = null, _bandLen = -1;
-function computeBands() { // memoïsé sur POOL.length (comme artistPeaks)
+function computeBands() { // memoïsé sur POOL.length (comme artistPeaks) — bande PRÉ-CALCULÉE + éraNorm pour l'ORDRE
   if (_bandCache && _bandLen === POOL.length) return _bandCache;
   const dec = (y) => !y ? 'x' : y < 2000 ? '90' : y < 2010 ? '00' : y < 2020 ? '10' : '20';
   const groups = {};
   for (const t of POOL) (groups[dec(t.year)] || (groups[dec(t.year)] = [])).push(t.rank || 0);
   for (const k in groups) groups[k].sort((a, b) => a - b);
   const eraPct = (y, r) => { const a = groups[dec(y)]; if (!a || !a.length) return 0.5; let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < r) lo = m + 1; else hi = m; } return lo / a.length; };
-  const base = { gp: 3, connu: 2, niche: 1, obscur: 0 };
-  const band = new Map(), eraNorm = new Map(), nicheObs = [];
-  for (const t of POOL) {
-    const en = eraPct(t.year || 0, t.rank || 0); eraNorm.set(t, en); // stream ajusté à l'époque
-    const tier = notoTier(t) || 'niche'; // hors liste (titre ajouté après) → jamais en facile
-    if (tier === 'gp') band.set(t, 'top');
-    else if (tier === 'connu') band.set(t, 'high');
-    else nicheObs.push({ t, noto: (base[tier] ?? 1) + en });
-  }
-  nicheObs.sort((a, b) => b.noto - a.noto); // niche+obscur coupés en 2 par notoriété : moitié haute = difficile, basse = puriste
-  const half = Math.floor(nicheObs.length / 2);
-  nicheObs.forEach((x, i) => band.set(x.t, i < half ? 'mid' : 'deep'));
+  const band = new Map(), eraNorm = new Map();
+  for (const t of POOL) { eraNorm.set(t, eraPct(t.year || 0, t.rank || 0)); band.set(t, trackBand(t)); }
   _bandCache = { band, eraNorm }; _bandLen = POOL.length; return _bandCache;
 }
 // Sous-ensemble par DIFFICULTÉ : la bande de notoriété demandée, triée par notoriété ajustée à l'époque.
