@@ -1,26 +1,35 @@
 # HANDOFF — Polish wizard TV (étapes/playlist/difficulté) + trophées
 
-> Session en cours (2026-07-09). Contexte limité → doc pour reprendre si besoin. Coche au fur et à mesure.
+> Session 2026-07-09. **TOUT FAIT ✅** (6/6). Doc conservée pour trace / reprise.
 > DA : anthracite + fluo jaune-vert (`--fluo`), **carré/biseauté**, échelle TV (gros, vu de loin). HOST = TV.
 
 ## Assets ajoutés par Alexandre
 - `assets/Trophy/` : + `le sans pitié..png` → copié en `client/public/trophies/sanspitie.png` (LFS). ✅
 - `assets/Difficulty/` : `grand public/connaisseur/digger/puriste.png` → copiés en
-  `client/public/difficulty/{facile,normal,difficile,puriste}.png` (LFS). Images CARRÉES, détaillées (comme les trophées). ✅
-- **Trophées SANS image encore** (repli SVG) : **escroc, boulet** (Le Rendement). À générer plus tard.
+  `client/public/difficulty/{facile,normal,difficile,puriste}.png` (LFS). ✅
+- **Trophées SANS image encore** (repli SVG auto) : **escroc, boulet**. À générer plus tard (prompts `TROPHIES_PROMPTS.md`).
 
-## Tâches (demande du 2026-07-09)
-1. **[✅ FAIT] Assets copiés** (sanspitie + 4 difficultés) + `.gitattributes` LFS (`client/public/difficulty/*.png`, `client/public/trophies/*.png`).
-2. **[  ] Difficulté en IMAGES** — étape difficulté du wizard (`ConfigWizard.tsx` `step === 2 && !isRush`, tuiles `.diff-tile` + `.diff-illu`).
-   Remplacer l'illustration SVG (`DIFF_ILLU`) par `<img src="/difficulty/<key>.png">` (key = d.key : facile/normal/difficile/puriste), tuile IMAGE-FORWARD (grande image carrée). CSS `.diff-tile`/`.diff-illu` dans `wizard.css`.
-3. **[  ] Galerie trophées** — `.troph-grid.big` (`styles.css` ~1008) : **enlever ≥2 colonnes par ligne** → `minmax(230px→~330px)` (images ENCORE plus grandes). Et **fondu en bas** de la carte (le bas s'arrête net) : dégradé image→fond de carte (ex. `::after` linear-gradient transparent→`var(--surf...)` en bas de `.troph-ic`).
-4. **[  ] Virer P1 + coins résiduels** — le tag `P1` (`.p1tag`) et les crochets d'angle (`.brackets`, `.pick .brackets b`, `.pick.on .p1tag`) sur les cartes/tuiles sélectionnées. `wizard.css` (~140-146) + JSX `ConfigWizard.tsx` (chercher `p1tag`, `brackets`, `bracketsSvg`). Les RETIRER partout.
-5. **[  ] Étapes + playlist PLUS GRANDES (TV)** — tout est écrit trop petit. Playlist : années DÉJÀ 36px, thématiques DÉJÀ toutes affichées ; **agrandir encore** (pads plus grands/plus lisibles, titres d'étape). Format/Chrono/Réglages aussi. `wizard.css` (`.pad`, `.diff-tile`, `.fmt-tile`, `.opt`, `.act-*`, `.stage-title`).
-6. **[  ] Effet OSCILLOSCOPE audio-réactif** sur les tuiles de difficulté + gros éléments des autres étapes (pas seulement la partie gauche / pas la Carte de match à droite). Voir `ConfigWizard.tsx` : `drawScope`, `waveRef`, boucle RAF audio-réactive (la home l'a). Le porter sur les tuiles (canvas/overlay réactif au son par tuile, ou glow réactif). **Le + complexe → à faire en dernier.**
+## Tâches (demande du 2026-07-09) — TOUTES FAITES
+1. **[✅] Assets copiés** (sanspitie + 4 difficultés) + `.gitattributes` LFS. — commit `b6aa45b`
+2. **[✅] Difficulté en IMAGES** — tuiles image-forward `<img src="/difficulty/<key>.png">` (repli SVG). — `11cc08f`
+3. **[✅] Galerie trophées** — `.troph-grid.big` (`styles.css`) : minmax 230→**330** (−2 colonnes/ligne, illus plus grandes)
+   + **fondu bas** (`::after` gradient image→fond de carte `#090a0d`) : plus de coupure nette. — `11cc08f`
+4. **[✅] P1 + crochets retirés** — `.wz .pick .brackets, .wz .pick .p1tag {display:none !important;}` (partout). — `11cc08f`
+5. **[✅] Étapes + playlist PLUS GRANDES (TV)** — thématiques 19→23, difficulté nom 22→27/desc 15→18,
+   format label 19→24, options 17→21, en-têtes d'acte agrandis, pads plus hauts. — `3e8747c`
+6. **[✅] Oscilloscope audio-réactif** sur tuile SÉLECTIONNÉE difficulté + format (+ Survivor) ; boucle RAF
+   généralisée à toutes les `.wz canvas.scope` ; PAS sur la Carte de match (sidebar). — `74d5a4f`
 
-## Commits
-- Base avant cette session : `790d3a4`.
-- (mettre à jour au fur et à mesure)
+## Commits (base session : `790d3a4`)
+- `b6aa45b` assets + HANDOFF · `11cc08f` difficulté images + trophées + P1/crochets · `3e8747c` étapes plus grandes ·
+  `74d5a4f` oscilloscope tuiles. **Pas encore push** (attendre l'accord d'Alexandre).
 
-## Vérif
-`cd client && npx tsc --noEmit` · preview `/host` → Configurer → étapes. Serveur inchangé cette passe.
+## Vérif faite
+`cd client && npx tsc --noEmit` = 0 erreur (à chaque étape) · preview `/host` → Configurer :
+difficulté 4 images + P1/crochets absents · playlist toutes thématiques visibles/plus grandes ·
+oscilloscope présent+dessine sur la tuile choisie (difficulté « Connaisseur », format « 16 »), 1 seul/étape.
+
+## Restes / pistes (hors périmètre de la demande)
+- Générer les 2 illus trophées manquantes (escroc, boulet).
+- Playtest live pour valider l'oscilloscope avec du vrai son (autoplay bloqué en preview → vague ~plate,
+  la vague oscille quand la musique joue fort). L'effet REND déjà (bordure verte lumineuse au repos).
