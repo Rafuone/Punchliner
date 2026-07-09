@@ -567,7 +567,7 @@ export default function Host() {
       <div className={`topbar${['prep', 'countdown', 'playing', 'reveal', 'final'].includes(phase) ? ' gamebar' : ''}`}>
         <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">R</span></h1>
         <span className="row" style={{ gap: 14, alignItems: 'center' }}>
-          {phase === 'lobby' && <span className="gpill"><span className="dot" />Salon {code} · {players.length} j.</span>}
+          {phase === 'lobby' && <><span className="gpill">Salon {code}</span><span className="gpill"><span className="dot" />{players.length} joueur{players.length !== 1 ? 's' : ''}</span></>}
           {['prep', 'countdown', 'playing', 'reveal'].includes(phase) && (<>
             <span className="gmeta">
               {round.mode === 'rush'

@@ -84,8 +84,8 @@ const RUSH_TRACK_MAX_MS = FAST ? 3000 : 30000; // durée MAX d'un morceau : si n
 // Difficulté PROGRESSIVE : p(n) ∈ [0,1] (0 = le plus reconnaissable → 1 = le plus obscur) pour le n-ième morceau.
 // Courbe CONVEXE (exposant > 1) : démarre TRÈS facile, monte lentement puis accélère → jamais ultra-dur dès la 4e
 // question, l'intérêt monte en crescendo maîtrisé. Le morceau n vient de cette tranche de recognizabilité.
-const RUSH_RAMP_SCALE = 42; // vers le morceau ~43, on atteint le fond du bac
-const RUSH_RAMP_EXP   = 1.7; // > 1 = facile longtemps puis ça grimpe
+const RUSH_RAMP_SCALE = 58; // vers le morceau ~59, on atteint le fond du bac (montée PLUS DOUCE : on reste grand public longtemps au début)
+const RUSH_RAMP_EXP   = 1.9; // > 1 = facile longtemps puis ça grimpe (exposant relevé → début encore plus accessible)
 function rushDifficulty(n) { return Math.min(1, Math.pow(Math.max(0, (n || 1) - 1) / RUSH_RAMP_SCALE, RUSH_RAMP_EXP)); }
 function rushLabel(p) { return p < 0.30 ? 'Grand public' : p < 0.55 ? 'Connaisseur' : p < 0.80 ? 'Digger' : 'Puriste'; } // libellé affiché, évolue avec p
 
@@ -838,9 +838,10 @@ function rushBoard(room) {
     .map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0 }))
     .sort((a, b) => b.score - a.score);
 }
-function rushRankedPool(room) { // pool trié du + reconnaissable au + obscur (recoScore), filtré époque/thème
-  const peaks = artistPeaks();
-  const rank = (arr) => arr.map((t) => ({ t, r: recoScore(t, peaks) })).sort((a, b) => b.r - a.r).map((x) => x.t);
+function rushRankedPool(room) { // pool trié GRAND PUBLIC → puriste (mêmes BANDES curées que les autres modes), filtré époque/thème
+  const { band, eraNorm } = computeBands();
+  const ord = { top: 0, high: 1, mid: 2, deep: 3 };
+  const rank = (arr) => arr.slice().sort((a, b) => ((ord[band.get(a)] ?? 2) - (ord[band.get(b)] ?? 2)) || ((eraNorm.get(b) || 0) - (eraNorm.get(a) || 0)));
   let s = rank(selectPool(room.settings.era, room.settings.themes));
   if (s.length < 20) s = rank(livePool()); // filtre trop restrictif → tout le pool jouable
   return s;
