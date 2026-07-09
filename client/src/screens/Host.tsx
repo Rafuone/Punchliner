@@ -123,6 +123,7 @@ export default function Host() {
   const [error, setError] = useState('');
   const [joinBase, setJoinBase] = useState(window.location.origin.replace(/\/$/, ''));
   const [now, setNow] = useState(Date.now());
+  const clockOffset = useRef(0); // horloge serveur-autoritaire → le décompte TV et téléphone dérivent du MÊME temps
   const [reactions, setReactions] = useState<any[]>([]); // taunts flottants (façon Meet)
   const reactKeyRef = useRef(0);
   const [prepEndsAt, setPrepEndsAt] = useState(0);
@@ -240,10 +241,10 @@ export default function Host() {
     if (socket.connected) boot();
     socket.on('connect', boot);
     socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); setWaiting(d.waiting || 0); if (typeof d.poolSize === 'number') setPoolSize(d.poolSize); if (d.phase === 'lobby') { setPhase('lobby'); sfxLoopStop(); } });
-    socket.on('round:prep', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
+    socket.on('round:prep', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
     socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
-    socket.on('round:host', (d: any) => { setReveal(null); setAnswered([]); setBuzzWinner(null); buzzActiveRef.current = false; setRound(d); setPhase('playing');
+    socket.on('round:host', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setReveal(null); setAnswered([]); setBuzzWinner(null); buzzActiveRef.current = false; setRound(d); setPhase('playing');
       if (d.mode === 'quiz') { wantAudioRef.current = false; clearTimeout(audioRetryRef.current); previewRef.current = { url: '', clipMs: 30000, startAt: 0 }; try { audioRef.current?.pause(); } catch {} spotifyPause(); } // QUIZ = pas d'extrait de jeu ; on garde l'instru de menu (Alpha Wann) en fond
       else playRound(d); });
     // Mode Survivor (contre-la-montre) : le son s'enchaîne automatiquement à chaque nouveau morceau
@@ -252,7 +253,7 @@ export default function Host() {
     socket.on('rush:end', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); clearTimeout(audioRetryRef.current); setRushEnd(d); setPhase('rushend'); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
     // buzz : le son SE COUPE (sinon on buzze, on écoute tranquille, puis on répond = trop facile)
-    socket.on('buzz:winner', (d: any) => { buzzActiveRef.current = true; wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 8000 }); setNow(Date.now()); }); // buzzActiveRef : verrou anti-relance du son PENDANT que le buzzeur répond (course avec playRound)
+    socket.on('buzz:winner', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); buzzActiveRef.current = true; wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 8000 }); setNow(Date.now()); }); // buzzActiveRef : verrou anti-relance du son PENDANT que le buzzeur répond (course avec playRound)
     // le buzzeur a raté → le buzzer rouvre et le son REPREND pour les autres (SEULEMENT la source active de la manche,
     // sinon on relancerait une piste Spotify périmée EN PLUS de Deezer = double son)
     socket.on('buzz:open', () => { buzzActiveRef.current = false; wantAudioRef.current = true; if (usingSpotifyRef.current) spotifyTogglePlay(); else try { audioRef.current?.play().catch(() => {}); } catch {} setBuzzWinner(null); }); // le buzzeur a raté → le buzzer rouvre, on relève le verrou et on reprend le son
@@ -280,7 +281,7 @@ export default function Host() {
     return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'round:countdown', 'round:host', 'rush:host', 'rush:state', 'rush:end', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'reaction', 'room:closed', 'battle:intro', 'battle:bets', 'battle:tally', 'battle:go', 'battle:reveal'].forEach((e) => socket.off(e as any));
   }, []);
 
-  useEffect(() => { if (!['playing', 'prep', 'battle-bet', 'battle-play'].includes(phase)) return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
+  useEffect(() => { if (!['playing', 'prep', 'battle-bet', 'battle-play'].includes(phase)) return; const id = setInterval(() => setNow(Date.now() + clockOffset.current), 100); return () => clearInterval(id); }, [phase]);
   useEffect(() => { if (phase !== 'countdown') return; const id = setInterval(() => setCountdown((c) => Math.max(1, c - 1)), 1000); return () => clearInterval(id); }, [phase]);
   useEffect(() => { if (phase === 'countdown') sfx('countdown'); }, [countdown, phase]); // tick raccord avec chaque chiffre du décompte
   const prepSec = phase === 'prep' ? Math.max(0, Math.ceil((prepEndsAt - now) / 1000)) : -1;

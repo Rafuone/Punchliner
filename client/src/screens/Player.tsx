@@ -64,6 +64,7 @@ export default function Player() {
   const [rushEnd, setRushEnd] = useState<any>(null); // fin de run Survivor (mon rang mondial + top 10)
   const rushTrackRef = useRef(0);                    // n° de morceau courant → reset de l'input à chaque enchaînement
   const [now, setNow] = useState(Date.now());
+  const clockOffset = useRef(0); // décalage horloge serveur↔tel : synchronise le décompte avec la TV (autorité serveur)
   const [buzz, setBuzz] = useState<'idle' | 'mine' | 'locked'>('idle');
   const [buzzMsg, setBuzzMsg] = useState('');
   const [buzzEndsAt, setBuzzEndsAt] = useState(0); // échéance de réponse quand c'est à moi (décompte)
@@ -137,18 +138,19 @@ export default function Player() {
     // Reconnexion (ex. serveur redémarré) : si on était déjà entré, on rejoint automatiquement le MÊME
     // salon avec sa session → pas besoin de retaper le code, la partie reprend.
     socket.on('connect', () => {
-      if (!meId.current) return; // pas encore entré : le flux normal gère la 1re connexion
       const s = loadSession();
-      if (s?.code && s?.playerId) socket.emit('player:join', { code: s.code, name: s.name, avatar: s.avatar, playerId: s.playerId }, (res: any) => {
-        if (res?.ok) { meId.current = res.playerId; setWaiting(!!res.waiting); setError(''); applyState(res.state); }
+      const pid = meId.current || s?.playerId; // même si meId pas encore amorcé (tel verrouillé/reload) → on rejoint avec la session
+      if (!pid || !s?.code) return; // vraiment pas de session : le flux normal gère la 1re connexion
+      socket.emit('player:join', { code: s.code, name: s.name, avatar: s.avatar, playerId: pid }, (res: any) => {
+        if (res?.ok) { meId.current = res.playerId; setWaiting(!!res.waiting); setError(''); applyState(res.state); } // reconnexion par playerId → reste JOUEUR ACTIF (jamais renvoyé en salle d'attente)
       });
     });
     socket.on('lobby', (d: any) => { setPlayers(d.players); if (d.phase === 'lobby') { setWaiting(false); setPhase('lobby'); setNewChars([]); } });
-    socket.on('round:prep', (d: any) => { setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setSubmitted(false); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setPowerElig({ ok: true, reason: '' }); setNow(Date.now()); setPhase('prep'); });
+    socket.on('round:prep', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setSubmitted(false); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setPowerElig({ ok: true, reason: '' }); setNow(Date.now() + clockOffset.current); setPhase('prep'); });
     socket.on('power:eligible', (d: any) => setPowerElig({ ok: d.eligible !== false, reason: d.reason || '' })); // grise le bouton si le pouvoir n'a pas de cible
     socket.on('power:hit', (d: any) => setPowerMsg(`−${fmtAud(d.amount)} auditeurs ${d.type === 'sabotage' ? 'raflés' : d.type === 'tax' ? 'taxés' : 'volés'} par ${d.by} !`)); // anim vol/dîme côté victime
     socket.on('round:countdown', (d: any) => { setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setCountdown(d.seconds || 5); setPhase('countdown'); });
-    socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setSubmitted(false); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); setBuzzEndsAt(0); } });
+    socket.on('round:go', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setRound(d); setGuess(''); setFeedback(null); setSubmitted(false); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); setBuzzEndsAt(0); } });
     // Mode Survivor : chaque nouveau morceau (trackNo change) → on remet l'input à zéro
     socket.on('rush:state', (d: any) => { setRound((r: any) => ({ ...r, ...d })); if (rushTrackRef.current !== d.trackNo) { rushTrackRef.current = d.trackNo; setGuess(''); setFeedback(null); } setPhase('playing'); });
     socket.on('rush:end', (d: any) => { setRushEnd(d); setPhase('rushend'); });
@@ -172,7 +174,7 @@ export default function Player() {
     return () => ['connect', 'lobby', 'round:prep', 'power:eligible', 'power:hit', 'round:countdown', 'round:go', 'rush:state', 'rush:end', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed', 'battle:intro', 'battle:bets', 'battle:go', 'battle:reveal'].forEach((e) => socket.off(e as any));
   }, []);
 
-  useEffect(() => { if (phase !== 'playing' && phase !== 'prep' && phase !== 'battle-bet' && phase !== 'battle-play') return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
+  useEffect(() => { if (phase !== 'playing' && phase !== 'prep' && phase !== 'battle-bet' && phase !== 'battle-play') return; const id = setInterval(() => setNow(Date.now() + clockOffset.current), 100); return () => clearInterval(id); }, [phase]);
   useEffect(() => { if (phase !== 'countdown') return; const id = setInterval(() => setCountdown((c) => Math.max(1, c - 1)), 1000); return () => clearInterval(id); }, [phase]);
   // jauge de pouvoir : synchro depuis le serveur
   useEffect(() => { const m = players.find((p) => p.id === meId.current); if (m) { if (typeof m.charge === 'number') setCharge(m.charge); if (typeof m.charges === 'number') setCharges(m.charges); } }, [players]);

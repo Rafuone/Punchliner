@@ -554,7 +554,7 @@ function beginRound(room) {
     room.phase = 'prep';
     const seconds = FAST ? 2 : 10;
     room.prepEndsAt = Date.now() + seconds * 1000;
-    const info = { index: room.roundIndex, total: room.totalRounds, endsAt: room.prepEndsAt, seconds, mode: room.settings.mode, difficulty: diffLabel };
+    const info = { index: room.roundIndex, total: room.totalRounds, endsAt: room.prepEndsAt, seconds, serverNow: Date.now(), mode: room.settings.mode, difficulty: diffLabel };
     io.to(room.code).emit('round:prep', info);
     io.to(room.hostId).emit('round:prep', info);
     // éligibilité PAR JOUEUR (grisage du bouton) : un pouvoir sans cible ne doit pas se gaspiller
@@ -615,7 +615,7 @@ function startRound(room) {
   room.roundStartAt = Date.now(); // vrai début de manche (fixe) : sert la fenêtre de brouillage, indépendant du décalage buzzer
   room.roundEndsAt = Date.now() + diff.windowMs;
 
-  const base = { index: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: diff.windowMs, mode: room.settings.mode, difficulty: diff.label, mj: room.settings.mj, suspense: room.suspense, jam: room.jam ? { by: room.jam.by, ms: room.jam.ms } : null };
+  const base = { index: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: diff.windowMs, serverNow: Date.now(), mode: room.settings.mode, difficulty: diff.label, mj: room.settings.mj, suspense: room.suspense, jam: room.jam ? { by: room.jam.by, ms: room.jam.ms } : null };
   // sp = titre/artiste envoyés À L'HÔTE SEUL (jamais aux joueurs) pour résoudre le morceau sur Spotify.
   // L'hôte joue déjà le son (= la réponse) → aucune fuite ; les joueurs ne reçoivent que round:go.
   io.to(room.hostId).emit('round:host', { ...base, preview: room.current.preview, startAt: room.startAt, sp: { title: room.current.title, artist: room.current.artist } });
@@ -1239,7 +1239,7 @@ io.on('connection', (socket) => {
     room.buzz.winnerId = p.id; room.buzz.winnerName = p.name; room.buzz.open = false;
     room.buzz.endsAt = Date.now() + BUZZ_ANSWER_MS; // échéance de réponse (décompte affiché TV + tel)
     cb?.({ ok: true, winner: true, endsAt: room.buzz.endsAt, answerMs: BUZZ_ANSWER_MS });
-    io.to(room.code).emit('buzz:winner', { id: p.id, name: p.name, avatar: p.avatar, endsAt: room.buzz.endsAt, answerMs: BUZZ_ANSWER_MS });
+    io.to(room.code).emit('buzz:winner', { id: p.id, name: p.name, avatar: p.avatar, endsAt: room.buzz.endsAt, answerMs: BUZZ_ANSWER_MS, serverNow: Date.now() });
     // on MET LA MANCHE EN PAUSE pendant qu'il répond (le son est coupé côté hôte) — sinon la manche
     // pourrait se terminer en plein milieu de sa réponse. On mémorise le temps restant.
     room.roundRemainingMs = Math.max(0, room.roundEndsAt - Date.now());
