@@ -35,7 +35,14 @@ const RADIO_STATIONS = [
   { label: 'Soirée', q: 'rap fr soirée ambiance' },
 ];
 
+// Mémoire de session radio (module-level → survit au démontage quand on repart au hub) : on retrouve la playlist
+// où on était (au pire en pause) au lieu de tout remettre à zéro.
+let radioMem: null | { source: string; results: any[]; query: string; selPl: any; tracks: any[]; trkInfo: any; activeUri: string; nowPlaying: any; posBase: number } = null;
+
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
+// icônes note + play en SVG (le glyphe texte ▶/♪ se rendait en EMOJI géant sur certains systèmes → cassé)
+const NOTE = <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}><path d="M9 17V5l10-2v12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><circle cx="6.5" cy="17" r="2.5" /><circle cx="16.5" cy="15" r="2.5" /></svg>;
+const PLAY = (s = 14) => <svg width={s} height={s} viewBox="0 0 24 24" aria-hidden="true"><polygon points="7 4 20 12 7 20 7 4" fill="currentColor" /></svg>;
 
 // icônes lecteur (SVG propres, DA) — plus d'emoji
 const svg = (d: any, size = 16) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{d}</svg>;
@@ -49,6 +56,8 @@ const IC = {
   expand: svg(<><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></>),
   minimize: svg(<><polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" /><line x1="14" y1="10" x2="21" y2="3" /><line x1="3" y1="21" x2="10" y2="14" /></>),
 };
+// Logo Spotify officiel (toujours en couleur) — repris tel quel de l'assistant (ConfigWizard) pour le badge de la radio.
+const SPOTIFY_ICO = '<svg width="15" height="15" viewBox="0 0 168 168" aria-hidden="true"><path fill="#1ed760" d="M83.996.277C37.747.277.253 37.77.253 84.019c0 46.251 37.494 83.741 83.743 83.741 46.254 0 83.744-37.49 83.744-83.741 0-46.246-37.49-83.738-83.745-83.738l.001-.004zm38.404 120.78a5.217 5.217 0 01-7.18 1.73c-19.662-12.01-44.414-14.73-73.564-8.07a5.222 5.222 0 01-6.249-3.93 5.213 5.213 0 013.926-6.25c31.9-7.291 59.263-4.15 81.337 9.34 2.46 1.51 3.24 4.72 1.73 7.18zm10.25-22.805c-1.89 3.075-5.91 4.045-8.98 2.155-22.51-13.839-56.823-17.846-83.448-9.764-3.453 1.043-7.1-.903-8.148-4.35a6.538 6.538 0 014.354-8.143c30.413-9.228 68.222-4.758 94.072 11.127 3.07 1.89 4.04 5.91 2.15 8.976v-.001zm.88-23.744c-26.99-16.031-71.52-17.505-97.289-9.684-4.138 1.255-8.514-1.081-9.768-5.219a7.835 7.835 0 015.221-9.771c29.581-8.98 78.756-7.245 109.83 11.202a7.823 7.823 0 012.74 10.733c-2.2 3.722-7.02 4.949-10.73 2.739z"/></svg>';
 const cats = [...CATEGORY_ORDER, ...Array.from(new Set(AVATARS.map((a) => a.cat))).filter((c) => !CATEGORY_ORDER.includes(c))];
 const ROSTER = [...cats.flatMap((cat) => AVATARS.filter((a) => a.cat === cat && !a.locked)), ...AVATARS.filter((a) => a.locked)]; // par catégorie, puis les déblocables (révélés, à part) à la fin
 
@@ -72,7 +81,9 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
   const [trkInfo, setTrkInfo] = useState<{ loading: boolean; total: number; durationMs: number; info: string }>({ loading: false, total: 0, durationMs: 0, info: '' });
   const posRef = useRef({ base: 0, at: 0 }); // position lecture (base + horodatage) → barre de progression interpolée
   const [, setUiTick] = useState(0);         // force le re-render de la barre pendant la lecture
-  const [bigPlayer, setBigPlayer] = useState(false); // vue « now playing » plein écran (façon Spotify TV)
+  const [bigPlayer, setBigPlayer] = useState(0); // vue « now playing » plein écran (mode Cinéma) : 0 = fermé, 1-4 = animation d'ouverture (à départager)
+  const [bigClosing, setBigClosing] = useState(false); // joue l'animation d'ouverture EN REVERSE avant de démonter
+  const closeTimer = useRef<any>(null);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (selPl) setSelPl(null); else onClose(); } };
@@ -82,21 +93,34 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
     if (mode !== 'leaderboard') return;
     socket.emit('leaderboard:get', { n: 30 }, (r: any) => { if (r?.ok) setBoard(r.top || []); });
   }, [mode]);
-  // Radio : now-playing + défaut « Découvertes ». À la SORTIE (Option 2) : on coupe la radio + on relance la musique du menu.
+  // Radio : now-playing + défaut « Découvertes ». À la SORTIE : on coupe la radio + on relance la musique du menu.
   useEffect(() => {
     if (mode !== 'radio') return;
     if (RADIO_DEMO) { setSpReady(true); setRadioResults(DEMO_PLAYLISTS); setRadioSource('mine'); openPlaylist(DEMO_PLAYLISTS[0]); setNowPlaying({ paused: false, name: 'Otto', artist: 'SCH', image: '', position: 74000, duration: 213000, shuffle: true, repeat: 1 }); posRef.current = { base: 74000, at: Date.now() }; return; }
     const rdy = hasSpotifySession(); setSpReady(rdy);
     const off = onPlayerState((s) => { setNowPlaying(s); posRef.current = { base: s?.position || 0, at: Date.now() }; });
-    if (rdy) runStation(RADIO_STATIONS[0]);
+    if (radioMem) {
+      // retour depuis le hub → on restaure la session (playlist où on était, en pause). Pas de reset.
+      setRadioSource(radioMem.source); setRadioResults(radioMem.results); setRadioQuery(radioMem.query);
+      setSelPl(radioMem.selPl); setTracks(radioMem.tracks); setTrkInfo(radioMem.trkInfo); setRadioActiveUri(radioMem.activeUri);
+      if (radioMem.nowPlaying) { setNowPlaying({ ...radioMem.nowPlaying, paused: true }); posRef.current = { base: radioMem.posBase, at: Date.now() }; }
+    } else if (rdy) { runStation(RADIO_STATIONS[0]); }
     return () => { off(); spotifyPause(); onRadioStop?.(); }; // quitter la radio → stop radio + reprise musique du menu
   }, [mode]);
+  // sauvegarde live de la session radio → restaurable au prochain retour (cf. radioMem)
+  useEffect(() => {
+    if (mode !== 'radio' || RADIO_DEMO) return;
+    radioMem = { source: radioSource, results: radioResults, query: radioQuery, selPl, tracks, trkInfo, activeUri: radioActiveUri, nowPlaying, posBase: nowPlaying ? (nowPlaying.paused ? nowPlaying.position : posRef.current.base) : 0 };
+  }, [mode, radioSource, radioResults, radioQuery, selPl, tracks, trkInfo, radioActiveUri, nowPlaying]);
   // tick pour animer la barre de progression pendant la lecture
   useEffect(() => {
     if (mode !== 'radio' || !nowPlaying || nowPlaying.paused) return;
     const id = setInterval(() => setUiTick((t) => t + 1), 500);
     return () => clearInterval(id);
   }, [mode, nowPlaying]);
+  // fermeture du plein écran : joue l'anim d'ouverture EN REVERSE puis démonte
+  function closeBig() { if (bigClosing) return; setBigClosing(true); clearTimeout(closeTimer.current); closeTimer.current = setTimeout(() => { setBigPlayer(0); setBigClosing(false); }, 360); }
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
 
   async function loadResults(promise: Promise<{ items: any[]; info: string }>, source: string) {
     setRadioLoading(true); setRadioSource(source); setRadioInfo(''); setSelPl(null);
@@ -234,13 +258,13 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
         <div className="wrap radio-wrap" style={{ position: 'relative', zIndex: 1, paddingBottom: nowPlaying ? 92 : 20 }}>
           <div className="topbar">
             <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={onClose}>← Retour au hub</button>
-            <h1 className="wm" style={{ fontSize: 22 }}>RADIO <span className="d">PUNCHLINR</span></h1>
-            <span className={`gpill ${spReady ? 'live' : ''}`}>{spReady && <span className="dot" />}{spReady ? 'Spotify connecté' : 'Spotify'}</span>
+            <h1 className="wm radio-title" style={{ fontSize: 22 }}>RADIO PUNCHLINR</h1>
+            <span className={`sp-badge ${spReady ? 'on' : ''}`}><span className="srclogo" dangerouslySetInnerHTML={{ __html: SPOTIFY_ICO }} />Spotify</span>
           </div>
 
           {!spReady ? (
             <div className="radio-empty tall">
-              <div className="radio-empty-ico">♪</div>
+              <div className="radio-empty-ico">{NOTE}</div>
               <p className="muted" style={{ fontSize: 16 }}>La radio a besoin de <b style={{ color: 'var(--txt)' }}>Spotify (Premium)</b> connecté.</p>
               <button className="btn warm" onClick={() => { try { localStorage.setItem('pl_radio_return', '1'); } catch {} spotifyLogin(); }}>Connecter Spotify</button>
             </div>
@@ -279,7 +303,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                   <div className="radio-grid">
                     {shownResults.map((p: any) => (
                       <button key={p.uri} className={`radio-card ${selPl?.uri === p.uri ? 'sel' : ''} ${radioActiveUri === p.uri ? 'on' : ''}`} onClick={() => openPlaylist(p)} title={p.name}>
-                        <div className="radio-cover">{p.image ? <img src={p.image} alt="" onError={hideOnErr} /> : <span>♪</span>}{radioActiveUri === p.uri ? <span className="radio-eq"><i /><i /><i /></span> : <span className="radio-play">▶</span>}</div>
+                        <div className="radio-cover">{p.image ? <img src={p.image} alt="" onError={hideOnErr} /> : <span>{NOTE}</span>}{radioActiveUri === p.uri ? <span className="radio-eq"><i /><i /><i /></span> : <span className="radio-play">{PLAY(15)}</span>}</div>
                         <div className="radio-name">{p.name}</div>
                         <div className="radio-owner">{[p.total ? `${p.total} titres` : '', p.owner].filter(Boolean).join(' · ')}</div>
                       </button>
@@ -291,7 +315,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
               {selPl && (
                 <aside className="radio-panel">
                   <div className="rpl-head">
-                    <div className="rpl-cover">{selPl.image ? <img src={selPl.image} alt="" onError={hideOnErr} /> : <span>♪</span>}</div>
+                    <div className="rpl-cover">{selPl.image ? <img src={selPl.image} alt="" onError={hideOnErr} /> : <span>{NOTE}</span>}</div>
                     <div className="rpl-info">
                       <div className="rpl-kicker">Playlist</div>
                       <div className="rpl-name" title={selPl.name}>{selPl.name}</div>
@@ -299,7 +323,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                     </div>
                     <button className="rpl-close" onClick={() => setSelPl(null)} aria-label="Fermer">×</button>
                   </div>
-                  <button className="btn warm rpl-play" onClick={() => playWhole(selPl)}>▶ Lancer la playlist</button>
+                  <button className="btn warm rpl-play" onClick={() => playWhole(selPl)}><span className="rpl-play-ic">{PLAY(15)}</span> Lancer la playlist</button>
                   <div className="rpl-tracks">
                     {trkInfo.loading ? (
                       Array.from({ length: 8 }).map((_, i) => (
@@ -307,13 +331,13 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                       ))
                     ) : tracks.length === 0 ? (
                       <div style={{ padding: '18px 16px', textAlign: 'center' }}>
-                        <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: 0 }}>{trkInfo.info === 'http-403' ? '🔒 Playlist protégée par Spotify — non lisible par l’app. Essaie « ★ Mes playlists » ou une autre.' : trkInfo.info ? radioMsg(trkInfo.info) : 'Playlist vide.'}</p>
+                        <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: 0 }}>{trkInfo.info === 'http-403' ? '🔒 Titres non lisibles pour cette playlist (limite de l’API Spotify). Essaie « ★ Mes playlists » ou une autre.' : trkInfo.info ? radioMsg(trkInfo.info) : 'Playlist vide.'}</p>
                         {spotifyLastError() && <p className="radio-diag" style={{ marginTop: 10 }}>⚙ {spotifyLastError()}</p>}
                       </div>
                     ) : tracks.map((t: any, i: number) => (
                       <button className="rtrack" key={t.uri + i} onClick={() => playTrack(t)} title={`${t.title} — ${t.artist}`}>
                         <span className="rt-idx">{i + 1}</span>
-                        <div className="rt-cov">{t.cover ? <img src={t.cover} alt="" onError={hideOnErr} /> : <span>♪</span>}<span className="rt-play">▶</span></div>
+                        <div className="rt-cov">{t.cover ? <img src={t.cover} alt="" onError={hideOnErr} /> : <span>{NOTE}</span>}<span className="rt-play">{PLAY(13)}</span></div>
                         <div className="rt-main"><div className="rt-t">{t.title}</div><div className="rt-a">{t.artist}</div></div>
                         <span className="rt-dur">{fmtDur(t.durationMs)}</span>
                       </button>
@@ -340,21 +364,30 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
             </div>
           );
           const bar = () => <div className="rp-bar" onClick={(e) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); if (dur) spotifySeek(Math.round(((e.clientX - r.left) / r.width) * dur)); }}><div className="rp-fill" style={{ width: (frac * 100) + '%' }} /></div>;
+          // titre plein écran : on ANTICIPE la longueur → taille réduite si long (jamais > 2 lignes)
+          const nm = nowPlaying.name || '';
+          const bigNameFs = nm.length > 40 ? 'clamp(20px,2.6vw,34px)' : nm.length > 26 ? 'clamp(25px,3.2vw,42px)' : nm.length > 16 ? 'clamp(30px,3.9vw,52px)' : 'clamp(34px,4.6vw,62px)';
           return (
             <>
-              {bigPlayer && (
-                <div className="radio-big">
-                  <button className="rbig-min" onClick={() => setBigPlayer(false)} title="Réduire" aria-label="Réduire">{IC.minimize}</button>
-                  <div className="rbig-cover">{nowPlaying.image ? <img src={nowPlaying.image} alt="" /> : <span>♪</span>}</div>
-                  <div className="rbig-name">{nowPlaying.name}</div>
-                  <div className="rbig-artist">{nowPlaying.artist}</div>
-                  <div className="rbig-prog"><span className="rp-time">{fmtDur(pos)}</span>{bar()}<span className="rp-time">{fmtDur(dur)}</span></div>
-                  {controls(true)}
+              {bigPlayer > 0 && (
+                <div className={`radio-big cine bigv${bigPlayer}${bigClosing ? ' closing' : ''}`} style={nowPlaying.image ? ({ ['--art' as any]: `url("${nowPlaying.image}")` }) : undefined}>
+                  <div className="rbig-backdrop" aria-hidden="true" />
+                  <button className="rbig-min" onClick={closeBig} title="Réduire" aria-label="Réduire">{IC.minimize}</button>
+                  <div className="rbig-stage">
+                    <div className="rbig-cover">{nowPlaying.image ? <img src={nowPlaying.image} alt="" /> : <span>{NOTE}</span>}</div>
+                    <div className="rbig-panel">
+                      <div className="rbig-kicker">Radio Punchlinr · en lecture</div>
+                      <div className="rbig-name" style={{ fontSize: bigNameFs }}>{nowPlaying.name}</div>
+                      <div className="rbig-artist">{nowPlaying.artist}</div>
+                      <div className="rbig-prog"><span className="rp-time">{fmtDur(pos)}</span>{bar()}<span className="rp-time">{fmtDur(dur)}</span></div>
+                      {controls(true)}
+                    </div>
+                  </div>
                 </div>
               )}
               <div className="radio-player">
                 <div className="rp-track">
-                  {nowPlaying.image ? <img src={nowPlaying.image} alt="" /> : <div className="rp-ph">♪</div>}
+                  {nowPlaying.image ? <img src={nowPlaying.image} alt="" /> : <div className="rp-ph">{NOTE}</div>}
                   <div className="rp-meta"><div className="rp-name">{nowPlaying.name}</div><div className="rp-artist">{nowPlaying.artist}</div></div>
                 </div>
                 <div className="rp-center">
@@ -362,8 +395,15 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                   <div className="rp-prog"><span className="rp-time">{fmtDur(pos)}</span>{bar()}<span className="rp-time">{fmtDur(dur)}</span></div>
                 </div>
                 <div className="rp-right">
-                  <button className="rp-btn sm" onClick={() => setBigPlayer(true)} title="Mettre en grand" aria-label="Mettre en grand">{IC.expand}</button>
-                  <button className="rp-cut" onClick={() => { spotifyPause(); setBigPlayer(false); setRadioActiveUri(''); }} title="Couper la radio" aria-label="Couper la radio">×</button>
+                  {/* 4 animations d'ouverture plein écran à départager — Alexandre choisit sa préférée. */}
+                  <div className="rp-exps" role="group" aria-label="Plein écran (test d'animations)">
+                    {[1, 2, 3, 4].map((n) => (
+                      <button key={n} className={`rp-btn sm rp-exp ${bigPlayer === n ? 'act' : ''}`} onClick={() => setBigPlayer(n)} title={`Plein écran — animation ${n}`} aria-label={`Plein écran, animation ${n}`}>
+                        {IC.expand}<span className="rp-expn">{n}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button className="rp-cut" onClick={() => { spotifyPause(); setBigPlayer(0); setRadioActiveUri(''); }} title="Couper la radio" aria-label="Couper la radio">×</button>
                 </div>
               </div>
             </>

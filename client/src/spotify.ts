@@ -252,20 +252,37 @@ export async function getMyPlaylists(limit = 50): Promise<{ items: PlaylistItem[
 }
 
 // Les titres d'une playlist : cover/titre/artiste/durée + meta (nom, owner, nb, durée totale).
+// ⚠️ CAUSE DU BUG « 403 Forbidden » : la migration API Spotify de FÉVRIER 2026 (enforcement 9 mars 2026) a
+// SUPPRIMÉ `GET /playlists/{id}/tracks` → remplacé par `GET /playlists/{id}/items`. L'ancien chemin renvoie
+// désormais un 403 « Forbidden » NU (sans message de scope), même sur SES PROPRES playlists. Le correctif est
+// donc juste le nouveau chemin `/items` (vérifié 200 en Development Mode). L'objet playlist complet
+// `/playlists/{id}` (toujours disponible) sert de repli. Voies essayées dans l'ordre, on garde la 1re qui rend.
 export async function getPlaylistTracks(id: string): Promise<{ tracks: PlaylistTrack[]; total: number; durationMs: number; info: string }> {
   const token = await getToken(); if (!token) return { tracks: [], total: 0, durationMs: 0, info: 'no-token' };
+  const auth = { Authorization: 'Bearer ' + token };
+  // post-migration : l'enveloppe peut nommer le morceau `.track` (ancien) OU `.item` (nouveau) → on gère les deux.
+  const mapTracks = (items: any[]): PlaylistTrack[] => (items || []).map((it: any) => it?.track || it?.item || it).filter((t: any) => t && t.uri).map((t: any) => ({
+    uri: t.uri, title: t.name || '?', artist: (t.artists || []).map((a: any) => a.name).join(', ') || '?',
+    durationMs: t.duration_ms || 0, cover: t.album?.images?.[t.album.images.length - 1]?.url || t.album?.images?.[0]?.url || '',
+  }));
+  const B = 'https://api.spotify.com/v1/playlists/' + id;
+  const variants: Array<{ url: string; pick: (j: any) => any[] }> = [
+    { url: B + '/items?limit=100&additional_types=track', pick: (j) => j?.items },  // NOUVEAU chemin canonique (fix du 403)
+    { url: B + '/items?limit=100', pick: (j) => j?.items },
+    { url: B + '?market=FR', pick: (j) => j?.tracks?.items || j?.items },           // repli : objet complet (toujours dispo)
+    { url: B, pick: (j) => j?.tracks?.items || j?.items },
+  ];
+  let lastStatus = 0, lastBody = '', lastUrl = '';
   try {
-    // pas de `fields` (rejet silencieux possible) ni de `market` (relinking null) : on prend la réponse complète.
-    const r = await fetch('https://api.spotify.com/v1/playlists/' + id + '/tracks?limit=50', { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) { const txt = await r.text().catch(() => ''); setErr('[v4] Titres playlist HTTP ' + r.status + ' · id=' + id + ' · ' + txt.slice(0, 140)); return { tracks: [], total: 0, durationMs: 0, info: 'http-' + r.status }; }
-    const raw = ((await r.json())?.items || []) as any[];
-    const tracks: PlaylistTrack[] = raw.map((it: any) => it?.track).filter(Boolean).map((t: any) => ({
-      uri: t.uri, title: t.name || '?', artist: (t.artists || []).map((a: any) => a.name).join(', ') || '?',
-      durationMs: t.duration_ms || 0, cover: t.album?.images?.[t.album.images.length - 1]?.url || t.album?.images?.[0]?.url || '',
-    }));
-    const durationMs = tracks.reduce((s, t) => s + t.durationMs, 0);
-    setErr('');
-    return { tracks, total: tracks.length, durationMs, info: tracks.length ? '' : 'empty' };
+    for (const v of variants) {
+      const r = await fetch(v.url, { headers: auth });
+      if (!r.ok) { lastStatus = r.status; lastBody = (await r.text().catch(() => '')).slice(0, 120); lastUrl = v.url.replace(B, '…'); continue; }
+      const tracks = mapTracks(v.pick(await r.json()));
+      if (tracks.length) { setErr(''); return { tracks, total: tracks.length, durationMs: tracks.reduce((s, t) => s + t.durationMs, 0), info: '' }; }
+      lastStatus = 200; lastUrl = v.url.replace(B, '…'); // 200 mais vide → on tente la voie suivante
+    }
+    if (lastStatus && lastStatus !== 200) { setErr('[v5] Titres playlist HTTP ' + lastStatus + ' · id=' + id + ' · [' + lastUrl + '] · ' + lastBody); return { tracks: [], total: 0, durationMs: 0, info: 'http-' + lastStatus }; }
+    setErr(''); return { tracks: [], total: 0, durationMs: 0, info: 'empty' };
   } catch { return { tracks: [], total: 0, durationMs: 0, info: 'network' }; }
 }
 
