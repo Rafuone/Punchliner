@@ -78,7 +78,7 @@ const STEP_SUB = [
   'Deux axes combinables : l’époque et la thématique. Le rap FR, c’est large.',
   'La force du signal : de la radio grand public au fond du bac.',
   'Le compteur de manches : la longueur du show.',
-  'Les faders de fin de chaîne. Défauts déjà calés.',
+  'Les faders de fin de chaîne. Ajuste, ou lance quand tu veux.',
 ];
 
 /* ====== SVG (dessinés — zéro emoji) ====== */
@@ -103,6 +103,8 @@ const KEYART: Record<string, string> = {
 const vhsOverlay = '<div class="vhs"><div class="lines"></div><div class="band"></div><div class="flick"></div></div>';
 // crunch/grésille fin par-dessus la vidéo Blind Test (reprise de la DA showcase perso : scanlines + bruit chroma + bande + voile froid)
 const keyvidFx = '<i class="kvl"></i><i class="kvt"></i><i class="kvn"></i><i class="kvb"></i>';
+// vidéo « diffusion télé » de fond, par mode (jouée UNIQUEMENT quand la carte est sélectionnée). Blind + Buzzer + Quiz.
+const VID_GAMES: Record<string, string> = { blind: '/blind-test.mp4', buzz: '/buzzer.mp4', quiz: '/quiz.mp4' };
 function dial(active: boolean) {
   const c = active ? 'var(--fluo)' : 'rgba(255,255,255,.28)';
   return `<svg class="dial" viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="16" fill="rgba(0,0,0,.35)" stroke="${c}" stroke-width="2"/><g stroke="${c}" stroke-width="1.4" opacity=".7"><line x1="20" y1="6" x2="20" y2="9"/><line x1="34" y1="20" x2="31" y2="20"/><line x1="20" y1="34" x2="20" y2="31"/><line x1="6" y1="20" x2="9" y2="20"/></g><line x1="20" y1="20" x2="${active ? 28 : 14}" y2="12" stroke="${active ? 'var(--fluo)' : '#fff'}" stroke-width="2.4" stroke-linecap="round"/><circle cx="20" cy="20" r="3" fill="${c}"/></svg>`;
@@ -128,7 +130,7 @@ function drawScope(canvas: HTMLCanvasElement, wave: Uint8Array) {
   if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H2);
   const PAD = 30;   // = |inset| du canvas : le bord de la carte est ici (le tracé suit CE contour, pas un rectangle inséré)
-  const R = 4;      // rayon des coins ≈ radius des cartes
+  const R = 10;     // rayon des coins = border-radius des cartes (bordure réactive raccord avec la bordure fixe arrondie)
   const x0 = PAD, y0 = PAD, x1 = W - PAD, y1 = H2 - PAD;
   const w = x1 - x0, h = y1 - y0; if (w <= 4 * R || h <= 4 * R) return;
   const sw = w - 2 * R, sh = h - 2 * R, arc = (Math.PI / 2) * R, perim = 2 * sw + 2 * sh + 4 * arc;
@@ -196,7 +198,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     { i: '01', k: 'Le jeu', v: GAMES.find((g) => g.id === game)!.name },
     isQuiz
       ? { i: '02', k: 'Questions', v: quizNoVf ? 'Sans Vrai/Faux' : 'QCM + Vrai/Faux' }
-      : { i: '02', k: 'Playlist', v: themeName + ' · ' + (era === 'all' ? 'Toutes époques' : eraName) },
+      : { i: '02', k: 'Playlist', v: themeName + (era === 'all' ? '' : ' · ' + ERAS.find((e) => e.id === era)!.big + 's') },
     { i: '03', k: 'Difficulté', v: DIFFS.find((d) => d.key === diff)!.name },
     isRush
       ? { i: '04', k: 'Chrono', v: rushStartSec + ' s · ' + rushPaceName }
@@ -227,15 +229,22 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
       rushStartSec: isRush ? rushStartSec : undefined, rushPace: isRush ? rushPace : undefined, quizNoVf: isQuiz ? quizNoVf : undefined });
   }
 
-  // vidéo « diffusion télé » de la carte Blind Test : sélectionnée → couleur + lecture + déchirures de
-  // tracking (MÊME effet analogique que le showcase perso) ; sinon → N&B, sur pause.
-  const blindVidRef = useRef<HTMLVideoElement | null>(null);
-  const blindTearRef = useRef<HTMLVideoElement | null>(null);
-  const blindCardRef = useRef<HTMLButtonElement | null>(null);
+  // vidéo « diffusion télé » de la carte sélectionnée (Blind/Buzzer/Quiz) : couleur + lecture + déchirures de
+  // tracking (MÊME effet analogique que le showcase perso) ; les autres → N&B, sur pause. Refs par mode.
+  const vidRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const tearRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const cardRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   useEffect(() => {
-    const v = blindVidRef.current, tear = blindTearRef.current, card = blindCardRef.current;
-    const active = step === 0 && game === 'blind';
-    [v, tear].forEach((el) => { if (!el) return; el.muted = true; if (active) { const p = el.play(); if (p?.catch) p.catch(() => {}); } else { try { el.pause(); } catch {} } });
+    const active = step === 0 && !!VID_GAMES[game];
+    const v = vidRefs.current[game], tear = tearRefs.current[game], card = cardRefs.current[game];
+    // ne joue QUE la vidéo du mode sélectionné ; met les autres en pause
+    Object.keys(VID_GAMES).forEach((id) => {
+      const playThis = active && id === game;
+      [vidRefs.current[id], tearRefs.current[id]].forEach((el) => {
+        if (!el) return; el.muted = true;
+        if (playThis) { const p = el.play(); if (p?.catch) p.catch(() => {}); } else { try { el.pause(); } catch {} }
+      });
+    });
     if (!active || !card) return;
     // pilote de glitch : déchirures de tracking ORGANIQUES (intervalles/tailles aléatoires), repris du showcase perso
     let timer: any;
@@ -427,13 +436,13 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
 
             {step === 0 && (() => {
               const gameCard = (g: any) => (
-                <button key={g.id} ref={g.id === 'blind' ? blindCardRef : undefined} className={`keycard pick g-${g.id} ${game === g.id ? 'sel on' : ''} ${g.soon ? 'locked' : ''}`} onClick={() => !g.soon && setGame(g.id)} onFocus={() => !g.soon && setGame(g.id)}>
+                <button key={g.id} ref={(el) => { cardRefs.current[g.id] = el; }} className={`keycard pick g-${g.id} ${game === g.id ? 'sel on' : ''} ${g.soon ? 'locked' : ''}`} onClick={() => !g.soon && setGame(g.id)} onFocus={() => !g.soon && setGame(g.id)}>
                   <div className="kclip">
                     <div className="keyart" {...H(KEYART[g.id] || '')} />
-                    {g.id === 'blind' && (
+                    {VID_GAMES[g.id] && (
                       <>
-                        <video className="keyvid" ref={blindVidRef} src="/blind-test.mp4" muted loop playsInline preload="auto" disablePictureInPicture />
-                        <video className="keyvid-tear" ref={blindTearRef} src="/blind-test.mp4" muted loop playsInline preload="auto" aria-hidden="true" disablePictureInPicture />
+                        <video className="keyvid" ref={(el) => { vidRefs.current[g.id] = el; }} src={VID_GAMES[g.id]} muted loop playsInline preload="auto" disablePictureInPicture />
+                        <video className="keyvid-tear" ref={(el) => { tearRefs.current[g.id] = el; }} src={VID_GAMES[g.id]} muted loop playsInline preload="auto" aria-hidden="true" disablePictureInPicture />
                         <div className="keyvid-fx" {...H(keyvidFx)} />
                       </>
                     )}
@@ -615,7 +624,6 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
               </div>
             </div>
             <button className="btn launch-full" onClick={launch}><span {...H(play)} /> LANCER LA PARTIE</button>
-            <div className="mc-note">Défauts calés — ajuste ou lance quand tu veux</div>
           </div>
         </aside>
       </div>
