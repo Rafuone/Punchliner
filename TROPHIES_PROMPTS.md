@@ -39,7 +39,6 @@ Object: [OBJET]
 | La Machine | `machine` | bleu acier | a single cog wheel with a tiny sound-wave arc |
 | Réflexe Éclair | `reflexe` | jaune | one bold lightning bolt |
 | Sans-Faute | `sansfaute` | vert | one thick check mark |
-| Le Puriste | `puriste` | blanc glacé | one brilliant-cut diamond |
 | Le Gros Move | `diamant` | bleu glacé | a vinyl record with a diamond gem as its center label |
 | Cavalier Seul | `solo` | ambre | a single downward spotlight beam cone |
 | Le Métronome | `metronome` | turquoise | one classic metronome, pendulum centered |
@@ -54,8 +53,8 @@ Object: [OBJET]
 |---|---|---|---|
 | La Mitraillette | `mitraillette` | rose fluo | a single graffiti spray can, nozzle up |
 | Feu de Paille | `feudepaille` | orange-rouge | one burning match, flame leaning into a wisp of smoke |
-| Le Braqueur | `braqueur` | anthracite/rouge | a single black bandit balaclava mask |
-| Le Kamikaze | `kamikaze` | rouge | one tumbling dice showing a single pip |
+| Les Impôts | `braqueur` | anthracite/rouge | a single black bandit balaclava mask (le fisc te braque) |
+| Le Poker | `kamikaze` | rouge | one tumbling dice showing a single pip |
 | Le Sans-Pitié | `sanspitie` | cramoisi | a clenched fist wearing a chunky gold ring |
 | L'Escroc | `escroc` | violet | a single ace playing card with a small hidden card behind it |
 | Le Rendement | `boulet` | gris fer | one iron ball-and-chain |

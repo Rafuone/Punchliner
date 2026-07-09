@@ -236,7 +236,7 @@
 .wz .keycard.sel .kcat {color:var(--fluo);}
 .wz .keycard .kname {font-family:var(--disp); font-weight:700; font-size:clamp(28px,2.8vw,40px); letter-spacing:-.015em; line-height:.92; text-transform:uppercase;}
 /* sous-texte : plus de troncature (le sous-titre restait coupé quand la carte était étroite) */
-.wz .keycard .kdesc {font-size:15px; line-height:1.45; color:var(--muted); margin-top:10px; text-wrap:pretty; max-width:34ch;}
+.wz .keycard .kdesc {font-size:16px; line-height:1.4; color:var(--muted); margin-top:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;} /* UNE seule ligne (jamais de pavé) + un poil plus grand ; textes tenus courts côté data */
 /* Badge "Bientôt" : point ROUGE + texte légèrement gris (lisible). */
 .wz .badge-soon {position:absolute; z-index:5; top:12px; right:12px;
   background:rgba(0,0,0,.72); border:1px solid var(--line3); border-radius:3px; padding:7px 11px;}

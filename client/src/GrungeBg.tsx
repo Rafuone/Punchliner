@@ -24,9 +24,13 @@ export default function GrungeBg() {
       // rayures claires (griffures xerox)
       for (let i = 0; i < 22; i++) { const x = Math.random() * W, y = Math.random() * H, len = 20 + Math.random() * 90, a = Math.random() * 0.6 - 0.3; ctx.strokeStyle = `rgba(255,255,255,${0.02 + Math.random() * 0.05})`; ctx.lineWidth = 0.5 + Math.random(); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); ctx.stroke(); }
     };
-    paint();
-    const onR = () => paint(); window.addEventListener('resize', onR);
-    return () => window.removeEventListener('resize', onR);
+    // Peinture LOURDE (~85k fillRect) → on la sort de la frame critique (montée / changement de phase) via rAF,
+    // et on COALESCE le resize (un drag envoie des dizaines d'events → au plus UNE peinture par frame). Sortie visuelle identique.
+    let raf = 0;
+    const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(paint); };
+    schedule();
+    window.addEventListener('resize', schedule);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', schedule); };
   }, []);
   return <canvas ref={ref} className="grungebg" aria-hidden="true" />;
 }

@@ -28,7 +28,8 @@ function top(list, val, min) {
 export const AWARDS = [
   { id: 'comeback', title: 'Comeback King', icon: 'up', weight: 10, pick(list, c) {
     if (c.N < 3) return null;
-    const cands = list.filter((p) => p.rank === 1 && p.worstRank >= Math.ceil(c.N * 0.7));
+    // vrai comeback = a fini 1er ET a VRAIMENT traîné au fond (plusieurs manches), pas juste un creux d'une manche
+    const cands = list.filter((p) => p.rank === 1 && p.worstRank >= Math.ceil(c.N * 0.7) && p.lowRounds >= Math.max(2, Math.ceil((c.total || 0) * 0.3)));
     if (!cands.length) return null;
     const p = rand(cands);
     return { playerId: p.id, desc: `Longtemps scotché au fond du classement, ${p.name} rafle tout sur la fin.` };
@@ -46,7 +47,9 @@ export const AWARDS = [
     return { playerId: s[0].id, desc: `Gagné sur le fil face à ${s[1].name} — ${c.fmt(s[0].score - s[1].score)} auditeurs d'écart.` };
   } },
   { id: 'mitraillette', title: 'La Mitraillette', icon: 'spray', weight: 7, pick(list, c) {
-    const r = top(list, (p) => p.att, Math.max(8, c.total + 3));
+    // seulement les vrais ARROSEURS (beaucoup de tentatives, PEU de trouvailles) — jamais le vainqueur qui tape juste
+    const sprayers = list.filter((p) => p.scored <= Math.ceil((c.total || 0) * 0.4));
+    const r = top(sprayers, (p) => p.att, Math.max(8, c.total + 3));
     if (!r) return null;
     return { playerId: r.player.id, desc: `${r.value} réponses balancées dans le tas. Au moins il aura essayé.` };
   } },
@@ -71,12 +74,7 @@ export const AWARDS = [
     if (!r) return null;
     return { playerId: r.player.id, desc: `${r.value} manches titre ET artiste. Le boulot bien fait.` };
   } },
-  { id: 'puriste', title: 'Le Puriste', icon: 'diamond', weight: 9, pick(list) {
-    const cands = list.filter((p) => p.scored >= 2 && p.perfect === p.scored);
-    if (!cands.length) return null;
-    const p = rand(cands);
-    return { playerId: p.id, desc: `Quand ${p.name} trouve, c'est toujours titre ET artiste. Jamais à moitié.` };
-  } },
+  // (« Le Puriste » retiré : faisait doublon avec « Sans-Faute » — les deux se basent sur les manches perfect titre+artiste)
   { id: 'diamant', title: 'Le Gros Move', icon: 'diamond', weight: 7, pick(list, c) {
     const r = top(list, (p) => p.best, 40000);
     if (!r) return null;
@@ -108,19 +106,20 @@ export const AWARDS = [
     const p = rand(cands);
     return { playerId: p.id, desc: `Démarrage poussif, finish canon. Il lui fallait juste chauffer.` };
   } },
-  { id: 'braqueur', title: 'Le Braqueur', icon: 'mask', weight: 7, pick(list) {
-    const cands = list.filter((p) => p.denial);
+  { id: 'braqueur', title: 'Les Impôts', icon: 'mask', weight: 7, pick(list) { // (id 'braqueur' conservé pour ne pas casser les déblocages déjà enregistrés)
+    const cands = list.filter((p) => p.denialGain > 0); // a RÉELLEMENT dépouillé (vol/dîme/musellement effectif), pas juste activé un pouvoir sans cible
     if (!cands.length) return null;
     const p = rand(cands);
-    return { playerId: p.id, desc: `A dépouillé ses adversaires sans le moindre scrupule.` };
+    return { playerId: p.id, desc: `A prélevé sa part sur le dos des autres. Personne n'échappe au fisc.` };
   } },
-  { id: 'kamikaze', title: 'Le Kamikaze', icon: 'dice', weight: 7, pick(list) {
+  { id: 'kamikaze', title: 'Le Poker', icon: 'dice', weight: 7, pick(list) { // (id 'kamikaze' conservé pour les déblocages déjà enregistrés)
     const cands = list.filter((p) => p.gamble);
     if (!cands.length) return null;
     const p = rand(cands);
     return { playerId: p.id, desc: `A tout misé sur un coup de poker. Faut avoir les nerfs.` };
   } },
   { id: 'sage', title: 'Le Sage', icon: 'feather', weight: 8, pick(list, c) {
+    if (c.mode === 'quiz' || c.mj) return null; // en Quiz/MJ les pouvoirs sont désactivés pour TOUS → « zéro pouvoir » n'a aucun sens
     const cands = list.filter((p) => p.powers === 0 && p.rank <= Math.ceil(c.N / 2) && p.score > 0);
     if (!cands.length || c.N < 2) return null;
     const p = rand(cands);
@@ -166,7 +165,7 @@ export const AWARDS = [
     return { playerId: p.id, desc: `${p.powers} pouvoirs claqués… pour finir bon dernier. La grosse lose.` };
   } },
   { id: 'radin', title: 'Le Radin', icon: 'skull', weight: 6, pick(list, c) {
-    if (c.N < 3) return null;
+    if (c.N < 3 || c.mode === 'quiz' || c.mj) return null; // Quiz/MJ : pouvoirs désactivés pour tous → pas de « radin »
     const cands = list.filter((p) => p.rank === c.N && p.powers === 0);
     if (!cands.length) return null;
     const p = rand(cands);
@@ -188,7 +187,7 @@ export const AWARDS = [
   { id: 'sanspitie', title: 'Le Sans-Pitié', icon: 'mask', weight: 7, pick(list, c) {
     if (c.N < 3) return null;
     const s = [...list].sort((a, b) => b.score - a.score);
-    if (s[0].rank !== 1 || !s[0].denial) return null;
+    if (s[0].rank !== 1 || !(s[0].denialGain > 0)) return null; // a gagné ET dépouillé pour de vrai
     return { playerId: s[0].id, desc: `Pas assez de gagner : il a fallu en plus dépouiller tout le monde.` };
   } },
   { id: 'champion', title: 'La Ceinture', icon: 'crown', weight: 2, pick(list) {
@@ -209,17 +208,22 @@ export function computeAwards(active, ctx, max = 3) {
     firsts: p.stat?.firsts || 0, best: p.stat?.best || 0, zeros: p.stat?.zeros || 0,
     powers: p.stat?.powers || 0, denial: !!p.stat?.denial, gamble: !!p.stat?.gamble,
     solo: p.stat?.solo || 0, firstHalf: p.stat?.firstHalf || 0, secondHalf: p.stat?.secondHalf || 0,
-    worstRank: p.stat?.worstRank || (i + 1),
+    worstRank: p.stat?.worstRank || (i + 1), lowRounds: p.stat?.lowRounds || 0, denialGain: p.stat?.denialGain || 0,
   }));
-  const c = { N: list.length, total: ctx.total || 0, mode: ctx.mode, fmt: ctx.fmt || ((n) => String(Math.round(n || 0))) };
+  const c = { N: list.length, total: ctx.total || 0, mode: ctx.mode, mj: !!ctx.mj, fmt: ctx.fmt || ((n) => String(Math.round(n || 0))) };
   const hits = [];
   for (const a of AWARDS) {
     let res = null;
     try { res = a.pick(list, c); } catch { res = null; }
     if (res && res.playerId) hits.push({ id: a.id, title: a.title, icon: a.icon, weight: a.weight, ...res });
   }
-  // tri par poids décroissant, jitteré (variété d'une partie à l'autre)
-  hits.sort((x, y) => (y.weight + Math.random() * 3) - (x.weight + Math.random() * 3));
+  // Sélection à VRAIE VARIÉTÉ : tirage aléatoire PONDÉRÉ par le poids (Efraimidis-Spirakis : clé = rand^(1/poids)).
+  // Un poids fort reste favorisé mais ne gagne plus systématiquement — un w=2 bat un w=10 ~17 % du temps.
+  // De plus, on DÉCOTE (×0.35) les trophées décernés à la partie PRÉCÉDENTE (ctx.recentIds) : l'assortiment
+  // tourne d'une partie à l'autre → on ne retombe pas toujours sur les mêmes, on sent qu'on peut en débloquer d'autres.
+  const recent = new Set(ctx.recentIds || []);
+  for (const h of hits) { const w = recent.has(h.id) ? h.weight * 0.35 : h.weight; h.k = Math.pow(Math.random(), 1 / Math.max(0.5, w)); }
+  hits.sort((x, y) => y.k - x.k);
   const out = [], usedAwards = new Set(), usedPlayers = new Set();
   // 1re passe : un trophée par joueur max (on varie les têtes)
   for (const h of hits) {

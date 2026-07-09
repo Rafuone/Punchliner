@@ -130,7 +130,7 @@ export type UnlockCtx = { won: boolean; rank: number; certifShort: string; award
 const PLATINE_PLUS = ['Platine', '2× Platine', '3× Platine', 'Diamant'];
 export const UNLOCKS: { id: string; objective: string; check: (c: UnlockCtx) => boolean }[] = [
   { id: 'caballerojeanjass', objective: 'Termine une partie en mode Quiz.', check: (c) => c.mode === 'quiz' },
-  { id: 'freezecorleone', objective: 'Gagne une partie en difficulté Puriste.', check: (c) => c.won && c.difficulty === 'puriste' },
+  { id: 'freezecorleone', objective: 'Termine une partie en difficulté Puriste.', check: (c) => c.difficulty === 'puriste' }, // pas de « gagner » : jeu multi, un seul gagne → on débloque à la PARTICIPATION
   { id: 'diams', objective: 'Finis sur le podium (1er/2ᵉ) d’une partie de 24 manches ou plus.', check: (c) => c.rank <= 2 && c.rounds >= 24 },
   { id: 'lino', objective: 'Décroche un Platine ou mieux en mode Buzzer.', check: (c) => c.mode === 'buzzer' && PLATINE_PLUS.includes(c.certifShort) },
   { id: 'disiz', objective: 'Décroche le trophée « Comeback King ».', check: (c) => c.awardIds.includes('comeback') },
@@ -287,7 +287,6 @@ export const AWARDS_INFO: AwardInfo[] = [
   { id: 'machine', title: 'La Machine', icon: 'gauge', blurb: 'Marque sur la grande majorité des manches.' },
   { id: 'reflexe', title: 'Réflexe Éclair', icon: 'bolt', blurb: 'Premier à trouver, encore et encore.' },
   { id: 'sansfaute', title: 'Sans-Faute', icon: 'check', blurb: 'Enchaîne les manches titre ET artiste.' },
-  { id: 'puriste', title: 'Le Puriste', icon: 'diamond', blurb: 'Ne trouve jamais à moitié : toujours titre ET artiste.' },
   { id: 'diamant', title: 'Le Gros Move', icon: 'diamond', blurb: 'Claque le plus gros score sur une seule manche.' },
   { id: 'solo', title: 'Cavalier Seul', icon: 'flag', blurb: 'Seul à reconnaître le son, plusieurs fois.' },
   { id: 'metronome', title: 'Le Métronome', icon: 'gauge', blurb: 'Marque à CHAQUE manche, aucune ratée.' },
@@ -298,8 +297,8 @@ export const AWARDS_INFO: AwardInfo[] = [
   // ---- les salés (on est là pour se chambrer) ----
   { id: 'mitraillette', title: 'La Mitraillette', icon: 'spray', blurb: 'Balance un max de réponses au petit bonheur.', salty: true },
   { id: 'feudepaille', title: 'Feu de Paille', icon: 'fire', blurb: 'Démarre en fusée… s\'éteint sur la fin.', salty: true },
-  { id: 'braqueur', title: 'Le Braqueur', icon: 'mask', blurb: 'Dépouille les autres avec un pouvoir de vol.', salty: true },
-  { id: 'kamikaze', title: 'Le Kamikaze', icon: 'dice', blurb: 'Mise tout sur un coup de poker.', salty: true },
+  { id: 'braqueur', title: 'Les Impôts', icon: 'mask', blurb: 'Prélève sa part sur le dos des autres (vol / dîme / sabotage).', salty: true },
+  { id: 'kamikaze', title: 'Le Poker', icon: 'dice', blurb: 'Mise tout sur un coup de poker.', salty: true },
   { id: 'sanspitie', title: 'Le Sans-Pitié', icon: 'mask', blurb: 'Gagne ET dépouille tout le monde au passage.', salty: true },
   { id: 'escroc', title: "L'Escroc", icon: 'dice', blurb: 'Gagne en n\'ayant trouvé presque aucune manche.', salty: true },
   { id: 'boulet', title: 'Le Rendement', icon: 'skull', blurb: 'Beaucoup de tentatives, presque rien à la clé.', salty: true },

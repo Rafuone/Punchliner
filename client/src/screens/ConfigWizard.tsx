@@ -11,11 +11,12 @@ type Props = { poolSize: number; roomCode: string; players: number; playerList?:
 
 /* ====== données (architecture 5 étapes) ====== */
 const GAMES = [
-  { id: 'blind', name: 'Blind Test', cat: 'Station · Live', family: 'multi', soon: false, desc: 'Tout le monde répond en même temps. Le plus rapide et juste rafle la mise.' },
-  { id: 'buzz', name: 'Buzzer', cat: 'Station · Duel', family: 'multi', soon: false, desc: 'Le premier qui buzze prend la main. Silence radio pour les autres.' },
-  { id: 'quiz', name: 'Quiz', cat: 'Station · Culture', family: 'multi', soon: false, desc: 'Blazes, années, groupes, villes, albums… la culture rap FR en QCM.' },
-  { id: 'rush', name: 'Cypher', cat: 'Station · Chrono', family: 'solo', soon: false, desc: 'Les sons s’enchaînent sans temps mort. Chaque bonne réponse rallonge le chrono — tiens le plus longtemps, décroche le record.' },
-  { id: 'adventure', name: 'Aventure', cat: 'Station · Campagne', family: 'solo', soon: true, desc: 'Un mode campagne solo, à débloquer étape par étape. Bientôt.' },
+  // desc = UNE ligne courte et explicite (les cartes sont sur une TV, vue de loin → pas de pavé de 3 lignes)
+  { id: 'blind', name: 'Blind Test', cat: 'Station · Live', family: 'multi', soon: false, desc: 'Tous ensemble, le plus rapide gagne.' },
+  { id: 'buzz', name: 'Buzzer', cat: 'Station · Duel', family: 'multi', soon: false, desc: 'Le premier qui buzze prend la main.' },
+  { id: 'quiz', name: 'Quiz', cat: 'Station · Culture', family: 'multi', soon: false, desc: 'Blazes, années, albums… en QCM.' },
+  { id: 'rush', name: 'Cypher', cat: 'Station · Chrono', family: 'solo', soon: false, desc: 'Enchaîne les sons, bats le record.' },
+  { id: 'adventure', name: 'Aventure', cat: 'Station · Campagne', family: 'solo', soon: true, desc: 'Campagne solo à débloquer.' },
 ];
 const ERAS = [
   { id: 'all', big: '∞', lab: 'Toutes', sub: 'époques' },
@@ -283,10 +284,13 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
       for (let i = 0; i < 40; i++) { const x = Math.random() * W, y = Math.random() * H * 0.6, len = 40 + Math.random() * 260; ctx.strokeStyle = `rgba(0,0,0,${0.04 + Math.random() * 0.08})`; ctx.lineWidth = 0.6 + Math.random() * 1.6; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (Math.random() * 4 - 2), y + len); ctx.stroke(); }
       for (let i = 0; i < 22; i++) { const x = Math.random() * W, y = Math.random() * H, len = 20 + Math.random() * 90, a = Math.random() * 0.6 - 0.3; ctx.strokeStyle = `rgba(255,255,255,${0.02 + Math.random() * 0.05})`; ctx.lineWidth = 0.5 + Math.random(); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); ctx.stroke(); }
     };
-    paint();
-    let ro: any = null; if ((window as any).ResizeObserver) { ro = new ResizeObserver(() => paint()); ro.observe(cv); }
-    const onR = () => paint(); window.addEventListener('resize', onR);
-    return () => { if (ro) ro.disconnect(); window.removeEventListener('resize', onR); };
+    // coalesce toutes les peintures lourdes via UNE rAF (annule-et-replanifie) → plus de double peinture au montage
+    // (ResizeObserver.observe() peint aussitôt) ni de repaint par event pendant un drag de resize. Sortie visuelle identique.
+    let raf = 0; const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(paint); };
+    schedule();
+    let ro: any = null; if ((window as any).ResizeObserver) { ro = new ResizeObserver(schedule); ro.observe(cv); }
+    window.addEventListener('resize', schedule);
+    return () => { cancelAnimationFrame(raf); if (ro) ro.disconnect(); window.removeEventListener('resize', schedule); };
   }, []);
   // audio-réactif : le glow du sélectionné suit le beat (basses) + l'égaliseur suit le spectre réel.
   const wzRef = useRef<HTMLDivElement | null>(null);

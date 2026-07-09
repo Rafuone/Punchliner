@@ -30,7 +30,7 @@ export const POWERS = {
   youssoupha: { name: 'Éternel Recommencement', type: 'momentum', base: 15000, per: 6000, cap: 30000 },
   sch:        { name: 'JVLIVS',                 type: 'wager',    mult: 1.8, penalty: 20000 },
   gims:       { name: 'Sapés comme jamais',     type: 'decay',    base: 33000, factor: 0.9 },
-  rohff:      { name: "Le Code de l'Honneur",   type: 'tax',      amount: 4500 }, // le padre prélève sa dîme sur TOUS
+  rohff:      { name: "Le Code de l'Honneur",   type: 'tax',      amount: 4200 }, // le padre prélève sa dîme sur TOUS (baissé 4500→4200 : bord haut ~27,7% → ~24% ; le tax est très sensible)
   kaaris:     { name: 'Or Noir',               type: 'wager',    mult: 1.85, penalty: 30000 },
   gazo:       { name: 'Drill',                  type: 'steal',    amount: 15000 },
   laylow:     { name: 'Trinity',                type: 'freeze',   self: 11000 },
@@ -40,7 +40,7 @@ export const POWERS = {
   fabe:       { name: 'Le Fond et la Forme',    type: 'veteran',  rounds: 3, floor: 14000 },
   medine:     { name: "Don't Panik",            type: 'safety',   floor: 20000, self: 10000 },
   lafouine:   { name: 'Capitale du Crime',      type: 'sabotage', grab: 8000 },
-  jewelusain: { name: 'Bruce Lee',             type: 'sustain',  amount: 11000, rounds: 2 }, // le conteur : ça résonne (auditeurs cette manche + la suivante) — boosté
+  jewelusain: { name: 'Bruce Lee',             type: 'sustain',  amount: 10000, rounds: 2 }, // ça résonne (auditeurs cette manche + la suivante) — baissé 11000→10000 : bord haut ~27,8% → ~23%
   // ===== Génies incompris — rappeurs-mèmes ratés : VOLONTAIREMENT les plus faibles (gagnable mais dur).
   //   Bishok = exception "rigolote" (hint, correct). Les 3 autres = EV basse assumée. =====
   bishok:     { name: 'Complotisme',              type: 'hint',       self: 11000 },   // décrypte le "message caché"

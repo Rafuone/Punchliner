@@ -1232,7 +1232,7 @@ button, input { font-family: inherit; }
   46% { transform: translate(-5px,0); text-shadow: 3px 0 #ff2b5e, -3px 0 #29eaff; clip-path: inset(16% 0 58% 0); }
   49% { transform: translate(6px,0); text-shadow: -3px 0 #ff2b5e, 3px 0 #29eaff; clip-path: inset(62% 0 12% 0); }
   52% { transform: translate(-2px,0); clip-path: inset(38% 0 40% 0); }
-  90% { transform: translate(0,0); }
+  54%, 90% { transform: translate(0,0); text-shadow: -2px 0 rgba(255,43,94,.55), 2px 0 rgba(41,234,255,.5); clip-path: inset(0 0 0 0); } /* la salve se REFERME ici → texte PLEINEMENT visible ; avant, le sliver du 52% restait figé (steps(1)) jusqu'à 90% = texte "disparu" ~0,9 s */
   92% { transform: translate(-4px,0); clip-path: inset(46% 0 34% 0); }
   95% { transform: translate(3px,0); clip-path: inset(0 0 0 0); } }
 @media (prefers-reduced-motion: reduce) { .uk[data-phase="alarm"] .qm { animation: qmslam .45s ease .3s both; } }
@@ -1274,12 +1274,12 @@ button, input { font-family: inherit; }
 .uk .stage-uk .tvros-hero { max-width: 1180px; width: 100%; margin: 0 auto; justify-content: center; align-items: center; gap: clamp(24px,3vw,58px); }
 .uk .stage-uk .tvros-fig { max-height: min(78vh,760px); transform: translateY(-3%); }
 .uk .stage-uk .tvros-side { flex: 0 1 600px; max-width: 600px; } /* + large : les tags tiennent sur une ligne (plus de ligne perdue) */
-.uk .stage-uk .tvros-name { font-size: clamp(40px, 4.4vw, 68px); } /* nom GROS (DA respectée) — sinon il hérite d'une taille minuscule */
+.uk .stage-uk .tvros-name { font-size: clamp(36px, 3.9vw, 60px); white-space: nowrap; } /* nom sur UNE ligne (jamais « Freeze / Corleone ») + ~12% plus petit ; il peut déborder un peu à droite — la zone stats/tags garde SA largeur (600px) */
 .uk .stage-uk .tvros-tags { flex-wrap: nowrap; } /* la ligne de tags prend toute la largeur au lieu de wrapper */
 .uk .stage-uk .tvros-tags span { white-space: nowrap; }
-.uk .stage-uk .tvros-statpow { gap: 14px; }
-.uk .stage-uk .tvros-block, .uk .stage-uk .tvros-obj { min-height: 0; padding: 16px 20px; }
-.uk .stage-uk .tvros-pow { padding: 22px 24px; } /* + de padding pour le pouvoir signature (moins compressé) */
+.uk .stage-uk .tvros-statpow { gap: 5px; } /* les deux blocs rapprochés (~-9px) */
+.uk .stage-uk .tvros-block, .uk .stage-uk .tvros-obj { min-height: 0; padding: 18px 22px; } /* un tout petit peu plus grands */
+.uk .stage-uk .tvros-pow { padding: 24px 26px; } /* + de padding pour le pouvoir signature (moins compressé) */
 /* stats un peu plus petites dans l'arrivée (ça serrait dans le bloc) */
 .uk .stage-uk .tvros-srow { gap: 14px; margin-bottom: 11px; }
 .uk .stage-uk .tvros-slab { flex-basis: 88px; font-size: 15px; }

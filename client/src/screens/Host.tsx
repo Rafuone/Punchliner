@@ -146,14 +146,19 @@ export default function Host() {
   const [deezerOn, setDeezerOn] = useState(true);          // source Deezer activée (repli)
   const spotifyOnRef = useRef(true);
   const deezerOnRef = useRef(true);
+  const usingSpotifyRef = useRef(false); // source RÉELLEMENT en cours pour la manche (≠ capacité) → la reprise après buzz vise la bonne
+  const audioReadyRef = useRef(false);   // l'autoplay a-t-il été débloqué par un geste ? false au reload à froid (TV rechargée en pleine partie)
+  const [audioLocked, setAudioLocked] = useState(false); // reload en pleine partie sans geste → autoplay bloqué → on affiche « cliquer pour le son »
 
   // Lecture d'une manche : Spotify si activé+prêt (extrait au milieu contrôlé), sinon Deezer.
   function playRound(d: any) {
     const useSp = spotifyOnRef.current && spReadyRef.current && d?.sp?.title;
     if (useSp) {
+      usingSpotifyRef.current = true;
       wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} // on laisse la main à Spotify
-      spotifyPlay(d.sp.title, d.sp.artist, (d.startAt || 0) > 0).then((ok) => { if (!ok && deezerOnRef.current) playPreview(d.preview, d.startAt); }); // introuvable sur Spotify → Deezer (si activé)
-    } else playPreview(d.preview, d.startAt);
+      // introuvable sur Spotify → on retombe TOUJOURS sur Deezer (au moins une source doit sonner, même si Deezer est « éteint » côté préférence : mieux vaut du son que le silence)
+      spotifyPlay(d.sp.title, d.sp.artist, (d.startAt || 0) > 0).then((ok) => { if (!ok) { usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); } });
+    } else { usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); }
   }
   // Bascule d'une source (au moins UNE reste toujours active → jamais de silence).
   function toggleSpotify() {
@@ -241,10 +246,10 @@ export default function Host() {
     socket.on('rush:end', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); clearTimeout(audioRetryRef.current); setRushEnd(d); setPhase('rushend'); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
     // buzz : le son SE COUPE (sinon on buzze, on écoute tranquille, puis on répond = trop facile)
-    socket.on('buzz:winner', (d: any) => { wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 8000 }); setNow(Date.now()); });
+    socket.on('buzz:winner', (d: any) => { wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 8000 }); setNow(Date.now()); }); // clearTimeout : sinon un retry de lecture en attente relancerait le son PENDANT que le buzzeur répond
     // le buzzeur a raté → le buzzer rouvre et le son REPREND pour les autres (SEULEMENT la source active de la manche,
     // sinon on relancerait une piste Spotify périmée EN PLUS de Deezer = double son)
-    socket.on('buzz:open', () => { wantAudioRef.current = true; if (spotifyOnRef.current && spReadyRef.current) spotifyTogglePlay(); else try { audioRef.current?.play().catch(() => {}); } catch {} setBuzzWinner(null); });
+    socket.on('buzz:open', () => { wantAudioRef.current = true; if (usingSpotifyRef.current) spotifyTogglePlay(); else try { audioRef.current?.play().catch(() => {}); } catch {} setBuzzWinner(null); }); // reprend la source RÉELLE de la manche (pas la simple capacité Spotify) → plus de piste périmée / double son sur une manche tombée sur Deezer
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // le son continue de tourner ; plus de "scratch" (jugé désagréable)
     socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(computeUnlock(d)); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées
     socket.on('power:used', (d: any) => { setPowerFeed((f) => [...f.slice(-4), { ...d, key: powerKeyRef.current++ }]); sfx('scratch'); });
@@ -291,12 +296,13 @@ export default function Host() {
     const musicPhase = (phase === 'playing' || phase === 'reveal' || phase === 'battle-play') && round.mode !== 'quiz';
     if (!musicPhase) return;
     const kick = () => { const a = audioRef.current; if (a && wantAudioRef.current && a.paused && !a.ended && previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); };
+    const onGesture = () => { audioReadyRef.current = true; setAudioLocked(false); kick(); }; // tout geste débloque l'autoplay + relance le son
     const onVis = () => { if (document.visibilityState === 'visible') kick(); };
-    window.addEventListener('pointerdown', kick);
-    window.addEventListener('keydown', kick);
+    window.addEventListener('pointerdown', onGesture);
+    window.addEventListener('keydown', onGesture);
     document.addEventListener('visibilitychange', onVis);
     const wd = setInterval(kick, 1500); // filet de sécurité ; l'essentiel se répare via onPause (instantané)
-    return () => { window.removeEventListener('pointerdown', kick); window.removeEventListener('keydown', kick); document.removeEventListener('visibilitychange', onVis); clearInterval(wd); };
+    return () => { window.removeEventListener('pointerdown', onGesture); window.removeEventListener('keydown', onGesture); document.removeEventListener('visibilitychange', onVis); clearInterval(wd); };
   }, [phase, round.mode]);
   useEffect(() => {
     fetch('/api/net').then((r) => r.json()).then(({ ip }) => {
@@ -330,6 +336,9 @@ export default function Host() {
       const NB = 7, USABLE = 96; // on ignore le très haut du spectre (souvent muet)
       const loop = () => {
         const o = acRef.current; if (!o) return;
+        // rien ne joue (musique du menu en pause pendant toute une partie) → on NE calcule PAS la FFT (l'EQ/oscillo
+        // qui la consomment sont démontés en jeu). Économise du CPU/batterie sur la TV, le loop se réveille à la reprise.
+        if (menuAudioRef.current?.paused) { requestAnimationFrame(loop); return; }
         o.an.getByteFrequencyData(o.data);
         o.an.getByteTimeDomainData(o.wave); // forme d'onde brute pour l'oscilloscope
         // "beat" : énergie des basses (bins 1..7)
@@ -431,20 +440,20 @@ export default function Host() {
     a.volume = 1;
     const p = a.play();
     if (p && p.then) {
-      p.then(() => { try { if (startAt && seekedUrlRef.current !== url) { if (Math.abs(a.currentTime - startAt / 1000) > 1) a.currentTime = startAt / 1000; seekedUrlRef.current = url; } } catch {} }) // seek 1x par extrait (pas à la reprise → sinon on rejouerait ce qui a déjà tourné)
-       .catch(() => { if (wantAudioRef.current && attempt < 6) audioRetryRef.current = setTimeout(() => playPreview(url, startAt, attempt + 1), 300); }); // le watchdog prend le relais ensuite
+      p.then(() => { audioReadyRef.current = true; setAudioLocked(false); try { if (startAt && seekedUrlRef.current !== url) { if (Math.abs(a.currentTime - startAt / 1000) > 1) a.currentTime = startAt / 1000; seekedUrlRef.current = url; } } catch {} }) // le son PART → autoplay ok, on retire l'invite ; seek 1x par extrait
+       .catch(() => { if (!audioReadyRef.current) setAudioLocked(true); if (wantAudioRef.current && attempt < 6) audioRetryRef.current = setTimeout(() => playPreview(url, startAt, attempt + 1), 300); }); // bloqué SANS geste (reload à froid) → invite ; sinon retry (watchdog)
     }
   }
   function start() {
     const a = audioRef.current;
-    if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); }
+    if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); audioReadyRef.current = true; } // ce clic « Lancer » débloque l'autoplay pour toute la partie
     sfx('launch');
     socket.emit('host:start', { rounds: settings.rounds, difficulty: settings.difficulty, mode: settings.mode, mj: settings.mj, rebalance: settings.rebalance }, (res: any) => res?.error && setError(res.error));
   }
   function startWizard(s: { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string; mjId?: string; era?: string; theme?: string; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean }) {
     lastWizRef.current = s; // mémorise pour un éventuel « Rejouer » (Cypher notamment)
     const a = audioRef.current;
-    if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); }
+    if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); audioReadyRef.current = true; } // ce clic « Lancer » débloque l'autoplay pour toute la partie
     sfx('launch');
     socket.emit('host:start', s, (res: any) => res?.error && setError(res.error));
   }
@@ -535,6 +544,12 @@ export default function Host() {
           );
         })}
       </div>
+    )}
+    {audioLocked && (
+      <button className="btn" onClick={() => { audioReadyRef.current = true; setAudioLocked(false); wantAudioRef.current = true; if (usingSpotifyRef.current) { try { spotifyTogglePlay(); } catch {} } else if (previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); }}
+        style={{ position: 'fixed', zIndex: 400, left: '50%', bottom: 'clamp(24px,5vh,56px)', transform: 'translateX(-50%)', padding: '16px 34px', borderRadius: 999, border: '2px solid var(--fluo)', background: 'rgba(10,11,14,.94)', color: 'var(--fluo)', fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 'clamp(20px,2.4vw,30px)', letterSpacing: '.04em', cursor: 'pointer', boxShadow: '0 14px 48px rgba(0,0,0,.7)' }}>
+        🔊 Cliquer pour lancer le son
+      </button>
     )}
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
       <div className={`topbar${['prep', 'countdown', 'playing', 'reveal', 'final', 'rushend'].includes(phase) ? ' gamebar' : ''}`}>

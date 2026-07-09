@@ -15,7 +15,7 @@ import { avatarById, initials, bioOf, EPITHETS, CATEGORY_COLORS, unlockObjective
 const UNLOCK_SONGS: Record<string, { title: string; artist: string; local?: string; startAt?: number }> = {
   disiz: { title: 'Toussa Toussa', artist: 'Disiz', local: '/music/disiz-toussa-toussa.mp3' },
   caballerojeanjass: { title: 'Zushileaks', artist: 'Caballero & JeanJass', local: '/music/zushileaks-cjj.mp3', startAt: 0.35 },
-  freezecorleone: { title: 'Shavkat', artist: 'Freeze Corleone' },
+  freezecorleone: { title: 'Shavkat', artist: 'Freeze Corleone', startAt: 12.5 }, // exception : l'extrait Deezer de Shavkat démarre sur l'intro atmosphérique (~12 s molles) → on saute au drop (le beat plein rentre à ~12,5 s)
   diams: { title: 'La Boulette', artist: "Diam's" },
   lino: { title: 'Suicide Commercial', artist: 'Lino' },
 };
