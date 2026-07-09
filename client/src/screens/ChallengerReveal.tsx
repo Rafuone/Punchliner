@@ -6,15 +6,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { avatarById, initials, bioOf, EPITHETS, CATEGORY_COLORS, unlockObjective } from '../data';
 
-// Le morceau (mp3 local) qui tombe quand le rappeur débarque — un par challenger. Même modèle que Disiz :
-// déposer le fichier dans client/public/music/ sous ce nom exact. Si le fichier manque, l'arrivée reste
-// visuelle (seul le BOOM 808 joue) → pas de crash. zushileaks-cjj.mp3 est déjà présent.
-const UNLOCK_TRACKS: Record<string, string> = {
-  disiz: '/music/disiz-toussa-toussa.mp3',            // « Toussa Toussa »
-  caballerojeanjass: '/music/zushileaks-cjj.mp3',     // « Zushileaks » (fichier déjà présent)
-  freezecorleone: '/music/freeze-shavkat.mp3',        // « Shavkat » — mp3 à déposer
-  diams: '/music/diams-la-boulette.mp3',              // « La Boulette » — mp3 à déposer
-  lino: '/music/lino-suicide-commercial.mp3',         // « Suicide Commercial » — mp3 à déposer
+// Le morceau qui tombe quand le rappeur débarque — un par challenger. Résolu à la volée via Deezer
+// (/api/unlock-preview → extrait 30 s proxifié) : AUCUN mp3 à fournir. Un mp3 `local` reste prioritaire s'il
+// existe (ex. Disiz déjà rapatrié). Si rien ne se résout, l'arrivée reste visuelle (seul le 808 joue).
+const UNLOCK_SONGS: Record<string, { title: string; artist: string; local?: string }> = {
+  disiz: { title: 'Toussa Toussa', artist: 'Disiz', local: '/music/disiz-toussa-toussa.mp3' },
+  caballerojeanjass: { title: 'Zushileaks', artist: 'Caballero & JeanJass', local: '/music/zushileaks-cjj.mp3' },
+  freezecorleone: { title: 'Shavkat', artist: 'Freeze Corleone' },
+  diams: { title: 'La Boulette', artist: "Diam's" },
+  lino: { title: 'Suicide Commercial', artist: 'Lino' },
 };
 
 /* ---- Web Audio (charge + BOOM 808 + repli sirène) ---- */
@@ -50,9 +50,14 @@ export default function ChallengerReveal({ charId, onClose }: { charId: string; 
     T(4500, () => { setPhase('reveal'); if (c) impact(c, c.currentTime + .02); startDrop(); fireGlitch(); });
     T(6100, () => setShowClose(true));
 
-    function startDrop() {
-      const track = UNLOCK_TRACKS[charId]; if (!track) return;
-      const d = new Audio(track); dropRef.current = d; d.volume = 0;
+    async function startDrop() {
+      const song = UNLOCK_SONGS[charId]; if (!song) return;
+      let url = song.local || '';
+      if (!url) { // pas de mp3 local → on demande l'extrait Deezer au serveur (title + artist)
+        try { const r = await fetch(`/api/unlock-preview?title=${encodeURIComponent(song.title)}&artist=${encodeURIComponent(song.artist)}`); url = (await r.json())?.preview || ''; } catch { /* injouable */ }
+      }
+      if (!url) return; // rien à jouer → seul le 808 assure l'impact
+      const d = new Audio(url); dropRef.current = d; d.volume = 0;
       d.play().then(() => { let v = 0; const f = window.setInterval(() => { v = Math.min(.85, v + .1); d.volume = v; if (v >= .85) window.clearInterval(f); }, 50); }).catch(() => {});
     }
     function fireGlitch() {

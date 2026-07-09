@@ -1455,6 +1455,21 @@ app.get('/api/dev/room', (_req, res) => {
   res.json({ code: room?.code || null });
 });
 app.get('/api/pool', (_req, res) => res.json(POOL.map((t) => ({ id: t.id, artist: t.artist, title: t.title, rank: t.rank })).sort((a, b) => b.rank - a.rank)));
+// Morceau de DÉBLOCAGE d'un challenger : résolu à la volée via Deezer (title+artist) → extrait 30 s proxifié.
+// L'arrivée épique (ChallengerReveal) lit /api/unlock-preview?... et joue l'URL → plus besoin de mp3 locaux.
+const unlockCache = new Map(); // "title|artist" -> preview url (ou '' si injouable)
+app.get('/api/unlock-preview', async (req, res) => {
+  const title = String(req.query.title || '').slice(0, 80), artist = String(req.query.artist || '').slice(0, 80);
+  if (!title || !artist) return res.json({ preview: '' });
+  const key = title + '|' + artist;
+  if (unlockCache.has(key)) return res.json({ preview: unlockCache.get(key) });
+  try {
+    const t = await resolveTrack({ title, artist });
+    if (t) { await cacheTrack(t); unlockCache.set(key, t.preview); return res.json({ preview: t.preview }); }
+  } catch { /* injouable */ }
+  unlockCache.set(key, '');
+  res.json({ preview: '' });
+});
 // Test uniquement : révèle la réponse de la manche en cours (pour scripter des réponses correctes dans test-games.mjs).
 app.get('/api/dev/answer', (req, res) => {
   const room = rooms.get(String(req.query.code || '').toUpperCase().trim());
