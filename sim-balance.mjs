@@ -105,7 +105,7 @@ function playGame(avatars, rounds, prof) {
       else if (pts > 0 && t === 'combo') { const mult = Math.min(p.pw.cap || 2.2, (p.pw.base || 1.3) + p.streak * (p.pw.per || 0.3)); pts = Math.round(pts * mult); }
       else if (t === 'wager') pts = p.found ? Math.round(pts * p.pw.mult) : -p.pw.penalty;
       else if (pts > 0 && t === 'bonus') { pts += p.pw.amount; if (p.pw.refuel) p.charges = Math.min(5, p.charges + 1); }
-      else if (pts > 0 && t === 'momentum') pts += p.pw.base + p.streak * p.pw.per;
+      else if (pts > 0 && t === 'momentum') pts += Math.min(p.pw.cap || 1e9, p.pw.base + p.streak * p.pw.per);
       else if (pts > 0 && t === 'decay') { pts += Math.round(p.pw.base * Math.pow(p.pw.factor || 0.75, p.decayUses)); p.decayUses++; }
       else if (pts > 0 && t === 'firstblood') { pts += (p.pw.base || 0); if (fastest && fastest.id === p.id) pts += (p.pw.first || 0); }
       if (muted.has(p.id)) pts = 0;

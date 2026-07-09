@@ -20,14 +20,14 @@ export const POWERS = {
   pnl:        { name: 'Onizuka',                type: 'double',   mult: 1.7 },
   damso:      { name: 'Le Vice',                type: 'firstblood', base: 15000, first: 35000 },
   nekfeu:     { name: 'Feu',                    type: 'double',   mult: 1.7 },
-  jul:        { name: 'La Machine',             type: 'momentum', base: 13000, per: 6000 },
-  ninho:      { name: 'Certifié Diamant',       type: 'combo',    base: 1.3, per: 0.3, cap: 2.3 }, // enchaîne les certifs : ×mult qui grossit avec la série
+  jul:        { name: 'La Machine',             type: 'momentum', base: 15000, per: 6000, cap: 30000 }, // force d'origine mais PLAFONNÉE : sans cap, s'emballait à 45 %+ en facile
+  ninho:      { name: 'Certifié Diamant',       type: 'combo',    base: 1.3, per: 0.25, cap: 1.9 }, // enchaîne les certifs : ×mult qui grossit avec la série
   orelsan:    { name: 'Basique',                type: 'comeback', factor: 0.55, cap: 32000 },
-  alphawann:  { name: "Une Main Lave l'Autre",  type: 'ace',      mult: 1.4 },
+  alphawann:  { name: "Une Main Lave l'Autre",  type: 'ace',      mult: 1.3 },
   // ===== A — très forts =====
   oxmo:       { name: 'Mines de Cristal',       type: 'hint',     self: 11000 },
   kery:       { name: 'Banlieusards',           type: 'comeback', factor: 0.55, cap: 33000 },
-  youssoupha: { name: 'Éternel Recommencement', type: 'momentum', base: 15000, per: 6000 },
+  youssoupha: { name: 'Éternel Recommencement', type: 'momentum', base: 15000, per: 6000, cap: 30000 },
   sch:        { name: 'JVLIVS',                 type: 'wager',    mult: 1.8, penalty: 20000 },
   gims:       { name: 'Sapés comme jamais',     type: 'decay',    base: 33000, factor: 0.9 },
   rohff:      { name: "Le Code de l'Honneur",   type: 'tax',      amount: 4500 }, // le padre prélève sa dîme sur TOUS
@@ -35,9 +35,9 @@ export const POWERS = {
   gazo:       { name: 'Drill',                  type: 'steal',    amount: 15000 },
   laylow:     { name: 'Trinity',                type: 'freeze',   self: 11000 },
   vald:       { name: 'NQNT',                   type: 'jam',      ms: 4500, self: 16000 },
-  plk:        { name: 'Polak',                  type: 'bonus',    amount: 14000, refuel: true },
+  plk:        { name: 'Polak',                  type: 'bonus',    amount: 12500, refuel: true },
   // ===== B — solides / montants =====
-  fabe:       { name: 'Le Fond et la Forme',    type: 'veteran',  rounds: 3, floor: 16000 },
+  fabe:       { name: 'Le Fond et la Forme',    type: 'veteran',  rounds: 3, floor: 14000 },
   medine:     { name: "Don't Panik",            type: 'safety',   floor: 20000, self: 10000 },
   lafouine:   { name: 'Capitale du Crime',      type: 'sabotage', grab: 8000 },
   jewelusain: { name: 'Bruce Lee',             type: 'sustain',  amount: 11000, rounds: 2 }, // le conteur : ça résonne (auditeurs cette manche + la suivante) — boosté
@@ -57,7 +57,7 @@ export const POWERS = {
   // ===== Déblocables (calibrer avec sim-balance.mjs comme le reste) =====
   freezecorleone: { name: 'Freeze Raël',      type: 'wager',    mult: 1.8, penalty: 20000 }, // propos problématiques : ×2 ou cancel
   lino:           { name: 'Requiem',          type: 'sabotage', targets: 1, grab: 6000 },     // muselle le n°1 ET lui rafle une part (le requiem)
-  diams:          { name: 'Jeune Demoiselle', type: 'momentum', base: 13000, per: 6000 },     // carton mainstream qui s'emballe
+  diams:          { name: 'Jeune Demoiselle', type: 'momentum', base: 15000, per: 6000, cap: 30000 }, // carton mainstream qui s'emballe (PLAFONNÉ)
   disiz:          { name: "J'pète les plombs",type: 'comeback', factor: 0.5, cap: 32000 },    // il pète les plombs et remonte
   caballerojeanjass:{ name: 'Double Hélice',  type: 'double',   mult: 1.6 },                  // duo : prochaine bonne réponse ×2
 };
