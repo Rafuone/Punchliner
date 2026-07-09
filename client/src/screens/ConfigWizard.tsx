@@ -182,7 +182,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const [rushPlayerId, setRushPlayerId] = useState('');  // Survivor : le joueur désigné (solo)
 
   // Le Maître du jeu ne s'applique qu'au Blind Test : Buzzer = 100% auto, Quiz/Survivor = objectifs.
-  const mjAllowed = game === 'blind';
+  const mjAllowed = false; // Maître du jeu PAS ENCORE PRÊT → désactivé partout (badge « Bientôt »). À réactiver quand le mode sera fini.
   const isQuiz = game === 'quiz', isRush = game === 'rush';
   const powersMode = game === 'blind' || game === 'buzz'; // seuls modes à pouvoirs (jauge de rééquilibrage utile)
   const showRebalance = powersMode && orch !== 'mj';       // jauge cachée en Quiz/Survivor (pas de pouvoirs) et en MJ (pouvoirs off)
@@ -202,7 +202,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     isRush
       ? { step: 3, k: 'Chrono', v: rushStartSec + ' s' }
       : { step: 3, k: isQuiz ? 'Questions' : 'Format', v: rounds === 'inf' ? 'Sans fin' : rounds + (isQuiz ? ' questions' : ' manches') },
-    { step: 4, k: isRush ? 'Le joueur' : 'Réglages', v: isRush ? (playerList.find((p) => p.id === rushPlayerId)?.name || 'À choisir') : showRebalance ? (ORCHESTRATION.find((o) => o.key === orch)!.name + ' · ' + REBALANCE.find((r) => r.key === rebalance)!.name) : (orch === 'mj' && mjAllowed ? 'Maître du jeu' : 'Automatique') },
+    ...(isRush ? [] : [{ step: 4, k: 'Réglages', v: showRebalance ? (ORCHESTRATION.find((o) => o.key === orch)!.name + ' · ' + REBALANCE.find((r) => r.key === rebalance)!.name) : (orch === 'mj' && mjAllowed ? 'Maître du jeu' : 'Automatique') }]),
   ];
   const visibleSteps = rows.map((r) => r.step);       // étapes réellement présentes pour ce mode
   const stepPos = Math.max(0, visibleSteps.indexOf(step)); // position visible (0-based) de l'étape courante
@@ -594,8 +594,8 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                   <div className="opt-stack">{ORCHESTRATION.map((o) => {
                     const locked = o.key === 'mj' && !mjAllowed;
                     return (
-                      <button key={o.key} className={`opt ${orch === o.key ? 'sel' : ''}`} disabled={locked} style={locked ? { opacity: .4, cursor: 'not-allowed' } : undefined} onClick={() => !locked && setOrch(o.key)}>
-                        <span className="ol"><b>{o.name}</b><small>{locked ? 'Uniquement en Blind Test — le Buzzer se note tout seul.' : o.desc}</small></span>
+                      <button key={o.key} className={`opt ${orch === o.key ? 'sel' : ''}`} disabled={locked} style={locked ? { opacity: .5, cursor: 'not-allowed' } : undefined} onClick={() => !locked && setOrch(o.key)}>
+                        <span className="ol"><b>{o.name}{locked && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, letterSpacing: '.12em', color: 'var(--muted2)', border: '1px solid var(--line3)', borderRadius: 3, padding: '2px 6px', textTransform: 'uppercase', verticalAlign: 'middle' }}>Bientôt</span>}</b><small>{locked ? 'Mode en préparation — pas encore jouable.' : o.desc}</small></span>
                       </button>
                     );
                   })}</div>
