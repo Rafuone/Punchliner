@@ -351,18 +351,29 @@ function poolForTier(tier) { return tierSlice(livePool(), tier); } // compat (Cy
 const ERA_WEIGHT = { '90': 0.19, '00': 0.22, '10': 0.26, '20': 0.28, 'x': 0.12 }; // décennies ~égales, léger surpoids récent ; 'x' = année inconnue (~9% du pool, à ne pas exclure)
 function eraBucket(t) { const y = t.year || 0; return !y ? 'x' : y <= 1999 ? '90' : y <= 2009 ? '00' : y <= 2019 ? '10' : '20'; }
 function shuffleArr(a) { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; }
+// Interleaving par « déficit » : à chaque tirage on prend la décennie la plus EN RETARD sur sa cible. Avantage
+// clé : TOUT PRÉFIXE de la sortie respecte déjà la cible → marche pour une partie de N manches (blind test /
+// buzzer) ET pour un FLUX potentiellement infini (Cypher, qui enchaîne et peut s'arrêter à tout moment).
+// Plafonné par la dispo : quand une décennie rare (90s) s'épuise, les autres complètent proprement.
 function sampleBalancedByEra(src, n) {
   const g = { '90': [], '00': [], '10': [], '20': [], 'x': [] };
   for (const t of src) g[eraBucket(t)].push(t);
   for (const k in g) g[k] = shuffleArr(g[k]);
-  const totW = Object.values(ERA_WEIGHT).reduce((a, b) => a + b, 0);
-  const out = [], used = new Set();
-  for (const k of Object.keys(ERA_WEIGHT)) {              // quota par décennie, PLAFONNÉ par la dispo réelle (90s est rare)
-    const q = Math.min(g[k].length, Math.round((n * ERA_WEIGHT[k]) / totW));
-    for (let i = 0; i < q && out.length < n; i++) { out.push(g[k][i]); used.add(g[k][i]); }
+  const keys = Object.keys(ERA_WEIGHT);
+  const totW = keys.reduce((s, k) => s + ERA_WEIGHT[k], 0);
+  const ptr = {}, cnt = {}; for (const k of keys) { ptr[k] = 0; cnt[k] = 0; }
+  const take = Math.min(n, src.length), out = [];
+  while (out.length < take) {
+    let best = null, bestDef = -Infinity;
+    for (const k of keys) {
+      if (ptr[k] >= g[k].length) continue;                            // décennie épuisée
+      const def = (out.length + 1) * (ERA_WEIGHT[k] / totW) - cnt[k];  // le plus sous sa cible l'emporte
+      if (def > bestDef) { bestDef = def; best = k; }
+    }
+    if (!best) break;
+    out.push(g[best][ptr[best]++]); cnt[best]++;
   }
-  if (out.length < n) for (const t of shuffleArr(src)) { if (out.length >= n) break; if (!used.has(t)) { out.push(t); used.add(t); } } // compléter (décennies maigres + années inconnues)
-  return shuffleArr(out).slice(0, n);
+  return out;
 }
 // Tire n morceaux : ÉPOQUE + THÈME → DIFFICULTÉ → aléatoire. Repli PROGRESSIF si le combo est trop restrictif
 // (on lâche d'abord la difficulté, puis époque/thème) → le jeu reste TOUJOURS jouable, jamais 0 morceau.

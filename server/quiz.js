@@ -51,7 +51,18 @@ export function pickQuiz(n, difficulty = 'normal', usedSet = null, opts = {}) {
   const used = usedSet || new Set();
   let avail = pool.filter((q) => !used.has(q.id));
   if (avail.length < n) { for (const q of pool) used.delete(q.id); avail = [...pool]; } // épuisé → on recycle ce pool
-  const picks = shuffle(avail).slice(0, Math.min(n, avail.length));
+  // RÉPARTITION : on évite qu'UNE catégorie (Culture/Année sont énormes) monopolise la partie → variété des types
+  // de questions. Cap ~30 % de la partie par catégorie (min 2), puis complétion sans cap si trop peu de catégories.
+  const cap = Math.max(2, Math.ceil(n * 0.30));
+  const shuffled = shuffle(avail);
+  const picks = [], catCount = {}, inPicks = new Set();
+  for (const q of shuffled) {
+    if (picks.length >= n) break;
+    const c = q.cat || '?';
+    if ((catCount[c] || 0) >= cap) continue; // catégorie déjà bien servie → on passe
+    picks.push(q); inPicks.add(q.id); catCount[c] = (catCount[c] || 0) + 1;
+  }
+  if (picks.length < Math.min(n, avail.length)) for (const q of shuffled) { if (picks.length >= n) break; if (!inPicks.has(q.id)) { picks.push(q); inPicks.add(q.id); } } // peu de catégories dispo → on complète
   for (const q of picks) used.add(q.id);
   return picks;
 }
