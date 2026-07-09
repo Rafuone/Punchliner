@@ -6,7 +6,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { avatarById, initials, bioOf, EPITHETS, CATEGORY_COLORS, unlockObjective } from '../data';
 
-const UNLOCK_TRACKS: Record<string, string> = { disiz: '/music/disiz-toussa-toussa.mp3' };
+// Le morceau (mp3 local) qui tombe quand le rappeur débarque — un par challenger. Même modèle que Disiz :
+// déposer le fichier dans client/public/music/ sous ce nom exact. Si le fichier manque, l'arrivée reste
+// visuelle (seul le BOOM 808 joue) → pas de crash. zushileaks-cjj.mp3 est déjà présent.
+const UNLOCK_TRACKS: Record<string, string> = {
+  disiz: '/music/disiz-toussa-toussa.mp3',            // « Toussa Toussa »
+  caballerojeanjass: '/music/zushileaks-cjj.mp3',     // « Zushileaks » (fichier déjà présent)
+  freezecorleone: '/music/freeze-shavkat.mp3',        // « Shavkat » — mp3 à déposer
+  diams: '/music/diams-la-boulette.mp3',              // « La Boulette » — mp3 à déposer
+  lino: '/music/lino-suicide-commercial.mp3',         // « Suicide Commercial » — mp3 à déposer
+};
 
 /* ---- Web Audio (charge + BOOM 808 + repli sirène) ---- */
 function nb(c: AudioContext, dur: number) { const n = Math.floor(c.sampleRate * dur); const b = c.createBuffer(1, n, c.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return b; }

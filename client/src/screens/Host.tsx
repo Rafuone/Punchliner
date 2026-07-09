@@ -9,6 +9,9 @@ import GrungeBg from '../GrungeBg';
 import { sfx, sfxLoopStop, playAirhorns } from '../sfx';
 import { handleSpotifyRedirect, hasSpotifySession, initSpotifyPlayer, spotifyPlay, spotifyPause, spotifyTogglePlay, spotifyLogin, spotifyLogout } from '../spotify';
 
+// Démo (?revealdemo) : sélectionner n'importe quel challenger déblocable et rejouer son arrivée épique (vérif visuelle).
+const REVEAL_DEMO = typeof location !== 'undefined' && new URLSearchParams(location.search).has('revealdemo');
+
 // Fond du lobby (écran du code) : instru d'Alpha Wann. Crossfade vers la playlist (Bishok) à l'entrée du ConfigWizard.
 const LOBBY_TRACK = '/music/alphawann-philly-flingo.mp3';
 
@@ -497,6 +500,19 @@ export default function Host() {
       </div>
     )}
     {showReveal && pendingUnlock && <ChallengerReveal charId={pendingUnlock} onClose={() => { setShowReveal(false); setPendingUnlock(null); }} />}
+    {REVEAL_DEMO && !showReveal && (
+      <div className="reveal-demo">
+        <div className="rd-title">DÉMO · arrivée d'un challenger</div>
+        <div className="rd-grid">
+          {AVATARS.filter((a) => a.locked).map((a) => (
+            <button key={a.id} className="rd-btn" onClick={() => { setPendingUnlock(a.id); setShowReveal(true); }}>
+              <img src={`/avatars/${a.id}.png`} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+              <span>{a.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
     {((phase === 'lobby' && !configuring) || ['prep', 'countdown', 'playing', 'reveal', 'final', 'rushend', 'battle-intro', 'battle-bet', 'battle-play', 'battle-reveal'].includes(phase)) && <GrungeBg />}
     {reactions.length > 0 && (
       <div className="reactfloat">

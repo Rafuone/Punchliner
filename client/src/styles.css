@@ -918,15 +918,23 @@ button, input { font-family: inherit; }
 /* stats + pouvoir : deux GROS blocs côte à côte, qui remplissent la zone droite */
 .tvros-statpow { display: flex; flex-wrap: wrap; gap: 18px; }
 .tvros-block, .tvros-obj { flex: 1 1 320px; min-height: clamp(180px, 26vh, 270px); display: flex; flex-direction: column; justify-content: center; background: rgba(8,9,12,.5); border: 1px solid var(--line2); border-radius: 12px; padding: 24px 26px; }
-.tvros-blabel { font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--muted2); margin-bottom: 13px; }
-.tvros-srow { display: flex; align-items: center; gap: 15px; margin-bottom: 12px; }
+.tvros-blabel { font-size: 14px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--muted2); margin-bottom: 15px; }
+.tvros-srow { display: flex; align-items: center; gap: 18px; margin-bottom: 15px; }
 .tvros-srow:last-child { margin-bottom: 0; }
-.tvros-slab { flex: 0 0 92px; font-size: 15px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--txt); }
-.tvros-sbar { display: flex; gap: 6px; flex: 1; }
-.tvros-sbar i { flex: 1; height: 18px; background: rgba(255,255,255,.14); transform: skewX(-16deg); }  /* pips BISEAUTÉS = même style que le character select */
+.tvros-slab { flex: 0 0 104px; font-size: 17px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--txt); }
+.tvros-sbar { display: flex; gap: 11px; flex: 1; }  /* plus d'espace entre les points = lisible de loin */
+.tvros-sbar i { flex: 1; height: 22px; background: rgba(255,255,255,.14); transform: skewX(-16deg); border-radius: 1px; }  /* pips BISEAUTÉS = même style que le character select */
 .tvros-sbar i.on { background: var(--cc, var(--fluo)); box-shadow: 0 0 10px color-mix(in srgb, var(--cc, #e4ff1a) 45%, transparent); }
-.tvros-pname { font-family: var(--disp); font-weight: 700; font-size: clamp(23px,2.7vw,36px); line-height: 1.02; color: var(--cc, var(--fluo)); text-transform: uppercase; margin-bottom: 9px; }
-.tvros-pfx { font-size: clamp(15px,1.6vw,18px); line-height: 1.5; color: var(--txt); }
+.tvros-pname { font-family: var(--disp); font-weight: 700; font-size: clamp(26px,3vw,40px); line-height: 1.02; color: var(--cc, var(--fluo)); text-transform: uppercase; margin-bottom: 11px; }
+.tvros-pfx { font-size: clamp(17px,1.8vw,21px); line-height: 1.5; color: var(--txt); }
+/* démo déblocage (?revealdemo) — chooser flottant pour rejouer l'arrivée de n'importe quel challenger */
+.reveal-demo { position: fixed; z-index: 200; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px 20px; background: rgba(10,11,14,.92); border: 1px solid var(--line2); border-radius: 12px; backdrop-filter: blur(8px); box-shadow: 0 20px 50px rgba(0,0,0,.6); }
+.reveal-demo .rd-title { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .12em; font-size: 13px; color: var(--fluo); }
+.reveal-demo .rd-grid { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.reveal-demo .rd-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 96px; padding: 8px; border-radius: 10px; background: var(--surf); border: 1px solid var(--line2); color: var(--txt); cursor: pointer; transition: border-color .14s, transform .14s; }
+.reveal-demo .rd-btn:hover { border-color: var(--fluo); transform: translateY(-3px); }
+.reveal-demo .rd-btn img { width: 72px; height: 72px; border-radius: 8px; object-fit: cover; object-position: 50% 20%; }
+.reveal-demo .rd-btn span { font-weight: 700; font-size: 12.5px; text-align: center; }
 .tvros-objtxt { font-family: var(--disp); font-weight: 700; font-size: clamp(20px,2.4vw,30px); line-height: 1.28; color: #fff; }
 .tvros-objnote { margin-top: 11px; font-size: 15px; color: var(--muted); }
 
