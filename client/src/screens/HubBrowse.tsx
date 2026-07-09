@@ -255,10 +255,13 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
     return (
       <div className="hub-overlay radio-overlay">
         <GrungeBg />
-        <div className="wrap radio-wrap" style={{ position: 'relative', zIndex: 1, paddingBottom: nowPlaying ? 92 : 20 }}>
-          <div className="topbar">
-            <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={onClose}>← Retour au hub</button>
-            <h1 className="wm radio-title" style={{ fontSize: 22 }}>RADIO PUNCHLINR</h1>
+        <button className="tvros-back" onClick={onClose}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          RETOUR
+        </button>
+        <div className="radio-wrap" style={{ position: 'relative', zIndex: 1, paddingBottom: nowPlaying ? 116 : 26 }}>
+          <div className="radio-topbar">
+            <h1 className="wm radio-title">RADIO PUNCHLINR</h1>
             <span className={`sp-badge ${spReady ? 'on' : ''}`}><span className="srclogo" dangerouslySetInnerHTML={{ __html: SPOTIFY_ICO }} />Spotify</span>
           </div>
 
@@ -330,8 +333,13 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                         <div className="rtrack skel" key={i}><span className="rt-idx" /><div className="rt-cov" /><div className="rt-main"><div className="skl-line" style={{ width: '70%' }} /><div className="skl-line" style={{ width: '45%', marginTop: 5 }} /></div><span className="skl-line" style={{ width: 32 }} /></div>
                       ))
                     ) : tracks.length === 0 ? (
-                      <div style={{ padding: '18px 16px', textAlign: 'center' }}>
-                        <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: 0 }}>{trkInfo.info === 'http-403' ? '🔒 Titres non lisibles pour cette playlist (limite de l’API Spotify). Essaie « ★ Mes playlists » ou une autre.' : trkInfo.info ? radioMsg(trkInfo.info) : 'Playlist vide.'}</p>
+                      <div style={{ padding: '20px 16px', textAlign: 'center' }}>
+                        {trkInfo.info === 'not-owned' ? (
+                          <><div style={{ fontSize: 30, marginBottom: 8 }}>🔒</div>
+                          <p className="muted" style={{ fontSize: 14, lineHeight: 1.55, margin: 0 }}>Spotify (mode dév) ne montre les titres que de <b style={{ color: 'var(--txt)' }}>tes</b> playlists. Celle-ci n’est pas à toi — mais tu peux quand même <b style={{ color: 'var(--fluo)' }}>la lancer</b> ▶.</p></>
+                        ) : (
+                          <p className="muted" style={{ fontSize: 14, lineHeight: 1.55, margin: 0 }}>{trkInfo.info && trkInfo.info !== 'empty' ? radioMsg(trkInfo.info) : 'Playlist vide.'}</p>
+                        )}
                         {spotifyLastError() && <p className="radio-diag" style={{ marginTop: 10 }}>⚙ {spotifyLastError()}</p>}
                       </div>
                     ) : tracks.map((t: any, i: number) => (
@@ -363,7 +371,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
               <button className={`rp-btn sm ${rep > 0 ? 'act' : ''}`} onClick={() => spotifyRepeat(rep === 0 ? 'context' : rep === 1 ? 'track' : 'off')} title={rep === 2 ? 'Répéter ce morceau' : rep === 1 ? 'Répéter la playlist' : 'Activer la boucle'} aria-label="Boucle"><span className="rp-ic-wrap">{IC.repeat}{rep === 2 && <span className="rp-one">1</span>}</span></button>
             </div>
           );
-          const bar = () => <div className="rp-bar" onClick={(e) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); if (dur) spotifySeek(Math.round(((e.clientX - r.left) / r.width) * dur)); }}><div className="rp-fill" style={{ width: (frac * 100) + '%' }} /></div>;
+          const bar = () => <div className="rp-bar" onClick={(e) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); if (dur) spotifySeek(Math.round(((e.clientX - r.left) / r.width) * dur)); }}><div className="rp-fill" style={{ width: (frac * 100) + '%' }}><span className="rp-knob" /></div></div>;
           // titre plein écran : on ANTICIPE la longueur → taille réduite si long (jamais > 2 lignes)
           const nm = nowPlaying.name || '';
           const bigNameFs = nm.length > 40 ? 'clamp(20px,2.6vw,34px)' : nm.length > 26 ? 'clamp(25px,3.2vw,42px)' : nm.length > 16 ? 'clamp(30px,3.9vw,52px)' : 'clamp(34px,4.6vw,62px)';
@@ -395,13 +403,8 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                   <div className="rp-prog"><span className="rp-time">{fmtDur(pos)}</span>{bar()}<span className="rp-time">{fmtDur(dur)}</span></div>
                 </div>
                 <div className="rp-right">
-                  {/* 4 animations d'ouverture plein écran à départager — Alexandre choisit sa préférée. */}
-                  <div className="rp-exps" role="group" aria-label="Plein écran (test d'animations)">
-                    {[1, 2, 3, 4].map((n) => (
-                      <button key={n} className={`rp-btn sm rp-exp ${bigPlayer === n ? 'act' : ''}`} onClick={() => setBigPlayer(n)} title={`Plein écran — animation ${n}`} aria-label={`Plein écran, animation ${n}`}>
-                        {IC.expand}<span className="rp-expn">{n}</span>
-                      </button>
-                    ))}
+                  <div className="rp-exps">
+                    <button className={`rp-btn sm rp-exp ${bigPlayer > 0 ? 'act' : ''}`} onClick={() => setBigPlayer(1)} title="Plein écran" aria-label="Plein écran">{IC.expand}</button>
                   </div>
                   <button className="rp-cut" onClick={() => { spotifyPause(); setBigPlayer(0); setRadioActiveUri(''); }} title="Couper la radio" aria-label="Couper la radio">×</button>
                 </div>
