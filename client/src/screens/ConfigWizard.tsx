@@ -3,7 +3,7 @@ import { avatarById, initials } from '../data';
 import '../wizard.css';
 
 /* ====== réglages envoyés au serveur (mappés depuis le wizard) ====== */
-export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; mjId?: string; rebalance: string; era: string; theme: string; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean; rushPlayerId?: string };
+export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; mjId?: string; rebalance: string; era: string; themes: string[]; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean; rushPlayerId?: string };
 type Music = { nowPlaying: number; musicOn: boolean; onToggle: () => void; onNext: () => void; onPrev: () => void; bassRef: { current: number }; barsRef: { current: number[] }; waveRef?: { current: Uint8Array }; tracks: { title: string; artist: string }[] };
 type Player = { id: string; name: string; avatar?: string };
 type SpotifyCtl = { state: string; spotifyOn: boolean; deezerOn: boolean; onToggleSpotify: () => void; onToggleDeezer: () => void };
@@ -170,7 +170,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const [step, setStep] = useState(0);
   const [game, setGame] = useState('blind');
   const [era, setEra] = useState('all');
-  const [theme, setTheme] = useState('all');
+  const [themes, setThemes] = useState<string[]>([]); // MULTI-thème : vide = tout le rap ; sinon UNION des styles cochés
   const [diff, setDiff] = useState('normal');
   const [rounds, setRounds] = useState<number | 'inf'>(16);
   const [rebalance, setRebalance] = useState('comeback');
@@ -189,7 +189,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   useEffect(() => { if (!mjAllowed && orch === 'mj') setOrch('auto'); }, [mjAllowed, orch]);
   useEffect(() => { if (isRush && step === 2) setStep(3); }, [isRush, step]); // Survivor n'a pas d'étape difficulté : on ne s'y arrête jamais
 
-  const themeName = [...THEMES_MAIN, ...THEMES_EXTRA].find((t) => t.id === theme)?.name || '';
+  const themeName = themes.length === 0 ? 'Tout le rap FR' : themes.map((id) => [...THEMES_MAIN, ...THEMES_EXTRA].find((t) => t.id === id)?.name).filter(Boolean).join(' + ');
   const eraName = era === 'all' ? 'Toutes époques' : (ERAS.find((e) => e.id === era)!.big + 's · ' + ERAS.find((e) => e.id === era)!.lab);
   // chaque étape porte son index RÉEL (step). Survivor n'a PAS d'étape difficulté (progressive) → on la retire
   // du parcours : une étape en moins dans la carte de match.
@@ -226,7 +226,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     const r = rounds === 'inf' ? Math.min(poolSize, 50) : Math.min(rounds, poolSize);
     const isMj = orch === 'mj' && mjAllowed;
     const mode = game === 'buzz' ? 'buzzer' : game === 'quiz' ? 'quiz' : game === 'rush' ? 'rush' : 'multi';
-    onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance, era, theme,
+    onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance, era, themes,
       rushStartSec: isRush ? rushStartSec : undefined, quizNoVf: isQuiz ? quizNoVf : undefined,
       rushPlayerId: isRush ? (rushPlayerId || playerList[0]?.id) : undefined });
   }
@@ -499,9 +499,12 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 <div className="axis">
                   <div className="axis-head"><span className="axis-chip"><span>Thématique · Ville · Sous-genre</span></span><span className="axis-note">Appuie sur un poussoir</span></div>
                   {/* TOUTES les thématiques affichées d'emblée (on a la place) — plus de bouton « plus de thématiques » */}
-                  <div className="pads">{[...THEMES_MAIN, ...THEMES_EXTRA].map((t) => (
-                    <button key={t.id} className={`pad ${(t as any).wide ? 'wide' : ''} ${theme === t.id ? 'sel' : ''}`} onClick={() => setTheme(t.id)}><span className="led" /><span className="pl"><b>{t.name}</b><small>{t.sub}</small></span></button>
-                  ))}</div>
+                  <div className="pads">{[...THEMES_MAIN, ...THEMES_EXTRA].map((t) => {
+                    const on = t.id === 'all' ? themes.length === 0 : themes.includes(t.id); // « Tout » actif quand rien n'est coché
+                    return (
+                    <button key={t.id} className={`pad ${(t as any).wide ? 'wide' : ''} ${on ? 'sel' : ''}`} onClick={() => setThemes((prev) => t.id === 'all' ? [] : prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev.filter((x) => x !== 'all'), t.id])}><span className="led" /><span className="pl"><b>{t.name}</b><small>{t.sub}</small></span></button>
+                    );
+                  })}</div>
                 </div>
               </>
             )}
@@ -547,6 +550,14 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                     <div className="fmt-desc">{s.desc}</div>
                   </button>
                 ))}</div>
+                <div className="rush-scoring">
+                  <div className="rs-chip"><span className="rs-k">Titre seul</span><span className="rs-v">+3 s</span></div>
+                  <div className="rs-op">ou</div>
+                  <div className="rs-chip"><span className="rs-k">Artiste seul</span><span className="rs-v">+3 s</span></div>
+                  <div className="rs-op">→</div>
+                  <div className="rs-chip full"><span className="rs-k">Les deux</span><span className="rs-v">+9 s · max de points</span></div>
+                </div>
+                <p className="rush-scoring-note">Un seul volet suffit pour <b>enchaîner</b> — mais mets le <b>titre ET l'artiste</b> pour gagner bien plus de temps et de points.</p>
               </>
             )}
 

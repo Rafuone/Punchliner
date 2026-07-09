@@ -7,7 +7,7 @@ import HubBrowse from './HubBrowse';
 import ChallengerReveal from './ChallengerReveal';
 import GrungeBg from '../GrungeBg';
 import { sfx, sfxLoopStop, playAirhorns } from '../sfx';
-import { handleSpotifyRedirect, hasSpotifySession, initSpotifyPlayer, spotifyPlay, spotifyPause, spotifyTogglePlay, spotifyLogin, spotifyLogout, listenSpotifyAuth } from '../spotify';
+import { handleSpotifyRedirect, hasSpotifySession, initSpotifyPlayer, resetSpotifyPlayer, spotifyPlay, spotifyPause, spotifyTogglePlay, spotifyLogin, spotifyLogout, listenSpotifyAuth } from '../spotify';
 
 // Démo (?revealdemo) : sélectionner n'importe quel challenger déblocable et rejouer son arrivée épique (vérif visuelle).
 const REVEAL_DEMO = typeof location !== 'undefined' && new URLSearchParams(location.search).has('revealdemo');
@@ -192,6 +192,7 @@ export default function Host() {
   // recharger l'app (l'hôte reste dans sa partie). Corrige aussi l'incohérence "hub déconnecté / radio connectée".
   useEffect(() => listenSpotifyAuth((ok) => {
     if (!ok) return;
+    resetSpotifyPlayer(); // token FRAIS après le popup → on détruit l'ancien player (sinon initSpotifyPlayer no-op et le pill reste grisé)
     setSpState('connecting');
     initSpotifyPlayer((s) => { setSpState(s); spReadyRef.current = (s === 'ready'); });
     window.dispatchEvent(new Event('pl-spotify-connected')); // notifie la radio (si ouverte)
@@ -450,7 +451,7 @@ export default function Host() {
     sfx('launch');
     socket.emit('host:start', { rounds: settings.rounds, difficulty: settings.difficulty, mode: settings.mode, mj: settings.mj, rebalance: settings.rebalance }, (res: any) => res?.error && setError(res.error));
   }
-  function startWizard(s: { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string; mjId?: string; era?: string; theme?: string; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean }) {
+  function startWizard(s: { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string; mjId?: string; era?: string; themes?: string[]; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean }) {
     lastWizRef.current = s; // mémorise pour un éventuel « Rejouer » (Survivor notamment)
     const a = audioRef.current;
     if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); audioReadyRef.current = true; } // ce clic « Lancer » débloque l'autoplay pour toute la partie
@@ -552,7 +553,7 @@ export default function Host() {
       </button>
     )}
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
-      <div className={`topbar${['prep', 'countdown', 'playing', 'reveal', 'final', 'rushend'].includes(phase) ? ' gamebar' : ''}`}>
+      <div className={`topbar${['prep', 'countdown', 'playing', 'reveal', 'final'].includes(phase) ? ' gamebar' : ''}`}>
         <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">R</span></h1>
         <span className="row" style={{ gap: 14, alignItems: 'center' }}>
           {phase === 'lobby' && <span className="gpill"><span className="dot" />Salon {code} · {players.length} j.</span>}
@@ -963,8 +964,15 @@ export default function Host() {
         const res = rushEnd.results || [];
         const top = rushEnd.top || [];
         return (
-        <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(14px,3vh,44px)', gap: 18 }}>
-          <span className="eyebrow">Survivor — contre-la-montre terminé</span>
+        <div className="hub-overlay">
+          <GrungeBg />
+          <button className="tvros-back" onClick={() => socket.emit('host:restart')}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            RETOUR
+          </button>
+          <div style={{ position: 'relative', zIndex: 1, padding: 'clamp(52px,7vh,84px) clamp(24px,4vw,64px) 40px', maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
+          <div className="tro-head"><h1 className="wm tro-title">CLASSEMENT <span className="d">SURVIVOR</span></h1></div>
+          <p className="muted tro-sub" style={{ margin: '0 0 6px' }}>Contre-la-montre terminé — ton record au classement mondial.</p>
           {res[0] && (
             <div className="champ">
               <Med avatarId={res[0].avatar} size={120} />
@@ -1000,7 +1008,7 @@ export default function Host() {
           </div>
           <div className="row" style={{ gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
             <button className="btn warm" onClick={() => socket.emit('host:start', { ...(lastWizRef.current || { difficulty: settings.difficulty }), mode: 'rush' }, (r: any) => r?.error && setError(r.error))}>Rejouer →</button>
-            <button className="btn" onClick={() => socket.emit('host:restart')}>Retour au salon</button>
+          </div>
           </div>
         </div>
         );

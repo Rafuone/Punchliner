@@ -235,7 +235,7 @@ export default function Player() {
     e?.preventDefault();
     if (!guess.trim() || phase !== 'playing') return;
     socket.emit('rush:answer', { text: guess.trim() }, (res: any) => {
-      if (res?.correct) { setFeedback({ points: res.points, added: res.addedMs }); setGuess(''); }
+      if (res?.correct) { setFeedback({ points: res.points, added: res.addedMs, full: res.full }); setGuess(''); }
       else if (res && !res.error) setFeedback({ wrong: true });
     });
   }
@@ -686,11 +686,11 @@ export default function Player() {
                   <>
                     <span className="muted">Morceau {round.trackNo} · {mine ? `${fmtAud(mine.score)} aud. · ${mine.tracks} ✓` : '0 aud.'}</span>
                     <form onSubmit={submitRush} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre + artiste, vite !" autoFocus />
+                      <input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre OU artiste — les 2 = + de temps" autoFocus />
                       <button className="btn warm big send" type="submit">Envoyer</button>
                       <button className="btn" type="button" onClick={rushPass}>Passer · −{Math.round((round.passMs || 8000) / 1000)} s</button>
                     </form>
-                    {feedback && (feedback.added ? <p className="feedback good">Trouvé ! +{fmtAud(feedback.points || 0)} · +{Math.round(feedback.added / 1000)} s</p> : feedback.removed ? <p className="feedback bad">Passé · −{Math.round(feedback.removed / 1000)} s</p> : feedback.wrong ? <p className="feedback bad">Pas ça… réessaie</p> : null)}
+                    {feedback && (feedback.added ? <p className="feedback good">{feedback.full ? 'Titre + artiste ! ' : 'Bien ! '}+{fmtAud(feedback.points || 0)} · +{Math.round(feedback.added / 1000)} s{feedback.full ? '' : ' — les 2 pour +'}</p> : feedback.removed ? <p className="feedback bad">Passé · −{Math.round(feedback.removed / 1000)} s</p> : feedback.wrong ? <p className="feedback bad">Pas ça… réessaie</p> : null)}
                   </>
                 )}
               </>

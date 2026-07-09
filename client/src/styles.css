@@ -1005,7 +1005,7 @@ button, input { font-family: inherit; }
 /* ===== page Palmarès (galerie de trophées) ===== */
 .troph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; width: 100%; max-width: 760px; margin: 0 auto; padding-bottom: 24px; }
 /* galerie PLEINE LARGEUR + GROSSE (TV, visible de loin, prête pour des IMAGES) — beaucoup d'éléments → on scrolle */
-.troph-grid.big { max-width: 1500px; margin: 0 auto; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 26px; } /* moins de colonnes → illustrations ENCORE plus grandes */
+.troph-grid.big { max-width: 1600px; margin: 0 auto; grid-template-columns: repeat(5, 1fr); gap: 24px; } /* EXACTEMENT 5 par ligne (demande proprio) */
 .tro-head { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 2px; }
 .tro-title { font-size: clamp(32px, 3.6vw, 54px); letter-spacing: -.01em; }
 .tro-sub { text-align: center; margin: 6px 0 30px; font-size: 17px; }

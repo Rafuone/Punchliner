@@ -131,12 +131,6 @@ export const AWARDS = [
     const p = rand(cands);
     return { playerId: p.id, desc: `Pas une seule réponse tentée de toute la partie. Présent, déjà.` };
   } },
-  { id: 'boulet', title: 'Le Rendement', icon: 'skull', weight: 6, pick(list) {
-    const r = top(list.filter((p) => p.att >= 8 && p.scored <= 1), (p) => p.att, 8);
-    if (!r) return null;
-    const p = r.player;
-    return { playerId: p.id, desc: `${p.att} tentatives pour ${p.scored} trouvaille. Le rendement à revoir.` };
-  } },
   { id: 'fantome', title: 'Le Fantôme', icon: 'ghost', weight: 5, pick(list, c) {
     if (c.total < 5) return null;
     const r = top(list, (p) => p.zeros, Math.ceil(c.total * 0.6));
@@ -170,13 +164,6 @@ export const AWARDS = [
     if (!cands.length) return null;
     const p = rand(cands);
     return { playerId: p.id, desc: `Dernier sans avoir lâché UN seul pouvoir. Fallait s'en servir, tocard.` };
-  } },
-  { id: 'escroc', title: "L'Escroc", icon: 'dice', weight: 7, pick(list, c) {
-    if (c.N < 2 || c.total < 5) return null;
-    const s = [...list].sort((a, b) => b.score - a.score);
-    const w = s[0];
-    if (w.rank !== 1 || w.score <= 0 || w.scored > Math.ceil(c.total * 0.4)) return null;
-    return { playerId: w.id, desc: `Gagne en n'ayant trouvé que ${w.scored} manche${w.scored > 1 ? 's' : ''}. Sacré roublard.` };
   } },
   { id: 'perdantmagnifique', title: 'Le Perdant Magnifique', icon: 'up', weight: 7, pick(list, c) {
     if (c.N < 3) return null;

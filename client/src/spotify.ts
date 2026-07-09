@@ -43,7 +43,7 @@ function store(j: any) {
   localStorage.setItem(KEY, JSON.stringify(t));
 }
 export function hasSpotifySession() { return !!load(); }
-export function spotifyLogout() { localStorage.removeItem(KEY); ready = false; deviceId = ''; try { player?.disconnect(); } catch {} }
+export function spotifyLogout() { localStorage.removeItem(KEY); ready = false; deviceId = ''; try { player?.disconnect(); } catch {} player = null; initing = false; } // reset COMPLET (sinon toute reconnexion future est bloquée par la garde de initSpotifyPlayer)
 
 /* ---------- PKCE ---------- */
 function b64url(buf: ArrayBuffer) {
@@ -162,6 +162,8 @@ let ready = false;
 let initing = false; // garde-fou double-init (React StrictMode)
 
 export function isSpotifyReady() { return ready && !!deviceId; }
+// Détruit le player courant → force initSpotifyPlayer à RECONSTRUIRE un SDK avec un token FRAIS (à appeler après une nouvelle auth popup).
+export function resetSpotifyPlayer() { try { player?.disconnect(); } catch {} player = null; ready = false; deviceId = ''; initing = false; }
 
 function loadSdk(): Promise<void> {
   return new Promise((res, rej) => {
@@ -208,6 +210,7 @@ export async function initSpotifyPlayer(onState: (s: string) => void) {
     stateSubs.forEach((cb) => { try { cb(np); } catch {} });
   });
   player.connect();
+  initing = false; // succès : on relâche le verrou (la garde `player` empêche toujours une double-init) → ré-init possible après reset
 }
 
 /* ---------- Radio : now-playing + lecture de playlists ---------- */

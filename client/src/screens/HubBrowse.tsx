@@ -252,10 +252,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
           RETOUR
         </button>
         <div className="wrap" style={{ position: 'relative', zIndex: 1, maxWidth: 'none', padding: '62px clamp(24px,4vw,64px) 40px' }}>
-          <div className="topbar" style={{ justifyContent: 'center', gap: 16 }}>
-            <h1 className="wm" style={{ fontSize: 'clamp(28px,3.2vw,46px)' }}>CLASSEMENT</h1>
-            <span className="gpill">Survivor</span>
-          </div>
+          <div className="tro-head"><h1 className="wm tro-title">CLASSEMENT <span className="d">SURVIVOR</span></h1></div>
           <p className="muted" style={{ textAlign: 'center', margin: '2px auto 20px', maxWidth: 820, fontSize: 'clamp(17px,1.9vw,25px)', lineHeight: 1.4 }}>Un tableau <b style={{ color: 'var(--txt)' }}>par créneau de départ</b> — la difficulté monte toute seule, seul le temps de départ sépare les classements.</p>
           {lbConfigs.length > 1 && (
             <div className="row" style={{ justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 26 }}>

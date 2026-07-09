@@ -300,8 +300,6 @@ export const AWARDS_INFO: AwardInfo[] = [
   { id: 'braqueur', title: 'Les Impôts', icon: 'mask', blurb: 'Prélève sa part sur le dos des autres (vol / dîme / sabotage).', salty: true },
   { id: 'kamikaze', title: 'Le Poker', icon: 'dice', blurb: 'Mise tout sur un coup de poker.', salty: true },
   { id: 'sanspitie', title: 'Le Sans-Pitié', icon: 'mask', blurb: 'Gagne ET dépouille tout le monde au passage.', salty: true },
-  { id: 'escroc', title: "L'Escroc", icon: 'dice', blurb: 'Gagne en n\'ayant trouvé presque aucune manche.', salty: true },
-  { id: 'boulet', title: 'Le Rendement', icon: 'skull', blurb: 'Beaucoup de tentatives, presque rien à la clé.', salty: true },
   { id: 'fantome', title: 'Le Fantôme', icon: 'ghost', blurb: 'Enchaîne les manches à zéro pointé.', salty: true },
   { id: 'muet', title: 'Le Muet', icon: 'ghost', blurb: 'Pas une seule réponse tentée de toute la partie.', salty: true },
   { id: 'lanterne', title: 'La Lanterne Rouge', icon: 'skull', blurb: 'Termine bon dernier.', salty: true },
