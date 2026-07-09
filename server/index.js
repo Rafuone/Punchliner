@@ -77,6 +77,18 @@ const RUSH_MAX_MS   = 90000;               // plafond de la jauge (anti-inflatio
 const RUSH_REF_MS   = 10000;               // fenêtre de référence pour la prime de vitesse
 const RUSH_TRACK_MAX_MS = FAST ? 3000 : 30000; // durée MAX d'un morceau : si ni trouvé ni passé, on enchaîne
                                            // tout seul (jamais bloqué sur un son). = durée du clip Deezer.
+// Barème du chrono selon le "pace" (option hôte) + delta selon la difficulté générique : plus dur = on gagne
+// moins de temps par bonne réponse et "passer" coûte plus cher → la difficulté touche ENFIN le ressenti temporel.
+const RUSH_PACE = { chill: { bonus: 8000, pass: 5000 }, normal: { bonus: 6000, pass: 8000 }, hardcore: { bonus: 5000, pass: 10000 } };
+const RUSH_DIFF_STEP = { facile: 0, normal: 1, difficile: 2, puriste: 3 };
+function rushParams(settings) {
+  const p = RUSH_PACE[settings.rushPace] || RUSH_PACE.normal;
+  const k = RUSH_DIFF_STEP[settings.difficulty] ?? 1;
+  return {
+    bonusMs: FAST ? 3000 : Math.max(3000, p.bonus - k * 500), // plus dur → moins de temps gagné
+    passMs:  FAST ? 3000 : (p.pass + k * 1000),               // plus dur → passer coûte plus cher
+  };
+}
 
 // Difficulté = QUELS morceaux tombent (popularité via le rank Deezer), PAS la durée.
 // Le son joue toujours généreusement ; offset = on démarre en plein milieu sur les niveaux durs.
@@ -298,7 +310,8 @@ function tierSlice(arr, tier) {
   if (tier === 'top') return s.slice(0, Math.max(6, Math.ceil(N * 0.55))); // les plus streamés
   if (tier === 'mid') return s.slice(Math.floor(N * 0.25));                // on retire le très grand public
   if (tier === 'deep') return s.slice(Math.floor(N * 0.45));               // le fond du bac
-  return s;                                                                // high = tout
+  if (tier === 'high') return s.slice(0, Math.max(8, Math.ceil(N * 0.82))); // Connaisseur : classiques + bien connus, SANS le fond du bac (réservé au puriste)
+  return s;                                                                // repli : tout
 }
 function poolForTier(tier) { return tierSlice(livePool(), tier); } // compat (Cypher recycle)
 // Tire n morceaux : ÉPOQUE + THÈME → DIFFICULTÉ → aléatoire. Repli PROGRESSIF si le combo est trop restrictif
@@ -359,7 +372,7 @@ function emitLobby(room) {
 function snapshot(room, isHost) {
   const s = { code: room.code, phase: room.phase, roundIndex: room.roundIndex, totalRounds: room.totalRounds, settings: room.settings, players: publicPlayers(room) };
   if (room.phase === 'playing' && room.settings.mode === 'rush') {
-    s.round = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: RUSH_MAX_MS, passMs: RUSH_PASS_MS, bonusMs: RUSH_BONUS_MS, difficulty: room.diffLabel, scores: rushBoard(room) };
+    s.round = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: room.rushMaxMs || RUSH_MAX_MS, passMs: room.rushPassMs, bonusMs: room.rushBonusMs, difficulty: room.diffLabel, scores: rushBoard(room) };
     if (isHost && room.current) Object.assign(s.round, { preview: room.current.preview, startAt: 0 });
   } else if (room.phase === 'playing' && room.current) {
     s.round = { index: room.roundIndex, roundIndex: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: room.windowMs, mode: room.settings.mode, difficulty: room.diffLabel, mj: room.settings.mj };
@@ -725,7 +738,7 @@ function rushEmitTrack(room, evt = {}) {
   clearTimeout(room.rushTrackTimer);
   const idxAtSet = room.rushIndex;
   room.rushTrackTimer = setTimeout(() => { if (room.phase === 'playing' && room.settings.mode === 'rush' && room.rushIndex === idxAtSet) rushAdvance(room, { reason: 'timeout' }); }, RUSH_TRACK_MAX_MS);
-  const common = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: RUSH_MAX_MS, passMs: RUSH_PASS_MS, bonusMs: RUSH_BONUS_MS, difficulty: room.diffLabel, scores: rushBoard(room), event: evt };
+  const common = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: room.rushMaxMs || RUSH_MAX_MS, passMs: room.rushPassMs, bonusMs: room.rushBonusMs, difficulty: room.diffLabel, scores: rushBoard(room), event: evt };
   io.to(room.hostId).emit('rush:host', { ...common, preview: cur.preview, startAt: 0, sp: { title: cur.title, artist: cur.artist } }); // l'hôte joue le son (sp = résolution Spotify, hôte only)
   io.to(room.code).emit('rush:state', common); // les joueurs : chrono + score, pas d'audio
 }
@@ -743,7 +756,7 @@ function rushAdvance(room, evt) {
   rushEmitTrack(room, evt);
 }
 function rushApplyDelta(room, deltaMs) {
-  room.rushEndsAt = Math.min(Date.now() + RUSH_MAX_MS, room.rushEndsAt + deltaMs);
+  room.rushEndsAt = Math.min(Date.now() + (room.rushMaxMs || RUSH_MAX_MS), room.rushEndsAt + deltaMs);
   clearTimeout(room.rushTimer);
   const left = room.rushEndsAt - Date.now();
   if (left <= 0) return endRush(room);
@@ -753,14 +766,17 @@ function startRush(room) {
   const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
   room.phase = 'playing';
   room.mult = diff.mult; room.diffLabel = diff.label;
+  const rp = rushParams(room.settings); room.rushBonusMs = rp.bonusMs; room.rushPassMs = rp.passMs; // barème (pace + difficulté)
+  const startMs = FAST ? RUSH_START_MS : (room.settings.rushStartSec || 60) * 1000;                // chrono de départ choisi
+  room.rushMaxMs = FAST ? RUSH_MAX_MS : Math.max(RUSH_MAX_MS, startMs + 30000);                     // plafond ≥ départ (les longs chronos ne se font pas raboter)
   room.rushPlaylist = pickPlaylist(POOL.length, diff.tier, room.settings.era, room.settings.theme);
   cacheTracks(room.rushPlaylist.slice(0, 12)); // Cypher enchaîne vite → on rapatrie le 1er paquet en fond
   room.rushIndex = 0;
-  room.rushEndsAt = Date.now() + RUSH_START_MS;
+  room.rushEndsAt = Date.now() + startMs;
   room.rushResolving = false;
   for (const p of room.players.values()) { p.rushScore = 0; p.rushTracks = 0; }
   clearTimeout(room.rushTimer);
-  room.rushTimer = setTimeout(() => endRush(room), RUSH_START_MS);
+  room.rushTimer = setTimeout(() => endRush(room), startMs);
   rushEmitTrack(room, { reason: 'start' });
 }
 function endRush(room) {
@@ -911,7 +927,7 @@ io.on('connection', (socket) => {
     cb?.({ ok: true, players: publicPlayers(room) });
   });
 
-  socket.on('host:start', ({ rounds, difficulty, mode, mj, mjId, rebalance, era, theme } = {}, cb) => {
+  socket.on('host:start', ({ rounds, difficulty, mode, mj, mjId, rebalance, era, theme, rushStartSec, rushPace, quizNoVf } = {}, cb) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
     const wantMode = MODES.includes(mode) ? mode : 'multi';
@@ -928,6 +944,9 @@ io.on('connection', (socket) => {
       rebalance: ['comeback', 'snowball', 'off'].includes(rebalance) ? rebalance : 'comeback',
       era: typeof era === 'string' ? era : 'all',     // ÉPOQUE (année) — filtre le pool musical
       theme: typeof theme === 'string' ? theme : 'all', // THÈME/STYLE — filtre le pool musical
+      rushStartSec: Math.min(180, Math.max(30, (rushStartSec | 0) || 60)), // Cypher : chrono de départ (s)
+      rushPace: ['chill', 'normal', 'hardcore'].includes(rushPace) ? rushPace : 'normal', // Cypher : barème du chrono
+      quizNoVf: !!quizNoVf, // Quiz : exclure les Vrai/Faux
     };
     for (const p of room.players.values()) { p.score = 0; p.waiting = false; p.stat = newStat(); p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; p.isMJ = false; p.streak = 0; p.decayUses = 0; p.veteranUntil = null; p.veteranFloor = 0; p.nofault = false; p.selfBonus = 0; p.sustainUntil = null; p.sustainAmount = 0; p.draftFrac = 0; p.rushScore = 0; p.rushTracks = 0; }
     room.mjDouble = false; room.mjPlus = false; room.mjId = null;
@@ -941,7 +960,7 @@ io.on('connection', (socket) => {
     }
     if (isQuiz) {
       if (!room.usedQuiz) room.usedQuiz = new Set(); // salons créés avant l'ajout du champ
-      room.playlist = pickQuiz(rounds || 8, room.settings.difficulty, room.usedQuiz); // filtre par difficulté + anti-répétition salon
+      room.playlist = pickQuiz(rounds || 8, room.settings.difficulty, room.usedQuiz, { noVf: room.settings.quizNoVf }); // filtre difficulté + anti-répétition salon (+ option sans Vrai/Faux)
     } else {
       const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
       room.playlist = pickPlaylist(rounds || 8, diff.tier, room.settings.era, room.settings.theme);
@@ -1015,9 +1034,9 @@ io.on('connection', (socket) => {
     const sm = speedMult(Math.max(0, RUSH_REF_MS - elapsed), RUSH_REF_MS);
     const pts = Math.round((g.base || 0) * sm * (room.mult || 1));
     p.rushScore = (p.rushScore || 0) + pts; p.rushTracks = (p.rushTracks || 0) + 1;
-    cb?.({ ok: true, correct: true, points: pts, addedMs: RUSH_BONUS_MS });
-    rushApplyDelta(room, RUSH_BONUS_MS); // +temps
-    if (room.phase === 'playing') rushAdvance(room, { reason: 'hit', by: p.id, name: p.name, points: pts, addedMs: RUSH_BONUS_MS });
+    cb?.({ ok: true, correct: true, points: pts, addedMs: room.rushBonusMs });
+    rushApplyDelta(room, room.rushBonusMs); // +temps
+    if (room.phase === 'playing') rushAdvance(room, { reason: 'hit', by: p.id, name: p.name, points: pts, addedMs: room.rushBonusMs });
   });
   socket.on('rush:pass', (_p, cb) => {
     const room = rooms.get(socket.data.roomCode);
@@ -1025,9 +1044,9 @@ io.on('connection', (socket) => {
     const p = room.players.get(socket.data.playerId);
     if (!p || p.waiting) return;
     room.rushResolving = true;
-    cb?.({ ok: true, removedMs: RUSH_PASS_MS });
-    rushApplyDelta(room, -RUSH_PASS_MS); // -temps (peut finir le run)
-    if (room.phase === 'playing') rushAdvance(room, { reason: 'pass', by: p.id, name: p.name, removedMs: RUSH_PASS_MS });
+    cb?.({ ok: true, removedMs: room.rushPassMs });
+    rushApplyDelta(room, -room.rushPassMs); // -temps (peut finir le run)
+    if (room.phase === 'playing') rushAdvance(room, { reason: 'pass', by: p.id, name: p.name, removedMs: room.rushPassMs });
   });
   socket.on('leaderboard:get', ({ n } = {}, cb) => cb?.({ ok: true, top: getTop(Math.min(50, Math.max(1, n || 10))) }));
 
@@ -1204,7 +1223,7 @@ io.on('connection', (socket) => {
       p.veteranFloor = pw.floor || 4000;
       detail = { rounds: pw.rounds || 3 };
     } else if (pw.type === 'momentum') {
-      const amt = (pw.base || 5000) + (p.streak || 0) * (pw.per || 5000); // grossit avec la série
+      const amt = Math.min(pw.cap || 1e9, (pw.base || 5000) + (p.streak || 0) * (pw.per || 5000)); // grossit avec la série, PLAFONNÉ (cap)
       p.armed = { type: 'bonus', amount: amt };
       detail = { amount: amt, streak: p.streak || 0 };
     } else if (pw.type === 'decay') {

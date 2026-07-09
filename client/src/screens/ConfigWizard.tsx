@@ -3,7 +3,7 @@ import { avatarById, initials } from '../data';
 import '../wizard.css';
 
 /* ====== réglages envoyés au serveur (mappés depuis le wizard) ====== */
-export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; mjId?: string; rebalance: string; era: string; theme: string };
+export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; mjId?: string; rebalance: string; era: string; theme: string; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean };
 type Music = { nowPlaying: number; musicOn: boolean; onToggle: () => void; onNext: () => void; onPrev: () => void; bassRef: { current: number }; barsRef: { current: number[] }; waveRef?: { current: Uint8Array }; tracks: { title: string; artist: string }[] };
 type Player = { id: string; name: string; avatar?: string };
 type SpotifyCtl = { state: string; spotifyOn: boolean; deezerOn: boolean; onToggleSpotify: () => void; onToggleDeezer: () => void };
@@ -59,6 +59,18 @@ const REBALANCE = [
 const ORCHESTRATION = [
   { key: 'auto', name: 'Automatique', desc: 'L’app arbitre seule, sans animateur.' },
   { key: 'mj', name: 'Maître du jeu', desc: 'Un animateur au pupitre mène la partie.' },
+];
+// ===== Cypher (contre-la-montre) : options PROPRES au mode (le format en manches n'a pas de sens ici) =====
+const RUSH_STARTS = [
+  { sec: 45, label: 'Sprint', desc: 'Court et nerveux.' },
+  { sec: 60, label: 'Standard', desc: 'Le format de référence.' },
+  { sec: 90, label: 'Longue', desc: 'De la marge pour scorer.' },
+  { sec: 120, label: 'Endurance', desc: 'Pour tenir un max de temps.' },
+];
+const RUSH_PACES = [
+  { key: 'chill', name: 'Chrono clément', desc: '+8 s par bonne · −5 s si tu passes.' },
+  { key: 'normal', name: 'Équilibré', desc: '+6 s par bonne · −8 s si tu passes.' },
+  { key: 'hardcore', name: 'Sous pression', desc: '+5 s par bonne · −10 s si tu passes.' },
 ];
 const STEP_TITLES = ['LE <span class="em">JEU</span>', 'LA <span class="em">PLAYLIST</span>', 'LA <span class="em">DIFFICULTÉ</span>', 'LE <span class="em">FORMAT</span>', 'LES <span class="em">RÉGLAGES</span>'];
 const STEP_SUB = [
@@ -166,26 +178,53 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const [mjId, setMjId] = useState('');
   const [themeExp, setThemeExp] = useState(false);
   const [showPlayers, setShowPlayers] = useState(false); // popover "qui est dans le salon"
+  const [rushStartSec, setRushStartSec] = useState(60); // Cypher : chrono de départ
+  const [rushPace, setRushPace] = useState('normal');   // Cypher : barème du chrono (bonus/malus)
+  const [quizNoVf, setQuizNoVf] = useState(false);       // Quiz : exclure les Vrai/Faux
 
   // Le Maître du jeu ne s'applique qu'au Blind Test : Buzzer = 100% auto, Quiz/Cypher = objectifs.
   const mjAllowed = game === 'blind';
+  const isQuiz = game === 'quiz', isRush = game === 'rush';
+  const powersMode = game === 'blind' || game === 'buzz'; // seuls modes à pouvoirs (jauge de rééquilibrage utile)
+  const showRebalance = powersMode && orch !== 'mj';       // jauge cachée en Quiz/Cypher (pas de pouvoirs) et en MJ (pouvoirs off)
   useEffect(() => { if (!mjAllowed && orch === 'mj') setOrch('auto'); }, [mjAllowed, orch]);
 
   const themeName = [...THEMES_MAIN, ...THEMES_EXTRA].find((t) => t.id === theme)?.name || '';
   const eraName = era === 'all' ? 'Toutes époques' : (ERAS.find((e) => e.id === era)!.big + 's · ' + ERAS.find((e) => e.id === era)!.lab);
+  const rushPaceName = RUSH_PACES.find((p) => p.key === rushPace)!.name;
   const rows = [
     { i: '01', k: 'Le jeu', v: GAMES.find((g) => g.id === game)!.name },
-    { i: '02', k: 'Playlist', v: themeName + ' · ' + (era === 'all' ? 'Toutes époques' : eraName) },
+    isQuiz
+      ? { i: '02', k: 'Questions', v: quizNoVf ? 'Sans Vrai/Faux' : 'QCM + Vrai/Faux' }
+      : { i: '02', k: 'Playlist', v: themeName + ' · ' + (era === 'all' ? 'Toutes époques' : eraName) },
     { i: '03', k: 'Difficulté', v: DIFFS.find((d) => d.key === diff)!.name },
-    { i: '04', k: 'Format', v: rounds === 'inf' ? 'Sans fin' : rounds + ' manches' },
-    { i: '05', k: 'Réglages', v: ORCHESTRATION.find((o) => o.key === orch)!.name + ' · ' + REBALANCE.find((r) => r.key === rebalance)!.name },
+    isRush
+      ? { i: '04', k: 'Chrono', v: rushStartSec + ' s · ' + rushPaceName }
+      : { i: '04', k: isQuiz ? 'Questions' : 'Format', v: rounds === 'inf' ? 'Sans fin' : rounds + (isQuiz ? ' questions' : ' manches') },
+    { i: '05', k: 'Réglages', v: showRebalance ? (ORCHESTRATION.find((o) => o.key === orch)!.name + ' · ' + REBALANCE.find((r) => r.key === rebalance)!.name) : (orch === 'mj' && mjAllowed ? 'Maître du jeu' : 'Automatique') },
   ];
   const last = step === 4;
+  // titres / sous-titres d'étape adaptés au mode (Quiz : pas de playlist ; Cypher : chrono au lieu du format)
+  const stepTitles = [
+    STEP_TITLES[0],
+    isQuiz ? 'LES <span class="em">QUESTIONS</span>' : STEP_TITLES[1],
+    STEP_TITLES[2],
+    isRush ? 'LE <span class="em">CHRONO</span>' : STEP_TITLES[3],
+    STEP_TITLES[4],
+  ];
+  const stepSubs = [
+    STEP_SUB[0],
+    isQuiz ? 'Le style de questions : QCM seul, ou avec les Vrai/Faux.' : STEP_SUB[1],
+    isRush ? 'La force du signal : quels sons tombent. Plus dur = moins de temps gagné.' : STEP_SUB[2],
+    isRush ? 'Le temps de départ et la pression du chrono.' : isQuiz ? 'Le nombre de questions du quiz.' : STEP_SUB[3],
+    STEP_SUB[4],
+  ];
   function launch() {
     const r = rounds === 'inf' ? Math.min(poolSize, 50) : Math.min(rounds, poolSize);
     const isMj = orch === 'mj' && mjAllowed;
     const mode = game === 'buzz' ? 'buzzer' : game === 'quiz' ? 'quiz' : game === 'rush' ? 'rush' : 'multi';
-    onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance, era, theme });
+    onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance, era, theme,
+      rushStartSec: isRush ? rushStartSec : undefined, rushPace: isRush ? rushPace : undefined, quizNoVf: isQuiz ? quizNoVf : undefined });
   }
 
   // vidéo « diffusion télé » de la carte Blind Test : sélectionnée → couleur + lecture + déchirures de
@@ -381,9 +420,9 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
             <div className="act-head">
               <div className="act-title-wrap">
                 <div className="act-kicker"><span className="actno"><span>ACTE 0{step + 1}</span></span><span className="actlabel">Sélection</span></div>
-                <h2 className="act-title" {...H(STEP_TITLES[step])} />
+                <h2 className="act-title" {...H(stepTitles[step])} />
               </div>
-              <p className="act-sub">{STEP_SUB[step]}</p>
+              <p className="act-sub">{stepSubs[step]}</p>
             </div>
 
             {step === 0 && (() => {
@@ -428,7 +467,16 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
               );
             })()}
 
-            {step === 1 && (
+            {step === 1 && isQuiz && (
+              <div className="axis" style={{ maxWidth: 660 }}>
+                <div className="axis-head"><span className="axis-chip"><span>Type de questions</span></span><span className="axis-note">Le style du quiz</span></div>
+                <div className="opt-stack">
+                  <button className={`opt ${!quizNoVf ? 'sel' : ''}`} onClick={() => setQuizNoVf(false)}><span className="ol"><b>QCM + Vrai / Faux</b><small>Toutes les questions : les QCM à 4 choix ET les Vrai / Faux.</small></span></button>
+                  <button className={`opt ${quizNoVf ? 'sel' : ''}`} onClick={() => setQuizNoVf(true)}><span className="ol"><b>QCM uniquement</b><small>On vire les Vrai / Faux — que des questions à 4 choix.</small></span></button>
+                </div>
+              </div>
+            )}
+            {step === 1 && !isQuiz && (
               <>
                 <div className="axis">
                   <div className="axis-head"><span className="axis-chip"><span>Époque</span></span><span className="axis-note">Tune la décennie</span></div>
@@ -462,7 +510,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
               ))}</div>
             )}
 
-            {step === 3 && (
+            {step === 3 && !isRush && (
               <div className="grid-fmt">{FORMATS.map((f) => {
                 const inf = f.rounds === 'inf';
                 const disabled = !inf && (f.rounds as number) > poolSize;
@@ -470,22 +518,49 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                   <button key={String(f.rounds)} className={`fmt-tile pick ${inf ? 'inf warm' : ''} ${rounds === f.rounds ? 'sel on' : ''} ${disabled ? 'disabled' : ''}`} onClick={() => !disabled && setRounds(f.rounds)}>
                     <span {...H(bracketsSvg)} />
                     <div className="fmt-count">{inf ? '∞' : f.rounds}</div>
-                    <div className="fmt-unit">{inf ? 'sans limite' : 'manches'}</div>
+                    <div className="fmt-unit">{inf ? 'sans limite' : (isQuiz ? 'questions' : 'manches')}</div>
                     <div className="fmt-label">{f.label}</div>
                     <div className="fmt-desc">{f.desc}</div>
                   </button>
                 );
               })}</div>
             )}
+            {step === 3 && isRush && (
+              <>
+                <div className="grid-fmt">{RUSH_STARTS.map((s) => (
+                  <button key={s.sec} className={`fmt-tile pick ${rushStartSec === s.sec ? 'sel on' : ''}`} onClick={() => setRushStartSec(s.sec)}>
+                    <span {...H(bracketsSvg)} />
+                    <div className="fmt-count">{s.sec}</div>
+                    <div className="fmt-unit">secondes</div>
+                    <div className="fmt-label">{s.label}</div>
+                    <div className="fmt-desc">{s.desc}</div>
+                  </button>
+                ))}</div>
+                <div className="axis" style={{ marginTop: 20, maxWidth: 660 }}>
+                  <div className="axis-head"><span className="axis-chip"><span>Pression du chrono</span></span><span className="axis-note">Bonus / malus de temps</span></div>
+                  <div className="opt-stack">{RUSH_PACES.map((p) => (
+                    <button key={p.key} className={`opt ${rushPace === p.key ? 'sel' : ''}`} onClick={() => setRushPace(p.key)}><span className="ol"><b>{p.name}</b><small>{p.desc}</small></span></button>
+                  ))}</div>
+                </div>
+              </>
+            )}
 
             {step === 4 && (
               <div className="settings-grid">
+                {showRebalance && (
                 <div className="setblock">
                   <div className="set-lbl"><span className="axis-chip"><span>Jauge de pouvoir</span></span></div>
                   <div className="opt-stack">{REBALANCE.map((r) => (
                     <button key={r.key} className={`opt ${rebalance === r.key ? 'sel' : ''}`} onClick={() => setRebalance(r.key)}><span className="ol"><b>{r.name}</b><small>{r.desc}</small></span></button>
                   ))}</div>
                 </div>
+                )}
+                {!powersMode && (
+                  <div className="setblock">
+                    <div className="set-lbl"><span className="axis-chip"><span>{isRush ? 'Contre-la-montre' : 'Quiz'}</span></span></div>
+                    <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '4px 2px 0' }}>{isRush ? 'Cypher = solo, arbitrage 100 % automatique. Pas de pouvoirs ni d’animateur : juste toi et le chrono.' : 'Le Quiz s’arbitre tout seul : pas de pouvoirs ni d’animateur. Le plus rapide et juste rafle la mise.'}</p>
+                  </div>
+                )}
                 <div className="setblock">
                   <div className="set-lbl"><span className="axis-chip"><span>Orchestration</span></span></div>
                   <div className="opt-stack">{ORCHESTRATION.map((o) => {

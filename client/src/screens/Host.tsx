@@ -75,6 +75,7 @@ export default function Host() {
   const [poolSize, setPoolSize] = useState(0);
   const [players, setPlayers] = useState<any[]>([]);
   const [settings, setSettings] = useState({ difficulty: 'normal', mode: 'multi', rounds: 8, mj: false, rebalance: 'comeback' });
+  const lastWizRef = useRef<any>(null); // dernier payload de l'assistant → « Rejouer » (Cypher) sans reperdre era/theme/chrono/pace
   const [configuring, setConfiguring] = useState(false);
   const [hubView, setHubView] = useState<null | 'roster' | 'trophies' | 'leaderboard' | 'radio'>(null); // consultation roster / palmarès / classement / radio sur la TV
   // Easter egg : code Konami (↑↑↓↓←→←→ B A) → pluie des portraits + flash « CHEAT » sur la TV (visuel pur pour l'instant).
@@ -428,7 +429,8 @@ export default function Host() {
     sfx('launch');
     socket.emit('host:start', { rounds: settings.rounds, difficulty: settings.difficulty, mode: settings.mode, mj: settings.mj, rebalance: settings.rebalance }, (res: any) => res?.error && setError(res.error));
   }
-  function startWizard(s: { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string; mjId?: string; era?: string; theme?: string }) {
+  function startWizard(s: { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string; mjId?: string; era?: string; theme?: string; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean }) {
+    lastWizRef.current = s; // mémorise pour un éventuel « Rejouer » (Cypher notamment)
     const a = audioRef.current;
     if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); }
     sfx('launch');
@@ -957,7 +959,7 @@ export default function Host() {
             ))}
           </div>
           <div className="row" style={{ gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
-            <button className="btn warm" onClick={() => socket.emit('host:start', { difficulty: settings.difficulty, mode: 'rush' }, (r: any) => r?.error && setError(r.error))}>Rejouer →</button>
+            <button className="btn warm" onClick={() => socket.emit('host:start', { ...(lastWizRef.current || { difficulty: settings.difficulty }), mode: 'rush' }, (r: any) => r?.error && setError(r.error))}>Rejouer →</button>
             <button className="btn" onClick={() => socket.emit('host:restart')}>Retour au salon</button>
           </div>
         </div>

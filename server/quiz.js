@@ -42,10 +42,12 @@ function shuffle(arr) {
 
 // Tire n questions de la DIFFICULTÉ demandée, en évitant celles déjà passées dans le salon (usedSet,
 // persistant sur la durée de vie du salon). Quand le pool de cette difficulté est épuisé, on le recycle.
-export function pickQuiz(n, difficulty = 'normal', usedSet = null) {
+export function pickQuiz(n, difficulty = 'normal', usedSet = null, opts = {}) {
   const d = DIFFS.includes(difficulty) ? difficulty : 'normal';
-  let pool = QUIZ.filter((q) => q.diff === d);
-  if (pool.length < n) pool = QUIZ; // sécurité : si une difficulté est trop maigre, on pioche dans tout
+  const noVf = !!opts.noVf; // option hôte : exclure les Vrai/Faux
+  const full = QUIZ.filter((q) => !noVf || q.format !== 'vf'); // banque filtrée (repli SANS réintroduire les VF exclus)
+  let pool = full.filter((q) => q.diff === d);
+  if (pool.length < n) pool = full; // sécurité : difficulté trop maigre → toute la banque (toujours filtrée)
   const used = usedSet || new Set();
   let avail = pool.filter((q) => !used.has(q.id));
   if (avail.length < n) { for (const q of pool) used.delete(q.id); avail = [...pool]; } // épuisé → on recycle ce pool
