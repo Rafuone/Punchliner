@@ -663,17 +663,29 @@ export default function Player() {
           {round.mode === 'rush' ? (() => {
             const rs = Math.max(0, Math.ceil((round.endsAt - now) / 1000));
             const mine = (round.scores || []).find((p: any) => p.id === meId.current);
+            const spectator = round.rushPlayerId && round.rushPlayerId !== meId.current; // Cypher = solo : je regarde
+            const runner = (round.scores || []).find((p: any) => p.id === round.rushPlayerId);
             return (
               <>
                 <span className="eyebrow">Cypher · {round.difficulty}</span>
                 <div className="big-num" style={{ color: rs <= 8 ? '#ff5a1f' : 'var(--fluo)' }}>{rs}</div>
-                <span className="muted">Morceau {round.trackNo} · {mine ? `${fmtAud(mine.score)} aud. · ${mine.tracks} ✓` : '0 aud.'}</span>
-                <form onSubmit={submitRush} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre + artiste, vite !" autoFocus />
-                  <button className="btn warm big send" type="submit">Envoyer</button>
-                  <button className="btn" type="button" onClick={rushPass}>Passer · −{Math.round((round.passMs || 8000) / 1000)} s</button>
-                </form>
-                {feedback && (feedback.added ? <p className="feedback good">Trouvé ! +{fmtAud(feedback.points || 0)} · +{Math.round(feedback.added / 1000)} s</p> : feedback.removed ? <p className="feedback bad">Passé · −{Math.round(feedback.removed / 1000)} s</p> : feedback.wrong ? <p className="feedback bad">Pas ça… réessaie</p> : null)}
+                {spectator ? (
+                  <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                    <span className="muted" style={{ fontWeight: 700 }}>🎧 {round.rushPlayerName || runner?.name || 'Un joueur'} est au contre-la-montre</span>
+                    <span className="muted" style={{ fontSize: 13 }}>Morceau {round.trackNo}{runner ? ` · ${fmtAud(runner.score)} aud. · ${runner.tracks} ✓` : ''}</span>
+                    <span className="muted" style={{ fontSize: 12, opacity: .7 }}>Le Cypher est solo — tu regardes.</span>
+                  </div>
+                ) : (
+                  <>
+                    <span className="muted">Morceau {round.trackNo} · {mine ? `${fmtAud(mine.score)} aud. · ${mine.tracks} ✓` : '0 aud.'}</span>
+                    <form onSubmit={submitRush} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre + artiste, vite !" autoFocus />
+                      <button className="btn warm big send" type="submit">Envoyer</button>
+                      <button className="btn" type="button" onClick={rushPass}>Passer · −{Math.round((round.passMs || 8000) / 1000)} s</button>
+                    </form>
+                    {feedback && (feedback.added ? <p className="feedback good">Trouvé ! +{fmtAud(feedback.points || 0)} · +{Math.round(feedback.added / 1000)} s</p> : feedback.removed ? <p className="feedback bad">Passé · −{Math.round(feedback.removed / 1000)} s</p> : feedback.wrong ? <p className="feedback bad">Pas ça… réessaie</p> : null)}
+                  </>
+                )}
               </>
             );
           })() : round.mode === 'quiz' ? (

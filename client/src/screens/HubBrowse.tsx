@@ -195,18 +195,26 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
 
   if (mode === 'trophies') {
     return (
-      <div className="hub-overlay">
-        <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
-          <div className="topbar">
-            <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={onClose}>← Retour au hub</button>
-            <h1 className="wm" style={{ fontSize: 22 }}>PALMARÈS</h1>
-            <span className="gpill">{AWARDS_INFO.length} trophées</span>
+      <div className="hub-overlay trophies-page">
+        <GrungeBg />
+        <button className="tvros-back" onClick={onClose}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          RETOUR
+        </button>
+        <div style={{ position: 'relative', zIndex: 1, padding: '62px clamp(24px,4vw,64px) 40px' }}>
+          <div className="tro-head">
+            <h1 className="wm tro-title">LES <span className="d">TROPHÉES</span></h1>
+            <span className="gpill">{AWARDS_INFO.length} à décrocher</span>
           </div>
-          <p className="muted" style={{ textAlign: 'center', margin: '2px 0 14px', fontSize: 13 }}>Décernés en fin de partie, selon ce qui s'est passé sur la table.</p>
-          <div className="troph-grid" style={{ maxWidth: 1040 }}>
+          <p className="muted tro-sub">Décernés en fin de partie, selon ce qui s'est passé sur la table.</p>
+          <div className="troph-grid big">
             {AWARDS_INFO.map((t) => (
               <div className={`troph ${t.salty ? 'salty' : ''}`} key={t.id}>
-                <span className="troph-ic" dangerouslySetInnerHTML={{ __html: awardIcon(t.icon) }} />
+                {/* image du trophée si présente (client/public/trophies/<id>.png), sinon repli sur l'icône SVG */}
+                <span className="troph-ic">
+                  <img className="troph-img" src={`/trophies/${t.id}.png`} alt="" onError={hideOnErr} />
+                  <span className="troph-svg" dangerouslySetInnerHTML={{ __html: awardIcon(t.icon) }} />
+                </span>
                 <div className="troph-title">{t.title}</div>
                 <div className="troph-desc">{t.blurb}</div>
               </div>
@@ -218,23 +226,30 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
   }
 
   if (mode === 'leaderboard') {
+    // les scores dépendent de la config (difficulté + chrono + pression) → on l'affiche pour comparer à config égale
+    const DIFF_LB: any = { facile: 'Facile', normal: 'Connaisseur', difficile: 'Digger', puriste: 'Puriste' };
+    const PACE_LB: any = { chill: 'Clément', normal: 'Équilibré', hardcore: 'Sous pression' };
+    const cfgChip = (t: any) => `${DIFF_LB[t.difficulty] || t.difficulty || 'Normal'} · ${t.startSec || 60}s · ${PACE_LB[t.pace || 'normal']}`;
     return (
       <div className="hub-overlay">
         <GrungeBg />
-        <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
-          <div className="topbar">
-            <button className="btn" style={{ padding: '8px 14px', fontSize: 13 }} onClick={onClose}>← Retour au hub</button>
-            <h1 className="wm" style={{ fontSize: 22 }}>CLASSEMENT <span className="d">MONDIAL</span></h1>
+        <button className="tvros-back" onClick={onClose}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          RETOUR
+        </button>
+        <div className="wrap" style={{ position: 'relative', zIndex: 1, maxWidth: 'none', padding: '62px clamp(24px,4vw,64px) 40px' }}>
+          <div className="topbar" style={{ justifyContent: 'center', gap: 16 }}>
+            <h1 className="wm" style={{ fontSize: 'clamp(28px,3.2vw,46px)' }}>CLASSEMENT <span className="d">MONDIAL</span></h1>
             <span className="gpill">Cypher</span>
           </div>
-          <p className="muted" style={{ textAlign: 'center', margin: '2px 0 30px', fontSize: 13 }}>Le contre-la-montre — meilleurs scores, tous salons confondus.</p>
+          <p className="muted" style={{ textAlign: 'center', margin: '2px 0 30px', fontSize: 15 }}>Le contre-la-montre — meilleurs scores, tous salons confondus. <b style={{ color: 'var(--txt)' }}>Chaque score porte sa config</b> (les options changent tout).</p>
           {board.length === 0 ? (
             <p className="muted" style={{ textAlign: 'center', marginTop: 70, fontSize: 'clamp(18px,2vw,24px)' }}>Aucun score pour l'instant.<br />Lance un <b style={{ color: 'var(--fluo)' }}>Cypher</b> pour ouvrir le classement.</p>
           ) : (
-            <div className="board tvbig" style={{ maxWidth: 940, margin: '0 auto' }}>
+            <div className="board tvbig" style={{ maxWidth: 1080, margin: '0 auto' }}>
               {board.map((t: any, i: number) => (
                 <div className={`prow ${i === 0 ? 'lead' : ''}`} key={i} style={{ animation: `rowin .3s ease ${Math.min(i, 12) * 0.035}s both` }}>
-                  <span className="who"><span className="rk">{i + 1}</span>{avNode(t.avatar)}{t.name}</span>
+                  <span className="who"><span className="rk">{i + 1}</span>{avNode(t.avatar)}<span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>{t.name}<span className="lb-cfg">{cfgChip(t)}</span></span></span>
                   <span className="row" style={{ gap: 24, alignItems: 'baseline' }}>
                     <span className="gain zero" style={{ fontSize: 'clamp(16px,1.7vw,22px)' }}>{t.tracks} ✓</span>
                     <span className="pts">{fmtAud(t.score)}</span>

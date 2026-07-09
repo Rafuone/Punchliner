@@ -11,7 +11,7 @@ import { gradeAnswer, speedMult, normalize, extractFeats } from './match.js';
 import { POWERS, firstLetters } from './powers.js';
 import { pickQuiz, buildQuizRound } from './quiz.js';
 import { computeAwards } from './awards.js';
-import { addScore, getTop } from './leaderboard.js';
+import { addScore, getTop, getConfigs } from './leaderboard.js';
 
 // format auditeurs (fr-FR) — utilisé pour les textes des trophées
 const fmtAud = (n) => Math.round(n || 0).toLocaleString('fr-FR');
@@ -372,7 +372,7 @@ function emitLobby(room) {
 function snapshot(room, isHost) {
   const s = { code: room.code, phase: room.phase, roundIndex: room.roundIndex, totalRounds: room.totalRounds, settings: room.settings, players: publicPlayers(room) };
   if (room.phase === 'playing' && room.settings.mode === 'rush') {
-    s.round = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: room.rushMaxMs || RUSH_MAX_MS, passMs: room.rushPassMs, bonusMs: room.rushBonusMs, difficulty: room.diffLabel, scores: rushBoard(room) };
+    s.round = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: room.rushMaxMs || RUSH_MAX_MS, passMs: room.rushPassMs, bonusMs: room.rushBonusMs, difficulty: room.diffLabel, scores: rushBoard(room), rushPlayerId: room.rushPlayerId, rushPlayerName: room.rushPlayerId ? (room.players.get(room.rushPlayerId)?.name || '') : '' };
     if (isHost && room.current) Object.assign(s.round, { preview: room.current.preview, startAt: 0 });
   } else if (room.phase === 'playing' && room.current) {
     s.round = { index: room.roundIndex, roundIndex: room.roundIndex, total: room.totalRounds, endsAt: room.roundEndsAt, durationMs: room.windowMs, mode: room.settings.mode, difficulty: room.diffLabel, mj: room.settings.mj };
@@ -738,7 +738,7 @@ function rushEmitTrack(room, evt = {}) {
   clearTimeout(room.rushTrackTimer);
   const idxAtSet = room.rushIndex;
   room.rushTrackTimer = setTimeout(() => { if (room.phase === 'playing' && room.settings.mode === 'rush' && room.rushIndex === idxAtSet) rushAdvance(room, { reason: 'timeout' }); }, RUSH_TRACK_MAX_MS);
-  const common = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: room.rushMaxMs || RUSH_MAX_MS, passMs: room.rushPassMs, bonusMs: room.rushBonusMs, difficulty: room.diffLabel, scores: rushBoard(room), event: evt };
+  const common = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: room.rushMaxMs || RUSH_MAX_MS, passMs: room.rushPassMs, bonusMs: room.rushBonusMs, difficulty: room.diffLabel, scores: rushBoard(room), rushPlayerId: room.rushPlayerId, rushPlayerName: room.rushPlayerId ? (room.players.get(room.rushPlayerId)?.name || '') : '', event: evt };
   io.to(room.hostId).emit('rush:host', { ...common, preview: cur.preview, startAt: 0, sp: { title: cur.title, artist: cur.artist } }); // l'hôte joue le son (sp = résolution Spotify, hôte only)
   io.to(room.code).emit('rush:state', common); // les joueurs : chrono + score, pas d'audio
 }
@@ -767,6 +767,8 @@ function startRush(room) {
   room.phase = 'playing';
   room.mult = diff.mult; room.diffLabel = diff.label;
   const rp = rushParams(room.settings); room.rushBonusMs = rp.bonusMs; room.rushPassMs = rp.passMs; // barème (pace + difficulté)
+  // Cypher = SOLO : un seul joueur joue. Celui désigné par l'hôte, sinon le 1er connecté.
+  room.rushPlayerId = room.settings.rushPlayerId || ([...room.players.values()].find((p) => p.connected && !p.waiting) || [...room.players.values()][0])?.id || null;
   const startMs = FAST ? RUSH_START_MS : (room.settings.rushStartSec || 60) * 1000;                // chrono de départ choisi
   room.rushMaxMs = FAST ? RUSH_MAX_MS : Math.max(RUSH_MAX_MS, startMs + 30000);                     // plafond ≥ départ (les longs chronos ne se font pas raboter)
   room.rushPlaylist = pickPlaylist(POOL.length, diff.tier, room.settings.era, room.settings.theme);
@@ -784,12 +786,14 @@ function endRush(room) {
   clearTimeout(room.rushTrackTimer);
   if (room.phase !== 'playing') return;
   room.phase = 'rushend';
+  const cfg = { difficulty: room.settings.difficulty, startSec: room.settings.rushStartSec || 60, pace: room.settings.rushPace || 'normal' };
   const players = [...room.players.values()].filter((p) => !p.waiting);
-  const results = players.map((p) => {
-    const placed = addScore({ name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0, difficulty: room.settings.difficulty });
-    return { id: p.id, name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0, rank: placed.rank };
+  const scorers = room.rushPlayerId ? players.filter((p) => p.id === room.rushPlayerId) : players; // 1 seul joueur désigné joue (sinon tous, compat)
+  const results = scorers.map((p) => {
+    const placed = addScore({ name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0, ...cfg });
+    return { id: p.id, name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0, rank: placed.rank, configTotal: placed.configTotal };
   }).sort((a, b) => b.score - a.score);
-  const payload = { results, top: getTop(10), difficulty: room.settings.difficulty };
+  const payload = { results, top: getTop(10, cfg), config: cfg }; // top de LA MÊME config → comparable
   room.lastRushEnd = payload;
   io.to(room.code).emit('rush:end', payload);
 }
@@ -927,7 +931,7 @@ io.on('connection', (socket) => {
     cb?.({ ok: true, players: publicPlayers(room) });
   });
 
-  socket.on('host:start', ({ rounds, difficulty, mode, mj, mjId, rebalance, era, theme, rushStartSec, rushPace, quizNoVf } = {}, cb) => {
+  socket.on('host:start', ({ rounds, difficulty, mode, mj, mjId, rebalance, era, theme, rushStartSec, rushPace, quizNoVf, rushPlayerId } = {}, cb) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
     const wantMode = MODES.includes(mode) ? mode : 'multi';
@@ -947,6 +951,7 @@ io.on('connection', (socket) => {
       rushStartSec: Math.min(180, Math.max(30, (rushStartSec | 0) || 60)), // Cypher : chrono de départ (s)
       rushPace: ['chill', 'normal', 'hardcore'].includes(rushPace) ? rushPace : 'normal', // Cypher : barème du chrono
       quizNoVf: !!quizNoVf, // Quiz : exclure les Vrai/Faux
+      rushPlayerId: (rushPlayerId && room.players.has(rushPlayerId)) ? rushPlayerId : null, // Cypher : le SEUL joueur qui joue
     };
     for (const p of room.players.values()) { p.score = 0; p.waiting = false; p.stat = newStat(); p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; p.isMJ = false; p.streak = 0; p.decayUses = 0; p.veteranUntil = null; p.veteranFloor = 0; p.nofault = false; p.selfBonus = 0; p.sustainUntil = null; p.sustainAmount = 0; p.draftFrac = 0; p.rushScore = 0; p.rushTracks = 0; }
     room.mjDouble = false; room.mjPlus = false; room.mjId = null;
@@ -1024,6 +1029,7 @@ io.on('connection', (socket) => {
   socket.on('rush:answer', ({ text } = {}, cb) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.phase !== 'playing' || room.settings.mode !== 'rush') return cb?.({ error: 'Pas de run.' });
+    if (room.rushPlayerId && socket.data.playerId !== room.rushPlayerId) return cb?.({ ok: true, correct: false, spectator: true }); // seul le joueur désigné joue
     if (room.rushResolving) return cb?.({ ok: true, correct: false }); // course : qqn a déjà trouvé ce morceau
     const p = room.players.get(socket.data.playerId);
     if (!p || p.waiting) return cb?.({ error: 'Joueur inconnu.' });
@@ -1041,6 +1047,7 @@ io.on('connection', (socket) => {
   socket.on('rush:pass', (_p, cb) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.phase !== 'playing' || room.settings.mode !== 'rush' || room.rushResolving) return cb?.({ error: 'Non.' });
+    if (room.rushPlayerId && socket.data.playerId !== room.rushPlayerId) return cb?.({ ok: true, spectator: true }); // seul le joueur désigné joue
     const p = room.players.get(socket.data.playerId);
     if (!p || p.waiting) return;
     room.rushResolving = true;
@@ -1048,7 +1055,7 @@ io.on('connection', (socket) => {
     rushApplyDelta(room, -room.rushPassMs); // -temps (peut finir le run)
     if (room.phase === 'playing') rushAdvance(room, { reason: 'pass', by: p.id, name: p.name, removedMs: room.rushPassMs });
   });
-  socket.on('leaderboard:get', ({ n } = {}, cb) => cb?.({ ok: true, top: getTop(Math.min(50, Math.max(1, n || 10))) }));
+  socket.on('leaderboard:get', ({ n, filter } = {}, cb) => cb?.({ ok: true, top: getTop(Math.min(50, Math.max(1, n || 10)), filter || null), configs: getConfigs() }));
 
   // Mode quiz : QCM, une seule réponse par joueur, note = justesse × vitesse
   socket.on('quiz:answer', ({ choice } = {}, cb) => {
