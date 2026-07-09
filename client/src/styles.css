@@ -954,7 +954,7 @@ button, input { font-family: inherit; }
 .reveal-demo .rd-btn:hover { border-color: var(--fluo); transform: translateY(-3px); }
 .reveal-demo .rd-btn img { width: 72px; height: 72px; border-radius: 8px; object-fit: cover; object-position: 50% 20%; }
 .reveal-demo .rd-btn span { font-weight: 700; font-size: 12.5px; text-align: center; }
-/* badge de config sur une ligne de classement Cypher (difficulté · chrono · pression) */
+/* badge de config sur une ligne de classement Survivor (difficulté · chrono · pression) */
 .lb-cfg { font-family: var(--ui); font-weight: 700; font-size: 12px; letter-spacing: .01em; color: var(--muted2); text-transform: none; }
 .tvros-objtxt { font-family: var(--disp); font-weight: 700; font-size: clamp(20px,2.4vw,30px); line-height: 1.28; color: #fff; }
 .tvros-objnote { margin-top: 11px; font-size: 15px; color: var(--muted); }

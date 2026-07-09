@@ -69,7 +69,7 @@ const PREVIEW_MS = 30000; // durée d'un extrait Deezer
 const QUIZ_MS = FAST ? 1500 : 22000; // durée d'une question de quiz (QCM)
 const HOST_GRACE_MS = 120000; // délai avant de fermer un salon dont l'hôte a disparu
 
-// Mode Cypher (contre-la-montre) — jauge de temps PARTAGÉE (bonne réponse = +temps, "passer" = -temps)
+// Mode Survivor (contre-la-montre) — jauge de temps PARTAGÉE (bonne réponse = +temps, "passer" = -temps)
 const RUSH_START_MS = FAST ? 8000 : 60000; // budget de départ (≥ 1 min : 45 s était trop court au lancement)
 const RUSH_BONUS_MS = FAST ? 3000 : 6000;  // +temps par bonne réponse
 const RUSH_PASS_MS  = FAST ? 3000 : 8000;  // -temps sur "passer"
@@ -344,7 +344,7 @@ function tierSlice(arr, tier) {
   if (tier === 'deep') return band(0.62, 1.0);  // puriste : le vrai fond du bac
   return s;                                     // repli : tout
 }
-function poolForTier(tier) { return tierSlice(livePool(), tier); } // compat (Cypher recycle)
+function poolForTier(tier) { return tierSlice(livePool(), tier); } // compat (Survivor recycle)
 // ÉQUILIBRAGE DES ÉPOQUES (époque = « toutes ») : le pool est très orienté récent (mesuré : 90s 3% · 00s 15% ·
 // 10s 33% · 20s 40%). On échantillonne par DÉCENNIE selon une cible « à peu près autant partout, léger surpoids
 // 2010/2020 » au lieu de la répartition brute → un blind-test balaie les époques au lieu de matraquer du récent.
@@ -353,7 +353,7 @@ function eraBucket(t) { const y = t.year || 0; return !y ? 'x' : y <= 1999 ? '90
 function shuffleArr(a) { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; }
 // Interleaving par « déficit » : à chaque tirage on prend la décennie la plus EN RETARD sur sa cible. Avantage
 // clé : TOUT PRÉFIXE de la sortie respecte déjà la cible → marche pour une partie de N manches (blind test /
-// buzzer) ET pour un FLUX potentiellement infini (Cypher, qui enchaîne et peut s'arrêter à tout moment).
+// buzzer) ET pour un FLUX potentiellement infini (Survivor, qui enchaîne et peut s'arrêter à tout moment).
 // Plafonné par la dispo : quand une décennie rare (90s) s'épuise, les autres complètent proprement.
 function sampleBalancedByEra(src, n) {
   const g = { '90': [], '00': [], '10': [], '20': [], 'x': [] };
@@ -789,7 +789,7 @@ function finishGame(room) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Mode Cypher (contre-la-montre) — jauge de temps partagée            */
+/* Mode Survivor (contre-la-montre) — jauge de temps partagée            */
 /* ------------------------------------------------------------------ */
 function rushBoard(room) {
   return [...room.players.values()].filter((p) => !p.waiting)
@@ -834,12 +834,12 @@ function startRush(room) {
   room.phase = 'playing';
   room.mult = diff.mult; room.diffLabel = diff.label;
   const rp = rushParams(room.settings); room.rushBonusMs = rp.bonusMs; room.rushPassMs = rp.passMs; // barème (pace + difficulté)
-  // Cypher = SOLO : un seul joueur joue. Celui désigné par l'hôte, sinon le 1er connecté.
+  // Survivor = SOLO : un seul joueur joue. Celui désigné par l'hôte, sinon le 1er connecté.
   room.rushPlayerId = room.settings.rushPlayerId || ([...room.players.values()].find((p) => p.connected && !p.waiting) || [...room.players.values()][0])?.id || null;
   const startMs = FAST ? RUSH_START_MS : (room.settings.rushStartSec || 60) * 1000;                // chrono de départ choisi
   room.rushMaxMs = FAST ? RUSH_MAX_MS : Math.max(RUSH_MAX_MS, startMs + 30000);                     // plafond ≥ départ (les longs chronos ne se font pas raboter)
   room.rushPlaylist = pickPlaylist(POOL.length, diff.tier, room.settings.era, room.settings.theme);
-  cacheTracks(room.rushPlaylist.slice(0, 12)); // Cypher enchaîne vite → on rapatrie le 1er paquet en fond
+  cacheTracks(room.rushPlaylist.slice(0, 12)); // Survivor enchaîne vite → on rapatrie le 1er paquet en fond
   room.rushIndex = 0;
   room.rushEndsAt = Date.now() + startMs;
   room.rushResolving = false;
@@ -1003,7 +1003,7 @@ io.on('connection', (socket) => {
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
     const wantMode = MODES.includes(mode) ? mode : 'multi';
     const isQuiz = wantMode === 'quiz';
-    // MJ = uniquement le Blind Test (multi). Quiz/Cypher = objectifs ; Buzzer = 100% auto (buzz puis saisie notée seule).
+    // MJ = uniquement le Blind Test (multi). Quiz/Survivor = objectifs ; Buzzer = 100% auto (buzz puis saisie notée seule).
   const useMj = !!mj && wantMode === 'multi';
     if (!isQuiz && !POOL.length) return cb?.({ error: 'Aucun morceau disponible (réseau ?).' });
     if (room.players.size < 1) return cb?.({ error: 'Il faut au moins un joueur.' });
@@ -1015,15 +1015,15 @@ io.on('connection', (socket) => {
       rebalance: ['comeback', 'snowball', 'off'].includes(rebalance) ? rebalance : 'comeback',
       era: typeof era === 'string' ? era : 'all',     // ÉPOQUE (année) — filtre le pool musical
       theme: typeof theme === 'string' ? theme : 'all', // THÈME/STYLE — filtre le pool musical
-      rushStartSec: Math.min(180, Math.max(30, (rushStartSec | 0) || 60)), // Cypher : chrono de départ (s)
-      rushPace: ['chill', 'normal', 'hardcore'].includes(rushPace) ? rushPace : 'normal', // Cypher : barème du chrono
+      rushStartSec: Math.min(180, Math.max(30, (rushStartSec | 0) || 60)), // Survivor : chrono de départ (s)
+      rushPace: ['chill', 'normal', 'hardcore'].includes(rushPace) ? rushPace : 'normal', // Survivor : barème du chrono
       quizNoVf: !!quizNoVf, // Quiz : exclure les Vrai/Faux
-      rushPlayerId: (rushPlayerId && room.players.has(rushPlayerId)) ? rushPlayerId : null, // Cypher : le SEUL joueur qui joue
+      rushPlayerId: (rushPlayerId && room.players.has(rushPlayerId)) ? rushPlayerId : null, // Survivor : le SEUL joueur qui joue
     };
     for (const p of room.players.values()) { p.score = 0; p.waiting = false; p.stat = newStat(); p.charge = 0; p.charges = 1; p.armed = null; p.shield = false; p.isMJ = false; p.streak = 0; p.decayUses = 0; p.veteranUntil = null; p.veteranFloor = 0; p.nofault = false; p.selfBonus = 0; p.sustainUntil = null; p.sustainAmount = 0; p.draftFrac = 0; p.rushScore = 0; p.rushTracks = 0; }
     room.mjDouble = false; room.mjPlus = false; room.mjId = null;
     clearTimeout(room.rushTimer);
-    // Mode Cypher : boucle dédiée (jauge de temps), pas de manches ni de pouvoirs → on lance et on sort
+    // Mode Survivor : boucle dédiée (jauge de temps), pas de manches ni de pouvoirs → on lance et on sort
     if (wantMode === 'rush') { room.totalRounds = 0; room.roundIndex = 0; room.prevRanks = null; cb?.({ ok: true }); return startRush(room); }
     if (room.settings.mj) {
       // le MJ est choisi explicitement (sinon 1er joueur connecté par défaut)
@@ -1092,7 +1092,7 @@ io.on('connection', (socket) => {
     // le son continue de tourner : on ne coupe plus la manche dès que tout le monde a répondu
   });
 
-  // Mode Cypher (contre-la-montre) : on répond en boucle, la 1re bonne réponse fait avancer TOUT LE MONDE
+  // Mode Survivor (contre-la-montre) : on répond en boucle, la 1re bonne réponse fait avancer TOUT LE MONDE
   socket.on('rush:answer', ({ text } = {}, cb) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.phase !== 'playing' || room.settings.mode !== 'rush') return cb?.({ error: 'Pas de run.' });

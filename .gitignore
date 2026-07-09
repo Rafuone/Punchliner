@@ -3,7 +3,7 @@ dist/
 *.log
 .DS_Store
 .env
-# leaderboard du mode Cypher = donnée runtime (généré au 1er score), pas versionné
+# leaderboard du mode Survivor = donnée runtime (généré au 1er score), pas versionné
 server/leaderboard.json
 # cache disque du pool musical (métadonnées Deezer, régénéré au boot) — pas versionné
 server/.pool-cache.json

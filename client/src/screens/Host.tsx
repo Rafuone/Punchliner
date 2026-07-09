@@ -78,7 +78,7 @@ export default function Host() {
   const [poolSize, setPoolSize] = useState(0);
   const [players, setPlayers] = useState<any[]>([]);
   const [settings, setSettings] = useState({ difficulty: 'normal', mode: 'multi', rounds: 8, mj: false, rebalance: 'comeback' });
-  const lastWizRef = useRef<any>(null); // dernier payload de l'assistant → « Rejouer » (Cypher) sans reperdre era/theme/chrono/pace
+  const lastWizRef = useRef<any>(null); // dernier payload de l'assistant → « Rejouer » (Survivor) sans reperdre era/theme/chrono/pace
   const [configuring, setConfiguring] = useState(false);
   const [hubView, setHubView] = useState<null | 'roster' | 'trophies' | 'leaderboard' | 'radio'>(null); // consultation roster / palmarès / classement / radio sur la TV
   // Easter egg : code Konami (↑↑↓↓←→←→ B A) → pluie des portraits + flash « CHEAT » sur la TV (visuel pur pour l'instant).
@@ -117,7 +117,7 @@ export default function Host() {
   const [pendingUnlock, setPendingUnlock] = useState<string | null>(null); // rappeur débloqué cette partie (arrivée du Challenger)
   const [showReveal, setShowReveal] = useState(false);   // l'overlay d'arrivée est en cours
   const [finalRounds, setFinalRounds] = useState(0);     // nb de manches de la partie (pour la certif)
-  const [rushEnd, setRushEnd] = useState<any>(null);     // fin de run Cypher (résultats + top 10 mondial)
+  const [rushEnd, setRushEnd] = useState<any>(null);     // fin de run Survivor (résultats + top 10 mondial)
   const [waiting, setWaiting] = useState(0);             // joueurs en salle d'attente
   const [error, setError] = useState('');
   const [joinBase, setJoinBase] = useState(window.location.origin.replace(/\/$/, ''));
@@ -240,7 +240,7 @@ export default function Host() {
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
     socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
     socket.on('round:host', (d: any) => { setReveal(null); setAnswered([]); setBuzzWinner(null); setRound(d); setPhase('playing'); playRound(d); });
-    // Mode Cypher (contre-la-montre) : le son s'enchaîne automatiquement à chaque nouveau morceau
+    // Mode Survivor (contre-la-montre) : le son s'enchaîne automatiquement à chaque nouveau morceau
     socket.on('rush:host', (d: any) => { setError(''); setRound(d); if (d.scores) setPlayers(d.scores); setPhase('playing'); playRound(d); });
     socket.on('rush:state', (d: any) => { setRound(d); if (d.scores) setPlayers(d.scores); });
     socket.on('rush:end', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); clearTimeout(audioRetryRef.current); setRushEnd(d); setPhase('rushend'); });
@@ -451,7 +451,7 @@ export default function Host() {
     socket.emit('host:start', { rounds: settings.rounds, difficulty: settings.difficulty, mode: settings.mode, mj: settings.mj, rebalance: settings.rebalance }, (res: any) => res?.error && setError(res.error));
   }
   function startWizard(s: { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string; mjId?: string; era?: string; theme?: string; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean }) {
-    lastWizRef.current = s; // mémorise pour un éventuel « Rejouer » (Cypher notamment)
+    lastWizRef.current = s; // mémorise pour un éventuel « Rejouer » (Survivor notamment)
     const a = audioRef.current;
     if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); audioReadyRef.current = true; } // ce clic « Lancer » débloque l'autoplay pour toute la partie
     sfx('launch');
@@ -496,7 +496,7 @@ export default function Host() {
   const buzzRemain = buzzWinner?.endsAt ? Math.max(0, buzzWinner.endsAt - now) : 0;
   const buzzSec = Math.ceil(buzzRemain / 1000);
   const buzzFrac = buzzWinner?.answerMs ? Math.max(0, Math.min(1, buzzRemain / buzzWinner.answerMs)) : 0;
-  const rushFrac = round.rushMax ? Math.max(0, Math.min(1, remaining / round.rushMax)) : 0; // jauge de temps Cypher
+  const rushFrac = round.rushMax ? Math.max(0, Math.min(1, remaining / round.rushMax)) : 0; // jauge de temps Survivor
   // décomptes CLASH (paris puis duel) — mêmes formules que la manche standard
   const btRemain = battle?.endsAt ? Math.max(0, battle.endsAt - now) : 0;
   const btSec = Math.ceil(btRemain / 1000);
@@ -559,7 +559,7 @@ export default function Host() {
           {['prep', 'countdown', 'playing', 'reveal'].includes(phase) && (<>
             <span className="gmeta">
               {round.mode === 'rush'
-                ? <span className="gmeta-round"><span className="gl">Cypher</span><b>{round.trackNo || 1}<i> morceau</i></b></span>
+                ? <span className="gmeta-round"><span className="gl">Survivor</span><b>{round.trackNo || 1}<i> morceau</i></b></span>
                 : <span className="gmeta-round"><span className="gl">Manche</span><b>{round.index + 1}<i>/{round.total}</i></b></span>}
               <span className="gmeta-chip">{round.difficulty}</span>
               <span className="gmeta-chip">{players.length} j.{waiting > 0 ? ` · ${waiting} att.` : ''}</span>
@@ -655,7 +655,7 @@ export default function Host() {
         <div className={round.mode === 'quiz' ? 'center qz-tv' : 'center'}>
           {round.mode === 'rush' ? (
             <div style={{ width: '100%', maxWidth: 960, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-              <span className="playmeta">Cypher — contre-la-montre · {round.difficulty}</span>
+              <span className="playmeta">Survivor — contre-la-montre · {round.difficulty}</span>
               <div className="ring big">
                 <svg viewBox="0 0 120 120">
                   <circle cx="60" cy="60" r="54" stroke="rgba(255,255,255,.10)" strokeWidth="9" fill="none" />
@@ -964,7 +964,7 @@ export default function Host() {
         const top = rushEnd.top || [];
         return (
         <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(14px,3vh,44px)', gap: 18 }}>
-          <span className="eyebrow">Cypher — contre-la-montre terminé</span>
+          <span className="eyebrow">Survivor — contre-la-montre terminé</span>
           {res[0] && (
             <div className="champ">
               <Med avatarId={res[0].avatar} size={120} />

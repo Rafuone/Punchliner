@@ -1,4 +1,4 @@
-// Leaderboard GLOBAL du mode Cypher (contre-la-montre) : commun à tous les salons,
+// Leaderboard GLOBAL du mode Survivor (contre-la-montre) : commun à tous les salons,
 // persistant entre sessions. Écriture atomique (tmp + rename) pour ne jamais corrompre le JSON.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,8 +44,8 @@ export function addScore(entry) {
     score: Math.max(0, Math.round(entry.score || 0)),
     tracks: entry.tracks | 0,
     difficulty: entry.difficulty || 'normal',
-    startSec: entry.startSec | 0 || 60, // config Cypher (chrono de départ)
-    pace: entry.pace || 'normal',       // config Cypher (pression du chrono)
+    startSec: entry.startSec | 0 || 60, // config Survivor (chrono de départ)
+    pace: entry.pace || 'normal',       // config Survivor (pression du chrono)
     at: Date.now(),
   };
   BOARD.push(e);

@@ -67,7 +67,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
   const sel = avatarById(selId) || AVATARS[0];
   const lockedSel = LOCKED_SLOTS.find((s) => s.id === selId) || null;
   const bio = bioOf(selId);
-  const [board, setBoard] = useState<any[]>([]); // classement mondial Cypher (chargé quand mode = leaderboard)
+  const [board, setBoard] = useState<any[]>([]); // classement mondial Survivor (chargé quand mode = leaderboard)
   const [radioResults, setRadioResults] = useState<any[]>([]); // playlists (bibliothèque, station ou recherche)
   const [radioQuery, setRadioQuery] = useState('');
   const [radioLoading, setRadioLoading] = useState(false);
@@ -242,11 +242,11 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
         <div className="wrap" style={{ position: 'relative', zIndex: 1, maxWidth: 'none', padding: '62px clamp(24px,4vw,64px) 40px' }}>
           <div className="topbar" style={{ justifyContent: 'center', gap: 16 }}>
             <h1 className="wm" style={{ fontSize: 'clamp(28px,3.2vw,46px)' }}>CLASSEMENT <span className="d">MONDIAL</span></h1>
-            <span className="gpill">Cypher</span>
+            <span className="gpill">Survivor</span>
           </div>
           <p className="muted" style={{ textAlign: 'center', margin: '2px 0 30px', fontSize: 15 }}>Le contre-la-montre — meilleurs scores, tous salons confondus. <b style={{ color: 'var(--txt)' }}>Chaque score porte sa config</b> (les options changent tout).</p>
           {board.length === 0 ? (
-            <p className="muted" style={{ textAlign: 'center', marginTop: 70, fontSize: 'clamp(18px,2vw,24px)' }}>Aucun score pour l'instant.<br />Lance un <b style={{ color: 'var(--fluo)' }}>Cypher</b> pour ouvrir le classement.</p>
+            <p className="muted" style={{ textAlign: 'center', marginTop: 70, fontSize: 'clamp(18px,2vw,24px)' }}>Aucun score pour l'instant.<br />Lance un <b style={{ color: 'var(--fluo)' }}>Survivor</b> pour ouvrir le classement.</p>
           ) : (
             <div className="board tvbig" style={{ maxWidth: 1080, margin: '0 auto' }}>
               {board.map((t: any, i: number) => (

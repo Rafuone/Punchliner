@@ -15,7 +15,7 @@ const GAMES = [
   { id: 'blind', name: 'Blind Test', cat: 'Station · Live', family: 'multi', soon: false, desc: 'Tous ensemble, le plus rapide gagne.' },
   { id: 'buzz', name: 'Buzzer', cat: 'Station · Duel', family: 'multi', soon: false, desc: 'Le premier qui buzze prend la main.' },
   { id: 'quiz', name: 'Quiz', cat: 'Station · Culture', family: 'multi', soon: false, desc: 'Blazes, années, albums… en QCM.' },
-  { id: 'rush', name: 'Cypher', cat: 'Station · Chrono', family: 'solo', soon: false, desc: 'Enchaîne les sons, bats le record.' },
+  { id: 'rush', name: 'Survivor', cat: 'Station · Chrono', family: 'solo', soon: false, desc: 'Enchaîne les sons, bats le record.' },
   { id: 'adventure', name: 'Aventure', cat: 'Station · Campagne', family: 'solo', soon: true, desc: 'Campagne solo à débloquer.' },
 ];
 const ERAS = [
@@ -61,7 +61,7 @@ const ORCHESTRATION = [
   { key: 'auto', name: 'Automatique', desc: 'L’app arbitre seule, sans animateur.' },
   { key: 'mj', name: 'Maître du jeu', desc: 'Un animateur au pupitre mène la partie.' },
 ];
-// ===== Cypher (contre-la-montre) : options PROPRES au mode (le format en manches n'a pas de sens ici) =====
+// ===== Survivor (contre-la-montre) : options PROPRES au mode (le format en manches n'a pas de sens ici) =====
 const RUSH_STARTS = [
   { sec: 45, label: 'Sprint', desc: 'Court et nerveux.' },
   { sec: 60, label: 'Standard', desc: 'Le format de référence.' },
@@ -181,16 +181,16 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const [mjId, setMjId] = useState('');
   const [themeExp, setThemeExp] = useState(false);
   const [showPlayers, setShowPlayers] = useState(false); // popover "qui est dans le salon"
-  const [rushStartSec, setRushStartSec] = useState(60); // Cypher : chrono de départ
-  const [rushPace, setRushPace] = useState('normal');   // Cypher : barème du chrono (bonus/malus)
+  const [rushStartSec, setRushStartSec] = useState(60); // Survivor : chrono de départ
+  const [rushPace, setRushPace] = useState('normal');   // Survivor : barème du chrono (bonus/malus)
   const [quizNoVf, setQuizNoVf] = useState(false);       // Quiz : exclure les Vrai/Faux
-  const [rushPlayerId, setRushPlayerId] = useState('');  // Cypher : le joueur désigné (solo)
+  const [rushPlayerId, setRushPlayerId] = useState('');  // Survivor : le joueur désigné (solo)
 
-  // Le Maître du jeu ne s'applique qu'au Blind Test : Buzzer = 100% auto, Quiz/Cypher = objectifs.
+  // Le Maître du jeu ne s'applique qu'au Blind Test : Buzzer = 100% auto, Quiz/Survivor = objectifs.
   const mjAllowed = game === 'blind';
   const isQuiz = game === 'quiz', isRush = game === 'rush';
   const powersMode = game === 'blind' || game === 'buzz'; // seuls modes à pouvoirs (jauge de rééquilibrage utile)
-  const showRebalance = powersMode && orch !== 'mj';       // jauge cachée en Quiz/Cypher (pas de pouvoirs) et en MJ (pouvoirs off)
+  const showRebalance = powersMode && orch !== 'mj';       // jauge cachée en Quiz/Survivor (pas de pouvoirs) et en MJ (pouvoirs off)
   useEffect(() => { if (!mjAllowed && orch === 'mj') setOrch('auto'); }, [mjAllowed, orch]);
 
   const themeName = [...THEMES_MAIN, ...THEMES_EXTRA].find((t) => t.id === theme)?.name || '';
@@ -208,7 +208,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     { i: '05', k: isRush ? 'Le joueur' : 'Réglages', v: isRush ? (playerList.find((p) => p.id === (rushPlayerId || playerList[0]?.id))?.name || 'Solo · 1er entré') : showRebalance ? (ORCHESTRATION.find((o) => o.key === orch)!.name + ' · ' + REBALANCE.find((r) => r.key === rebalance)!.name) : (orch === 'mj' && mjAllowed ? 'Maître du jeu' : 'Automatique') },
   ];
   const last = step === 4;
-  // titres / sous-titres d'étape adaptés au mode (Quiz : pas de playlist ; Cypher : chrono au lieu du format)
+  // titres / sous-titres d'étape adaptés au mode (Quiz : pas de playlist ; Survivor : chrono au lieu du format)
   const stepTitles = [
     STEP_TITLES[0],
     isQuiz ? 'LES <span class="em">QUESTIONS</span>' : STEP_TITLES[1],
@@ -573,11 +573,11 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                   <div className="setblock">
                     <div className="set-lbl"><span className="axis-chip"><span>Qui joue ?</span></span></div>
                     {playerList.length === 0
-                      ? <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '4px 2px 0' }}>Le Cypher est <b style={{ color: 'var(--txt)' }}>solo</b> : un seul joueur relève le défi. Personne n'a rejoint — le 1er à entrer jouera (ou reviens ici le choisir).</p>
+                      ? <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '4px 2px 0' }}>Le Survivor est <b style={{ color: 'var(--txt)' }}>solo</b> : un seul joueur relève le défi. Personne n'a rejoint — le 1er à entrer jouera (ou reviens ici le choisir).</p>
                       : <><div className="opt-stack">{playerList.map((p) => (
                           <button key={p.id} className={`opt ${(rushPlayerId || playerList[0]?.id) === p.id ? 'sel' : ''}`} onClick={() => setRushPlayerId(p.id)}><span className="ol"><b>{p.name}</b><small>{avatarById(p.avatar)?.name || 'Au contre-la-montre'}</small></span></button>
                         ))}</div>
-                        <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, margin: '10px 2px 0' }}>Cypher = solo : ce joueur affronte le chrono, les autres regardent.</p></>}
+                        <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, margin: '10px 2px 0' }}>Survivor = solo : ce joueur affronte le chrono, les autres regardent.</p></>}
                   </div>
                 )}
                 {isQuiz && (

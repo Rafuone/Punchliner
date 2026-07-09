@@ -57,7 +57,7 @@ export default function Player() {
   const [players, setPlayers] = useState<any[]>([]);
   const [battle, setBattle] = useState<any>(null);        // manche CLASH (1v1 + paris) : {a,b,flavor,endsAt,reveal}
   const [betPick, setBetPick] = useState<'a' | 'b' | null>(null); // camp sur lequel ce spectateur a parié
-  const [rushEnd, setRushEnd] = useState<any>(null); // fin de run Cypher (mon rang mondial + top 10)
+  const [rushEnd, setRushEnd] = useState<any>(null); // fin de run Survivor (mon rang mondial + top 10)
   const rushTrackRef = useRef(0);                    // n° de morceau courant → reset de l'input à chaque enchaînement
   const [now, setNow] = useState(Date.now());
   const [buzz, setBuzz] = useState<'idle' | 'mine' | 'locked'>('idle');
@@ -142,7 +142,7 @@ export default function Player() {
     socket.on('round:prep', (d: any) => { setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setSubmitted(false); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setNow(Date.now()); setPhase('prep'); });
     socket.on('round:countdown', (d: any) => { setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setCountdown(d.seconds || 5); setPhase('countdown'); });
     socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setSubmitted(false); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); setBuzzEndsAt(0); } });
-    // Mode Cypher : chaque nouveau morceau (trackNo change) → on remet l'input à zéro
+    // Mode Survivor : chaque nouveau morceau (trackNo change) → on remet l'input à zéro
     socket.on('rush:state', (d: any) => { setRound((r: any) => ({ ...r, ...d })); if (rushTrackRef.current !== d.trackNo) { rushTrackRef.current = d.trackNo; setGuess(''); setFeedback(null); } setPhase('playing'); });
     socket.on('rush:end', (d: any) => { setRushEnd(d); setPhase('rushend'); });
     socket.on('mj:track', (d: any) => setMjTrack(d));
@@ -230,7 +230,7 @@ export default function Player() {
     setSubmitted(true); // VERROU IMMÉDIAT : le bouton se coupe dès le 1er clic (plus de double validation)
     socket.emit('player:answer', { text: guess.trim() }, (res: any) => { if (res?.error) setSubmitted(false); }); // ré-ouvre seulement si refusé (ex. brouillé). Résultat à la révélation.
   }
-  // Mode Cypher : on répond en boucle (PAS de verrou), la bonne réponse fait avancer + rallonge le chrono
+  // Mode Survivor : on répond en boucle (PAS de verrou), la bonne réponse fait avancer + rallonge le chrono
   function submitRush(e?: any) {
     e?.preventDefault();
     if (!guess.trim() || phase !== 'playing') return;
@@ -663,17 +663,17 @@ export default function Player() {
           {round.mode === 'rush' ? (() => {
             const rs = Math.max(0, Math.ceil((round.endsAt - now) / 1000));
             const mine = (round.scores || []).find((p: any) => p.id === meId.current);
-            const spectator = round.rushPlayerId && round.rushPlayerId !== meId.current; // Cypher = solo : je regarde
+            const spectator = round.rushPlayerId && round.rushPlayerId !== meId.current; // Survivor = solo : je regarde
             const runner = (round.scores || []).find((p: any) => p.id === round.rushPlayerId);
             return (
               <>
-                <span className="eyebrow">Cypher · {round.difficulty}</span>
+                <span className="eyebrow">Survivor · {round.difficulty}</span>
                 <div className="big-num" style={{ color: rs <= 8 ? '#ff5a1f' : 'var(--fluo)' }}>{rs}</div>
                 {spectator ? (
                   <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
                     <span className="muted" style={{ fontWeight: 700 }}>🎧 {round.rushPlayerName || runner?.name || 'Un joueur'} est au contre-la-montre</span>
                     <span className="muted" style={{ fontSize: 13 }}>Morceau {round.trackNo}{runner ? ` · ${fmtAud(runner.score)} aud. · ${runner.tracks} ✓` : ''}</span>
-                    <span className="muted" style={{ fontSize: 12, opacity: .7 }}>Le Cypher est solo — tu regardes.</span>
+                    <span className="muted" style={{ fontSize: 12, opacity: .7 }}>Le Survivor est solo — tu regardes.</span>
                   </div>
                 ) : (
                   <>
@@ -899,7 +899,7 @@ export default function Player() {
         const mine = res.find((r: any) => r.id === meId.current);
         return (
         <div className="center" style={{ gap: 12, justifyContent: 'flex-start', paddingTop: 'clamp(14px,5vh,40px)' }}>
-          <span className="eyebrow">Cypher — terminé</span>
+          <span className="eyebrow">Survivor — terminé</span>
           <div className="big-num" style={{ color: 'var(--fluo)' }}>{mine ? fmtAud(mine.score) : 0}</div>
           <h2 className="title-xl" style={{ margin: 0 }}>{mine ? `${mine.tracks} morceaux trouvés` : 'Fini'}</h2>
           {mine && <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 14, padding: '10px 16px' }}>Record #{mine.rank} au classement mondial</div>}
