@@ -89,20 +89,20 @@ let refreshing: Promise<Tokens | null> | null = null;
 async function doRefresh(): Promise<Tokens | null> {
   const t = load(); if (!t?.refresh_token) return null;
   const body = new URLSearchParams({ client_id: CLIENT_ID, grant_type: 'refresh_token', refresh_token: t.refresh_token });
-  try {
-    const r = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    if (!r.ok) {
+  // On NE vide la session QUE si le refresh_token est DÉFINITIVEMENT mort (invalid_grant). Avant, tout 400/401
+  // (blip réseau, 429, 5xx, désync horloge) détruisait la session → l'hôte devait redonner l'autorisation Spotify
+  // en boucle (20×/soirée). Désormais : erreur transitoire = on GARDE la session + petit retry.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const r = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+      if (r.ok) { store(await r.json()); return load(); }
       const txt = await r.text().catch(() => '');
       console.warn('[SPOTIFY] refresh HTTP ' + r.status + ' — ' + txt);
-      // 400 (invalid_grant) / 401 = refresh_token DÉFINITIVEMENT mort (rotation désynchro / révoqué).
-      // On VIDE la session morte : sinon hasSpotifySession() reste true et on reste bloqué en
-      // « connecté mais cassé » à chaque rechargement → l'UI doit reproposer une VRAIE reconnexion.
-      if (r.status === 400 || r.status === 401) { localStorage.removeItem(KEY); ready = false; deviceId = ''; }
-      return null;
-    }
-    store(await r.json());
-    return load();
-  } catch (e) { console.warn('[SPOTIFY] refresh réseau KO', e); return null; }
+      if (/invalid_grant/i.test(txt)) { localStorage.removeItem(KEY); ready = false; deviceId = ''; return null; } // vraiment mort → reconnexion
+      await new Promise((res) => setTimeout(res, 500)); // transitoire → on réessaie une fois, session conservée
+    } catch (e) { console.warn('[SPOTIFY] refresh réseau KO', e); await new Promise((res) => setTimeout(res, 500)); }
+  }
+  return null; // échec transitoire : session CONSERVÉE (on retentera au prochain besoin)
 }
 function refresh(): Promise<Tokens | null> {
   if (!refreshing) refreshing = doRefresh().finally(() => { refreshing = null; });
@@ -165,7 +165,13 @@ export async function initSpotifyPlayer(onState: (s: string) => void) {
   });
   player.addListener('ready', ({ device_id }: any) => { deviceId = device_id; ready = true; onState('ready'); });
   player.addListener('not_ready', () => { ready = false; onState('offline'); });
-  player.addListener('authentication_error', () => { ready = false; onState('auth_error'); });
+  player.addListener('authentication_error', async () => {
+    // token rejeté par le SDK (souvent : access token périmé) → on tente UN refresh silencieux + reconnexion
+    // AVANT de demander à l'hôte de se reconnecter à la main. Évite une ré-autorisation inutile.
+    const fresh = await refresh();
+    if (fresh) { try { player.connect(); return; } catch {} }
+    ready = false; onState('auth_error');
+  });
   player.addListener('account_error', () => { ready = false; onState('premium_required'); });
   player.addListener('initialization_error', () => { ready = false; onState('error'); });
   // état de lecture (now-playing) → pour la barre de lecture de la Radio
