@@ -506,6 +506,33 @@ function snapshot(room, isHost) {
 /* ------------------------------------------------------------------ */
 /* Boucle de jeu                                                       */
 /* ------------------------------------------------------------------ */
+// Un pouvoir PEUT-IL agir maintenant ? (miroir des gardes d'activation) → sert à GRISER le bouton côté joueur.
+function canPowerAct(room, p, pw) {
+  if (!pw) return false;
+  const prot = (x) => !!x.safety || !!x.shield || (x.veteranUntil != null && room.roundIndex <= x.veteranUntil);
+  const others = () => [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting);
+  const attackable = () => others().filter((x) => !prot(x));
+  switch (pw.type) {
+    case 'steal': { if (pw.shield) return true; const t = attackable().sort((a, b) => b.score - a.score)[0]; return !!(t && t.score > p.score && t.score > 0); }
+    case 'sabotage': return attackable().length > 0;
+    case 'tax': return attackable().some((x) => x.score > 0);
+    case 'comeback': { const lead = others().sort((a, b) => b.score - a.score)[0]; return !!(lead && lead.score - p.score >= 2000); }
+    case 'draft': return others().length > 0;
+    case 'jam': return !room.jam;
+    default: return true; // double/bonus/hint/safety/veteran/momentum/decay/firstblood/freeze/nofault/ace/wager/allin/combo/sustain : pas de cible requise
+  }
+}
+function powerIneligibleReason(pw) {
+  switch (pw && pw.type) {
+    case 'steal': return 'Personne à voler pour l\'instant';
+    case 'sabotage': return 'Aucune cible (meneurs blindés)';
+    case 'tax': return 'Personne à taxer';
+    case 'comeback': return 'Tu n\'es pas assez à la traîne';
+    case 'draft': return 'Aucun adversaire';
+    case 'jam': return 'Déjà brouillé ce tour';
+    default: return 'Sans effet ce tour';
+  }
+}
 function beginRound(room) {
   // le morceau est choisi MAINTENANT (avant la fenêtre pouvoirs → le hint peut révéler ses lettres)
   room.current = room.playlist[room.roundIndex];
@@ -515,6 +542,7 @@ function beginRound(room) {
   room.firstScorerId = null; // 1er à trouver cette manche (pour firstblood)
   room.jam = null;           // brouillage (pouvoir jam) posé pour cette manche
   room.roundPowers = new Map(); // pouvoirs activés cette manche (pid → {name,type,note}) → affichés au reveal
+  room.powerHits = new Map();   // victimes de vol/sabotage/tax cette manche (pid → [{by,byAvatar,type,amount}]) → anim au reveal
   for (const pl of room.players.values()) { pl.armed = null; pl.safety = false; pl.nofault = false; pl.selfBonus = 0; } // veteranUntil / streak / decayUses persistent
   clearTimeout(room.cdTimer);
   const diffLabel = (DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal).label;
@@ -529,6 +557,13 @@ function beginRound(room) {
     const info = { index: room.roundIndex, total: room.totalRounds, endsAt: room.prepEndsAt, seconds, mode: room.settings.mode, difficulty: diffLabel };
     io.to(room.code).emit('round:prep', info);
     io.to(room.hostId).emit('round:prep', info);
+    // éligibilité PAR JOUEUR (grisage du bouton) : un pouvoir sans cible ne doit pas se gaspiller
+    for (const pl of room.players.values()) {
+      if (pl.socketId && !pl.isMJ && !pl.waiting) {
+        const pw = POWERS[pl.avatar]; const ok = canPowerAct(room, pl, pw);
+        io.to(pl.socketId).emit('power:eligible', { eligible: ok, reason: ok ? '' : powerIneligibleReason(pw) });
+      }
+    }
     room.cdTimer = setTimeout(() => startRound(room), seconds * 1000);
   } else {
     // quiz / Maître du jeu : pas de pouvoirs → décompte direct
@@ -673,7 +708,7 @@ function endRound(room) {
       else answerText = ansEntry?.text || null;
     }
     const usedPower = room.roundPowers ? room.roundPowers.get(p.id) : null;
-    results.push({ id: p.id, name: p.name, avatar: p.avatar, isMJ: !!p.isMJ, points, titleHit, artistHit, answer: answerText, tried: !!ansEntry, power: usedPower || null });
+    results.push({ id: p.id, name: p.name, avatar: p.avatar, isMJ: !!p.isMJ, points, titleHit, artistHit, answer: answerText, tried: !!ansEntry, power: usedPower || null, hitBy: (room.powerHits && room.powerHits.get(p.id)) || null });
   }
   if (roundScorers.length === 1) { const w = room.players.get(roundScorers[0]); if (w?.stat) w.stat.solo++; } // seul à trouver cette manche
   // braqueur : crédite le musellement (sabotage) qui a RÉELLEMENT refusé des points à un adversaire cette manche
@@ -1289,6 +1324,13 @@ io.on('connection', (socket) => {
     const protectedNow = (x) => !!x.safety || !!x.shield || (x.veteranUntil != null && room.roundIndex <= x.veteranUntil);
     const topOther = () => [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting).sort((a, b) => b.score - a.score)[0];
     const topAttackable = () => [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting && !protectedNow(x)).sort((a, b) => b.score - a.score)[0];
+    // enregistre + notifie une VICTIME d'un vol/sabotage/dîme (anim temps réel + rejeu au reveal)
+    const recordHit = (victim, amount) => {
+      if (!victim || !(amount > 0)) return;
+      if (!room.powerHits) room.powerHits = new Map();
+      const arr = room.powerHits.get(victim.id) || []; arr.push({ by: p.name, byAvatar: p.avatar, type: pw.type, amount }); room.powerHits.set(victim.id, arr);
+      if (victim.socketId) io.to(victim.socketId).emit('power:hit', { by: p.name, byAvatar: p.avatar, type: pw.type, amount });
+    };
     let detail = null;
     if (pw.type === 'steal') {
       const top = topAttackable();
@@ -1298,19 +1340,19 @@ io.on('connection', (socket) => {
       // le pouvoir reste utile même sans cible (défense quand on mène) → on continue.
       if ((!leader || leader.score <= 0) && !pw.shield) return cb?.({ error: 'Personne à voler pour l\'instant.' });
       let amt = 0;
-      if (leader && leader.score > 0) { amt = Math.min(pw.amount || 12000, leader.score); leader.score -= amt; p.score += amt; if (p.stat) p.stat.denialGain += amt; }
+      if (leader && leader.score > 0) { amt = Math.min(pw.amount || 12000, leader.score); leader.score -= amt; p.score += amt; if (p.stat) p.stat.denialGain += amt; recordHit(leader, amt); }
       if (pw.shield) { p.shield = true; room.muted.delete(p.id); } // devient intouchable ce tour (immunisé vol/sabotage/dîme, annule un sabotage déjà posé) → peut DÉFENDRE son rang
       detail = { stoleFrom: amt ? leader.name : null, amount: amt, shield: !!pw.shield };
     } else if (pw.type === 'sabotage') {
       const targets = [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting && !protectedNow(x)).sort((a, b) => b.score - a.score).slice(0, pw.targets || 1);
       if (!targets.length) return cb?.({ error: 'Aucun leader à museler (les meneurs sont blindés).' });
-      targets.forEach((t) => { room.muted.add(t.id); room.mutedBy.set(t.id, p.id); if (pw.grab) { const amt = Math.min(pw.grab, t.score); t.score -= amt; p.score += amt; if (amt > 0 && p.stat) p.stat.denialGain += amt; } }); // muselle + rafle une part
+      targets.forEach((t) => { room.muted.add(t.id); room.mutedBy.set(t.id, p.id); if (pw.grab) { const amt = Math.min(pw.grab, t.score); t.score -= amt; p.score += amt; if (amt > 0 && p.stat) p.stat.denialGain += amt; recordHit(t, amt); } }); // muselle + rafle une part
       detail = { mutedName: targets.map((t) => t.name).join(' & ') };
     } else if (pw.type === 'tax') {
       // prélève une petite dîme sur CHAQUE adversaire attaquable
       const others = [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting && !protectedNow(x));
       let grabbed = 0;
-      others.forEach((t) => { const amt = Math.min(pw.amount || 2500, t.score); t.score -= amt; p.score += amt; grabbed += amt; });
+      others.forEach((t) => { const amt = Math.min(pw.amount || 2500, t.score); t.score -= amt; p.score += amt; grabbed += amt; recordHit(t, amt); });
       if (grabbed > 0 && p.stat) p.stat.denialGain += grabbed;
       detail = { amount: grabbed, count: others.length };
     } else if (pw.type === 'allin') {

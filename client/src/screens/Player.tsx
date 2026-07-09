@@ -68,6 +68,7 @@ export default function Player() {
   const [buzzMsg, setBuzzMsg] = useState('');
   const [buzzEndsAt, setBuzzEndsAt] = useState(0); // échéance de réponse quand c'est à moi (décompte)
   const [powerMsg, setPowerMsg] = useState('');
+  const [powerElig, setPowerElig] = useState<{ ok: boolean; reason: string }>({ ok: true, reason: '' }); // pouvoir peut-il agir ce tour ? (grisage)
   const [hint, setHint] = useState<any>(null);
   const [charge, setCharge] = useState(0);
   const [charges, setCharges] = useState(1);
@@ -143,7 +144,9 @@ export default function Player() {
       });
     });
     socket.on('lobby', (d: any) => { setPlayers(d.players); if (d.phase === 'lobby') { setWaiting(false); setPhase('lobby'); setNewChars([]); } });
-    socket.on('round:prep', (d: any) => { setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setSubmitted(false); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setNow(Date.now()); setPhase('prep'); });
+    socket.on('round:prep', (d: any) => { setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setSubmitted(false); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setPowerElig({ ok: true, reason: '' }); setNow(Date.now()); setPhase('prep'); });
+    socket.on('power:eligible', (d: any) => setPowerElig({ ok: d.eligible !== false, reason: d.reason || '' })); // grise le bouton si le pouvoir n'a pas de cible
+    socket.on('power:hit', (d: any) => setPowerMsg(`−${fmtAud(d.amount)} auditeurs ${d.type === 'sabotage' ? 'raflés' : d.type === 'tax' ? 'taxés' : 'volés'} par ${d.by} !`)); // anim vol/dîme côté victime
     socket.on('round:countdown', (d: any) => { setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setCountdown(d.seconds || 5); setPhase('countdown'); });
     socket.on('round:go', (d: any) => { setRound(d); setGuess(''); setFeedback(null); setSubmitted(false); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); setBuzzEndsAt(0); } });
     // Mode Survivor : chaque nouveau morceau (trackNo change) → on remet l'input à zéro
@@ -166,7 +169,7 @@ export default function Player() {
     socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) { setBuzz('mine'); setBuzzEndsAt(d.endsAt || 0); setNow(Date.now()); } else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
     socket.on('buzz:open', (d: any) => { setBuzzEndsAt(0); if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — au tour des autres'); } else setBuzz('idle'); });
     socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); setJoined(false); localStorage.removeItem(SKEY); });
-    return () => ['connect', 'lobby', 'round:prep', 'round:countdown', 'round:go', 'rush:state', 'rush:end', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed', 'battle:intro', 'battle:bets', 'battle:go', 'battle:reveal'].forEach((e) => socket.off(e as any));
+    return () => ['connect', 'lobby', 'round:prep', 'power:eligible', 'power:hit', 'round:countdown', 'round:go', 'rush:state', 'rush:end', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed', 'battle:intro', 'battle:bets', 'battle:go', 'battle:reveal'].forEach((e) => socket.off(e as any));
   }, []);
 
   useEffect(() => { if (phase !== 'playing' && phase !== 'prep' && phase !== 'battle-bet' && phase !== 'battle-play') return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
@@ -658,7 +661,7 @@ export default function Player() {
               {charges < 1 && <p className="trashtalk">{TRASH_TALK[round.index % TRASH_TALK.length]}</p>}
               <div className="row" style={{ gap: 10 }}>
                 <button className="btn" style={{ flex: 1 }} onClick={passPower}>{charges >= 1 ? 'Passer' : 'Prêt'}</button>
-                <button className="btn warm" style={{ flex: 1 }} onClick={usePower} disabled={charges < 1}>{charges >= 1 ? `Activer (${charges})` : 'Aucune charge'}</button>
+                <button className="btn warm" style={{ flex: 1 }} onClick={usePower} disabled={charges < 1 || !powerElig.ok} title={!powerElig.ok ? powerElig.reason : undefined}>{charges < 1 ? 'Aucune charge' : !powerElig.ok ? (powerElig.reason || 'Sans effet ce tour') : `Activer (${charges})`}</button>
               </div>
               {powerMsg && <p className="feedback bad">{powerMsg}</p>}
             </div>
@@ -769,6 +772,9 @@ export default function Player() {
           <div className={`gainbadge ${myPts > 0 ? 'win' : myPts < 0 ? 'loss' : 'zero'}`}>
             {myPts > 0 ? <>+{fmtAud(myPts)} <span>auditeurs</span></> : myPts < 0 ? <>{fmtAud(myPts)} <span>auditeurs · pari perdu</span></> : 'Zéro auditeur'}
           </div>
+          {myResult?.hitBy && myResult.hitBy.length > 0 && (
+            <p className="feedback bad" style={{ margin: '2px 0 0' }}>{myResult.hitBy.map((h: any) => `−${fmtAud(h.amount)} ${h.type === 'sabotage' ? 'raflés' : h.type === 'tax' ? 'taxés' : 'volés'} par ${h.by}`).join(' · ')}</p>
+          )}
           {/* réactions/taunts — s'affichent sur l'écran hôte ; le joueur reste actif entre les manches */}
           <div className="reactbar">{REACTIONS.map((r, i) => <button key={i} type="button" className="reactbtn" onClick={() => sendReaction(i)}><span className="re">{r.e}</span>{r.t}</button>)}</div>
           {av && <p className="muted" style={{ fontSize: 13, margin: '2px 0 0', maxWidth: 400, lineHeight: 1.45 }}>Ton pouvoir — <b style={{ color: 'var(--ember)' }}>{av.power.name}</b> : {av.power.effect}</p>}
