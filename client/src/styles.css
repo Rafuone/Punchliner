@@ -1069,6 +1069,8 @@ button, input { font-family: inherit; }
 .charges i { width: 11px; height: 11px; transform: rotate(45deg); border-radius: 2px; background: rgba(255,255,255,.13);
   border: 1px solid var(--line2); transition: background .2s ease, box-shadow .2s ease, border-color .2s ease; }
 .charges i.on { background: var(--fluo); border-color: var(--fluo); box-shadow: 0 0 8px -1px var(--fluo); }
+/* charge EN COURS : le losange se REMPLIT (dégradé à stop dur piloté par --cf) → on voit qu'on cumule même en ayant déjà des pouvoirs */
+.charges i.fill { background: linear-gradient(to top right, var(--fluo) var(--cf), rgba(255,255,255,.13) var(--cf)); border-color: var(--fluo); box-shadow: 0 0 6px -2px var(--fluo); }
 .charges .charges-pct { margin-left: 5px; font-size: 10px; font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* ---- quiz : choix retenu, neutre (pas de bon/mauvais avant la révélation) ---- */

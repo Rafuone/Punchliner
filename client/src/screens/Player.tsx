@@ -10,7 +10,11 @@ function Charges({ n, max = 5, charge }: { n: number; max?: number; charge?: num
   return (
     <span className="charges" role="img" aria-label={`${n} charge${n > 1 ? 's' : ''} de pouvoir sur ${max}`}>
       <svg className="charges-ic" width="12" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2L4 14h6l-1 8 9-12h-6z" /></svg>
-      {Array.from({ length: max }).map((_, i) => <i key={i} className={i < n ? 'on' : ''} />)}
+      {Array.from({ length: max }).map((_, i) => {
+        if (i < n) return <i key={i} className="on" />; // charge PLEINE (pouvoir dispo)
+        if (i === n && n < max && typeof charge === 'number') return <i key={i} className="fill" style={{ ['--cf' as any]: `${Math.max(6, Math.round(charge))}%` }} />; // charge EN COURS : le losange se remplit visiblement (min 6% pour qu'on VOIE que ça monte)
+        return <i key={i} />; // vide
+      })}
       {typeof charge === 'number' && n < max && <b className="charges-pct">{Math.round(charge)}%</b>}
     </span>
   );

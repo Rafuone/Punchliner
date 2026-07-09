@@ -340,28 +340,54 @@ function recoScore(t, peaks) {
   const depth = 0.15 + 0.85 * rel * rel;     // courbe CONVEXE : un deep cut (rel bas) plonge vraiment vers les tiers durs ; un hit (rel~1) reste en haut
   return (t.rank || 0) * eraMult * depth;
 }
-// Sous-ensemble par DIFFICULTÉ = tranche de RECOGNIZABILITÉ (reco décroissant). Bandes MONOTONES
-// (facile = le plus reconnaissable → puriste = le plus obscur) avec un léger recouvrement pour garder des
-// pools fournis même après filtre époque/thème. facile et puriste NE se recouvrent JAMAIS → un tube grand
-// public n'atterrit JAMAIS en puriste, et un deep cut jamais en facile.
-function tierSlice(arr, tier) {
-  const peaks = artistPeaks();
-  const s = [...arr].map((t) => ({ t, r: recoScore(t, peaks) })).sort((a, b) => b.r - a.r).map((x) => x.t);
-  const N = s.length;
-  const band = (lo, hi) => s.slice(Math.floor(N * lo), Math.max(Math.floor(N * lo) + 1, Math.floor(N * hi)));
-  if (tier === 'top') {
-    // FACILE = VRAIS hits. En plus du tri par reco, on impose un PLANCHER de rank RÉEL (popularité du titre) : un
-    // deep cut d'artiste connu (rank faible) ne peut JAMAIS entrer en Grand public, même remonté par la prime patrimoine.
-    const ranks = arr.map((t) => t.rank || 0).sort((a, b) => a - b);
-    const floor = ranks.length ? ranks[Math.floor(ranks.length * 0.55)] : 0; // ≥ 55e percentile du rank brut du pool
-    const want = Math.max(1, Math.floor(N * 0.38));
-    const eligible = s.filter((t) => (t.rank || 0) >= floor); // reste trié par reco décroissant
-    return (eligible.length >= want ? eligible : s).slice(0, want); // réabondé si besoin (jamais moins que la bande d'origine)
+// ── DIFFICULTÉ PAR NOTORIÉTÉ « GRAND PUBLIC » (liste curée + vérifiée) — remplace le rank brut, trop faux pour le facile ──
+// server/difficulty-labels.json : { "artiste|titre" normalisé → 'gp'|'connu'|'niche'|'obscur' }. Jugement humain sur les
+// VRAIS titres du pool (radio/tubes que même les non-fans connaissent, PAS le streaming) ; le stream ajusté à l'époque
+// (percentile dans la décennie) ne sert QU'à l'ORDRE au sein d'un niveau. gp→facile, connu→normal, niche/obscur→difficile/puriste.
+let DIFF_LABELS = {};
+try { DIFF_LABELS = JSON.parse(fs.readFileSync(path.join(__dirname, 'difficulty-labels.json'), 'utf8')); } catch { DIFF_LABELS = {}; }
+function dnorm(s) { return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\(.*?\)|\[.*?\]/g, '').replace(/\b(feat|ft|featuring|avec)\b\.?/g, '').replace(/,.*$/, '').replace(/[^a-z0-9]+/g, ''); }
+function notoTier(t) { return DIFF_LABELS[dnorm(t.artist) + '|' + dnorm(t.title)] || null; }
+let _bandCache = null, _bandLen = -1;
+function computeBands() { // memoïsé sur POOL.length (comme artistPeaks)
+  if (_bandCache && _bandLen === POOL.length) return _bandCache;
+  const dec = (y) => !y ? 'x' : y < 2000 ? '90' : y < 2010 ? '00' : y < 2020 ? '10' : '20';
+  const groups = {};
+  for (const t of POOL) (groups[dec(t.year)] || (groups[dec(t.year)] = [])).push(t.rank || 0);
+  for (const k in groups) groups[k].sort((a, b) => a - b);
+  const eraPct = (y, r) => { const a = groups[dec(y)]; if (!a || !a.length) return 0.5; let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < r) lo = m + 1; else hi = m; } return lo / a.length; };
+  const base = { gp: 3, connu: 2, niche: 1, obscur: 0 };
+  const band = new Map(), eraNorm = new Map(), nicheObs = [];
+  for (const t of POOL) {
+    const en = eraPct(t.year || 0, t.rank || 0); eraNorm.set(t, en); // stream ajusté à l'époque
+    const tier = notoTier(t) || 'niche'; // hors liste (titre ajouté après) → jamais en facile
+    if (tier === 'gp') band.set(t, 'top');
+    else if (tier === 'connu') band.set(t, 'high');
+    else nicheObs.push({ t, noto: (base[tier] ?? 1) + en });
   }
-  if (tier === 'high') return band(0.18, 0.60); // normal (Connaisseur)
-  if (tier === 'mid')  return band(0.45, 0.80); // difficile (Digger)
-  if (tier === 'deep') return band(0.62, 1.0);  // puriste : le vrai fond du bac
-  return s;                                     // repli : tout
+  nicheObs.sort((a, b) => b.noto - a.noto); // niche+obscur coupés en 2 par notoriété : moitié haute = difficile, basse = puriste
+  const half = Math.floor(nicheObs.length / 2);
+  nicheObs.forEach((x, i) => band.set(x.t, i < half ? 'mid' : 'deep'));
+  _bandCache = { band, eraNorm }; _bandLen = POOL.length; return _bandCache;
+}
+// Sous-ensemble par DIFFICULTÉ : la bande de notoriété demandée, triée par notoriété ajustée à l'époque.
+// Backfill depuis les niveaux adjacents (plus proche d'abord) si un filtre (thème rare) rend la bande trop maigre.
+function tierSlice(arr, tier) {
+  const { band, eraNorm } = computeBands();
+  const byEra = (a, b) => (eraNorm.get(b) || 0) - (eraNorm.get(a) || 0);
+  const seen = new Set(); // le pool a des ré-éditions (même titre, id différent) → une partie ne doit JAMAIS rejouer le même son
+  const dedup = (list) => list.filter((t) => { const k = dnorm(t.artist) + '|' + dnorm(t.title); if (seen.has(k)) return false; seen.add(k); return true; });
+  let sel = dedup(arr.filter((t) => band.get(t) === tier).sort(byEra));
+  const MIN = 30; // assez pour une partie 24 manches sans que pickPlaylist ne retombe sur TOUTES les difficultés
+  if (sel.length < MIN) {
+    const order = ['top', 'high', 'mid', 'deep'], i = order.indexOf(tier);
+    for (const d of [1, -1, 2, -2, 3]) {
+      const nb = order[i + d]; if (!nb) continue;
+      sel = sel.concat(dedup(arr.filter((t) => band.get(t) === nb).sort(byEra)));
+      if (sel.length >= MIN) break;
+    }
+  }
+  return sel;
 }
 function poolForTier(tier) { return tierSlice(livePool(), tier); } // compat (Survivor recycle)
 // ÉQUILIBRAGE DES ÉPOQUES (époque = « toutes ») : le pool est très orienté récent (mesuré : 90s 3% · 00s 15% ·
