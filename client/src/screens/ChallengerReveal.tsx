@@ -9,9 +9,12 @@ import { avatarById, initials, bioOf, EPITHETS, CATEGORY_COLORS, unlockObjective
 // Le morceau qui tombe quand le rappeur débarque — un par challenger. Résolu à la volée via Deezer
 // (/api/unlock-preview → extrait 30 s proxifié) : AUCUN mp3 à fournir. Un mp3 `local` reste prioritaire s'il
 // existe (ex. Disiz déjà rapatrié). Si rien ne se résout, l'arrivée reste visuelle (seul le 808 joue).
-const UNLOCK_SONGS: Record<string, { title: string; artist: string; local?: string }> = {
+// `startAt` = où démarrer le drop (le hook, pas l'intro). Fraction de la durée si < 1, secondes si >= 1.
+// Les extraits Deezer (30 s) sont déjà calés sur le refrain → 0. Les mp3 LOCAUX (morceau entier) partent de
+// l'intro → on saute au milieu. Ajuste par morceau si un démarre mal.
+const UNLOCK_SONGS: Record<string, { title: string; artist: string; local?: string; startAt?: number }> = {
   disiz: { title: 'Toussa Toussa', artist: 'Disiz', local: '/music/disiz-toussa-toussa.mp3' },
-  caballerojeanjass: { title: 'Zushileaks', artist: 'Caballero & JeanJass', local: '/music/zushileaks-cjj.mp3' },
+  caballerojeanjass: { title: 'Zushileaks', artist: 'Caballero & JeanJass', local: '/music/zushileaks-cjj.mp3', startAt: 0.35 },
   freezecorleone: { title: 'Shavkat', artist: 'Freeze Corleone' },
   diams: { title: 'La Boulette', artist: "Diam's" },
   lino: { title: 'Suicide Commercial', artist: 'Lino' },
@@ -58,7 +61,10 @@ export default function ChallengerReveal({ charId, onClose }: { charId: string; 
       }
       if (!url) return; // rien à jouer → seul le 808 assure l'impact
       const d = new Audio(url); dropRef.current = d; d.volume = 0;
-      d.play().then(() => { let v = 0; const f = window.setInterval(() => { v = Math.min(.85, v + .1); d.volume = v; if (v >= .85) window.clearInterval(f); }, 50); }).catch(() => {});
+      const at = song.startAt || 0; // saute au hook (fraction si < 1, secondes sinon) — évite l'intro des mp3 entiers
+      const seek = () => { if (at && d.duration && isFinite(d.duration)) { try { d.currentTime = at >= 1 ? at : d.duration * at; } catch {} } };
+      d.addEventListener('loadedmetadata', seek, { once: true });
+      d.play().then(() => { if (d.readyState >= 1) seek(); let v = 0; const f = window.setInterval(() => { v = Math.min(.85, v + .1); d.volume = v; if (v >= .85) window.clearInterval(f); }, 50); }).catch(() => {});
     }
     function fireGlitch() {
       const fig = figRef.current; if (!fig) return;
@@ -119,7 +125,6 @@ export default function ChallengerReveal({ charId, onClose }: { charId: string; 
       <div className="glow" /><div className="speed" /><div className="flash" /><div className="shock" /><div className="shock2" />
 
       <div className="stage-uk">
-        <div className="rays" />
         <div className="challbanner">Nouveau Challenger</div>
         <div className="chall-why">Débloqué — {unlockObjective(charId)}</div>
         <div className="tvros-hero">
