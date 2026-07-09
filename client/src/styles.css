@@ -1005,13 +1005,13 @@ button, input { font-family: inherit; }
 /* ===== page Palmarès (galerie de trophées) ===== */
 .troph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; width: 100%; max-width: 760px; margin: 0 auto; padding-bottom: 24px; }
 /* galerie PLEINE LARGEUR + GROSSE (TV, visible de loin, prête pour des IMAGES) — beaucoup d'éléments → on scrolle */
-.troph-grid.big { max-width: none; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 22px; }
+.troph-grid.big { max-width: 1500px; margin: 0 auto; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 26px; } /* moins de colonnes → illustrations ENCORE plus grandes */
 .tro-head { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 2px; }
 .tro-title { font-size: clamp(32px, 3.6vw, 54px); letter-spacing: -.01em; }
 .tro-sub { text-align: center; margin: 6px 0 30px; font-size: 17px; }
 .troph { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 14px 12px 13px;
   background: var(--surf2); border: 1px solid var(--line2); border-top: 2px solid var(--fluo); border-radius: 4px; }
-.troph-grid.big .troph { gap: 0; padding: 0 0 18px; border: 1px solid var(--line2); border-radius: 12px; overflow: hidden; background: rgba(0, 0, 0, .28); } /* carte IMAGE-FORWARD : l'illustration carrée en grand en haut, titre/desc dessous */
+.troph-grid.big .troph { gap: 0; padding: 0 0 20px; border: 1px solid var(--line2); border-radius: 12px; overflow: hidden; background: #090a0d; } /* carte IMAGE-FORWARD : illustration carrée en grand, fondue en bas dans ce fond, titre/desc dessous */
 .troph.salty { border-top-color: var(--ember); }
 .troph.locked { opacity: .5; border-top-color: var(--line2); }
 .troph.got { box-shadow: 0 0 0 1px var(--fluo); }
@@ -1022,8 +1022,11 @@ button, input { font-family: inherit; }
 .troph-grid.big .troph-svg svg { width: 92px; height: 92px; }               /* gros icône SVG = repli tant qu'il n'y a pas d'image */
 /* image du trophée : couvre le SVG si le fichier existe ; onError la masque (404) → le SVG repli reste */
 .troph-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: 1; }
-.troph-grid.big .troph-ic { width: 100%; height: auto; aspect-ratio: 1; min-height: 0; margin-bottom: 15px; } /* illustration carrée PLEINE LARGEUR */
+.troph-grid.big .troph-ic { width: 100%; height: auto; aspect-ratio: 1; min-height: 0; margin-bottom: 15px; border-radius: 0; } /* illustration carrée PLEINE LARGEUR */
 .troph-grid.big .troph-img { object-fit: cover; }
+/* FONDU en bas de l'illustration → elle se fond dans la carte (plus de coupure nette) */
+.troph-grid.big .troph-ic::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 40%; z-index: 2; pointer-events: none;
+  background: linear-gradient(to bottom, transparent, rgba(9, 10, 13, .55) 55%, #090a0d); }
 .troph-title { font-family: var(--disp); font-weight: 700; text-transform: uppercase; font-size: 13.5px; color: var(--txt); line-height: 1; }
 .troph-grid.big .troph-title { font-size: 21px; line-height: 1.12; padding: 0 14px; }
 .troph.locked .troph-title { color: var(--muted); }

@@ -510,8 +510,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
             {step === 2 && !isRush && (
               <div className="grid-diff">{DIFFS.map((d, i) => (
                 <button key={d.key} className={`diff-tile pick ${diff === d.key ? 'sel on' : ''}`} onClick={() => setDiff(d.key)}>
-                  <span {...H(bracketsSvg)} />
-                  <div className="diff-illu" {...H(DIFF_ILLU[i])} />
+                  <div className="diff-illu"><img src={`/difficulty/${d.key}.png`} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /><span className="diff-illu-svg" {...H(DIFF_ILLU[i])} /></div>
                   <div className="diff-idx">Signal {d.signal}/4</div>
                   <div className="diff-name">{d.name}</div>
                   <div className="vu">{[0, 1, 2, 3].map((b) => <i key={b} className={b < d.signal ? (d.signal === 4 && b === 3 ? 'hot' : 'on') : ''} />)}</div>
