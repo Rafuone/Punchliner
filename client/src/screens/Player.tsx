@@ -724,7 +724,7 @@ export default function Player() {
             buzz === 'mine' ? (<>
                 <h2 className="title-xl" style={{ margin: 0 }}>À toi ! Réponds vite</h2>
                 {buzzEndsAt > 0 && <div className="big-num" style={{ color: buzzLeft <= 3 ? 'var(--ember)' : 'var(--fluo)', lineHeight: 1 }}>{buzzLeft}</div>}
-                <form onSubmit={submitBuzzerAnswer} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}><input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre et/ou artiste…" autoFocus /><button className="btn warm big send" type="submit">Valider</button></form>
+                <form onSubmit={submitBuzzerAnswer} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}><input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre ET artiste — les deux !" autoFocus /><button className="btn warm big send" type="submit">Valider</button></form>
               </>)
               : buzz === 'locked' ? (<><svg width="46" height="46" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--muted)' }}><rect x="5" y="10.5" width="14" height="9.5" rx="2" stroke="currentColor" strokeWidth="1.7" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.7" /></svg><p className="muted">{buzzMsg}</p></>)
                 : jamMs > 0 ? (<><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti — tu pourras buzzer dans un instant.</p></>)

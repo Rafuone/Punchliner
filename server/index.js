@@ -55,6 +55,8 @@ const PORT = process.env.SERVER_PORT || 3001;
 const FAST = !!process.env.PL_FAST; // TEST uniquement (test-games.mjs) : manches ultra-courtes. JAMAIS en prod.
 const W = (ms) => (FAST ? 1500 : ms); // durée d'écoute par manche (raccourcie en mode test)
 const BUZZ_ANSWER_MS = FAST ? 2500 : 8000; // fenêtre pour répondre après avoir buzzé (sinon lockout + réouverture)
+const BUZZ_ROUND_MAX_MS = FAST ? 4000 : 30000; // buzzer : PLAFOND ABSOLU par manche → révèle même si ça buzze/rate en boucle (plus de musique infinie)
+const MIN_BUZZ_MS = FAST ? 200 : 800; // buzzer : grâce en début de manche (le son doit avoir démarré côté TV avant qu'on puisse buzzer)
 // Manche BATTLE (clash 1v1 généré par le jeu, façon battle hip-hop) — événement BONUS, PAS un pouvoir.
 // 2 joueurs s'affrontent ; les autres PARIENT sur le vainqueur. Le 1er des deux qui trouve gagne.
 const BATTLE_WIN = 20000;              // auditeurs pour le vainqueur du clash
@@ -587,6 +589,7 @@ function startRound(room) {
   if (room.mjId) { const a = room.players.get(room.mjId); if (a?.socketId) io.to(a.socketId).emit('mj:track', { title: room.current.title, artist: room.current.artist, cover: room.current.cover }); }
   clearTimeout(room.timer);
   room.timer = setTimeout(() => endRound(room), diff.windowMs);
+  if (room.settings.mode === 'buzzer') { clearTimeout(room.hardTimer); room.hardTimer = setTimeout(() => { if (room.phase === 'playing') endRound(room); }, BUZZ_ROUND_MAX_MS); } // plafond absolu (buzz/pause ne le repoussent pas)
 }
 
 // Remplit la jauge de pouvoir de chaque joueur en fin de manche selon la règle choisie
@@ -628,6 +631,7 @@ function suspenseActive(room) {
 function endRound(room) {
   clearTimeout(room.timer);
   clearTimeout(room.buzzTimer);
+  clearTimeout(room.hardTimer);
   if (room.phase !== 'playing') return;
   room.phase = 'reveal';
   const results = [];
@@ -669,7 +673,7 @@ function endRound(room) {
       else answerText = ansEntry?.text || null;
     }
     const usedPower = room.roundPowers ? room.roundPowers.get(p.id) : null;
-    results.push({ id: p.id, name: p.name, avatar: p.avatar, isMJ: !!p.isMJ, points, titleHit, artistHit, answer: answerText, power: usedPower || null });
+    results.push({ id: p.id, name: p.name, avatar: p.avatar, isMJ: !!p.isMJ, points, titleHit, artistHit, answer: answerText, tried: !!ansEntry, power: usedPower || null });
   }
   if (roundScorers.length === 1) { const w = room.players.get(roundScorers[0]); if (w?.stat) w.stat.solo++; } // seul à trouver cette manche
   // braqueur : crédite le musellement (sabotage) qui a RÉELLEMENT refusé des points à un adversaire cette manche
@@ -1193,6 +1197,7 @@ io.on('connection', (socket) => {
     if (!room || room.phase !== 'playing' || room.settings.mode !== 'buzzer' || room.settings.mj) return cb?.({ error: 'Pas de buzzer.' });
     const p = room.players.get(socket.data.playerId);
     if (!p) return cb?.({ error: 'Joueur inconnu.' });
+    if (Date.now() < (room.roundStartAt || 0) + MIN_BUZZ_MS) return cb?.({ error: 'Le son démarre…' }); // ANTI-BUZZ PRÉCOCE : refusé tant que le son n'a pas vraiment démarré côté TV
     if (room.jam && p.id !== room.jam.by && Date.now() < (room.roundStartAt || (room.roundEndsAt - room.windowMs)) + room.jam.ms) return cb?.({ error: 'Brouillé — patiente…', jammed: true });
     if (!room.buzz.open || room.buzz.winnerId || room.buzz.lockedOut.has(p.id)) return cb?.({ error: 'Buzzer indisponible.' });
     room.buzz.winnerId = p.id; room.buzz.winnerName = p.name; room.buzz.open = false;
@@ -1216,7 +1221,7 @@ io.on('connection', (socket) => {
     clearTimeout(room.buzzTimer);
     if (p.stat) p.stat.att++;
     const g = gradeAnswer(text, room.current, !!p.nofault);
-    if (g.base > 0) {
+    if (g.titleHit && g.artistHit) { // BUZZER : titre ET artiste obligatoires (sinon injuste vs qqn qui met les deux)
       let points = Math.round(g.base * room.mult) + 5000; // bonus buzzer
       if (!room.firstScorerId) { room.firstScorerId = p.id; if (p.stat) p.stat.firsts++; } // le buzz gagnant = 1er à trouver
       if (p.armed) {
@@ -1232,6 +1237,7 @@ io.on('connection', (socket) => {
       cb?.({ ok: true, correct: true, points });
       endRound(room);
     } else {
+      room.answers.set(p.id, { points: 0, titleHit: g.titleHit, artistHit: g.artistHit, text: String(text || '').slice(0, 60), tried: true }); // trace la tentative RATÉE (pour l'affichage reveal)
       cb?.({ ok: true, correct: false });
       buzzerFail(room, p.id);
     }
@@ -1483,7 +1489,7 @@ io.on('connection', (socket) => {
   socket.on('host:restart', (_p, cb) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
-    clearTimeout(room.timer); clearTimeout(room.buzzTimer); clearTimeout(room.cdTimer); clearTimeout(room.rushTimer);
+    clearTimeout(room.timer); clearTimeout(room.buzzTimer); clearTimeout(room.cdTimer); clearTimeout(room.rushTimer); clearTimeout(room.hardTimer);
     room.phase = 'lobby'; room.roundIndex = 0; room.prevRanks = null; room.current = null; room.lastReveal = null;
     room.battle = null; room.battlesThisGame = 0; room.lastBattleRound = -99;
     for (const p of room.players.values()) {

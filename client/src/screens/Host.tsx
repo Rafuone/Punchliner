@@ -148,11 +148,13 @@ export default function Host() {
   const spotifyOnRef = useRef(true);
   const deezerOnRef = useRef(true);
   const usingSpotifyRef = useRef(false); // source RÉELLEMENT en cours pour la manche (≠ capacité) → la reprise après buzz vise la bonne
+  const buzzActiveRef = useRef(false); // buzzer : un buzz est en cours → bloque tout (re)démarrage d'extrait (le son reste coupé pendant la réponse)
   const audioReadyRef = useRef(false);   // l'autoplay a-t-il été débloqué par un geste ? false au reload à froid (TV rechargée en pleine partie)
   const [audioLocked, setAudioLocked] = useState(false); // reload en pleine partie sans geste → autoplay bloqué → on affiche « cliquer pour le son »
 
   // Lecture d'une manche : Spotify si activé+prêt (extrait au milieu contrôlé), sinon Deezer.
   function playRound(d: any) {
+    if (buzzActiveRef.current) return; // un buzz est en cours → on NE (re)démarre PAS le son (il doit rester coupé le temps de la réponse)
     const useSp = spotifyOnRef.current && spReadyRef.current && d?.sp?.title;
     if (useSp) {
       usingSpotifyRef.current = true;
@@ -241,7 +243,7 @@ export default function Host() {
     socket.on('round:prep', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
     socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
-    socket.on('round:host', (d: any) => { setReveal(null); setAnswered([]); setBuzzWinner(null); setRound(d); setPhase('playing');
+    socket.on('round:host', (d: any) => { setReveal(null); setAnswered([]); setBuzzWinner(null); buzzActiveRef.current = false; setRound(d); setPhase('playing');
       if (d.mode === 'quiz') { wantAudioRef.current = false; clearTimeout(audioRetryRef.current); previewRef.current = { url: '', clipMs: 30000, startAt: 0 }; try { audioRef.current?.pause(); } catch {} spotifyPause(); } // QUIZ = pas d'extrait de jeu ; on garde l'instru de menu (Alpha Wann) en fond
       else playRound(d); });
     // Mode Survivor (contre-la-montre) : le son s'enchaîne automatiquement à chaque nouveau morceau
@@ -250,11 +252,14 @@ export default function Host() {
     socket.on('rush:end', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); clearTimeout(audioRetryRef.current); setRushEnd(d); setPhase('rushend'); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
     // buzz : le son SE COUPE (sinon on buzze, on écoute tranquille, puis on répond = trop facile)
-    socket.on('buzz:winner', (d: any) => { wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 8000 }); setNow(Date.now()); }); // clearTimeout : sinon un retry de lecture en attente relancerait le son PENDANT que le buzzeur répond
+    socket.on('buzz:winner', (d: any) => { buzzActiveRef.current = true; wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 8000 }); setNow(Date.now()); }); // buzzActiveRef : verrou anti-relance du son PENDANT que le buzzeur répond (course avec playRound)
     // le buzzeur a raté → le buzzer rouvre et le son REPREND pour les autres (SEULEMENT la source active de la manche,
     // sinon on relancerait une piste Spotify périmée EN PLUS de Deezer = double son)
-    socket.on('buzz:open', () => { wantAudioRef.current = true; if (usingSpotifyRef.current) spotifyTogglePlay(); else try { audioRef.current?.play().catch(() => {}); } catch {} setBuzzWinner(null); }); // reprend la source RÉELLE de la manche (pas la simple capacité Spotify) → plus de piste périmée / double son sur une manche tombée sur Deezer
-    socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // le son continue de tourner ; plus de "scratch" (jugé désagréable)
+    socket.on('buzz:open', () => { buzzActiveRef.current = false; wantAudioRef.current = true; if (usingSpotifyRef.current) spotifyTogglePlay(); else try { audioRef.current?.play().catch(() => {}); } catch {} setBuzzWinner(null); }); // le buzzeur a raté → le buzzer rouvre, on relève le verrou et on reprend le son
+    socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); buzzActiveRef.current = false;
+      // BUZZER : le son avait été coupé au buzz → on le REMET pour la révélation (titre + artiste). En Blind Test wantAudioRef reste true → no-op.
+      if (!wantAudioRef.current && previewRef.current.url) { wantAudioRef.current = true; if (usingSpotifyRef.current) { try { spotifyTogglePlay(); } catch {} } else playPreview(previewRef.current.url, previewRef.current.startAt, 0); }
+    });
     socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); const u = computeUnlock(d, unlockedRef.current); if (u) { unlockedRef.current.add(u); try { localStorage.setItem('pl_unlocked', JSON.stringify([...unlockedRef.current])); } catch {} } setPendingUnlock(u); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées ; un challenger déjà débloqué ne réapparaît plus
     socket.on('power:used', (d: any) => { setPowerFeed((f) => [...f.slice(-4), { ...d, key: powerKeyRef.current++ }]); sfx('scratch'); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
@@ -437,6 +442,7 @@ export default function Host() {
   // depuis le clic "Lancer", donc play() marche en programmatique : si le navigateur coupe le son, on le
   // relance tout seul (retries ici + events onPause/onError de l'élément + horloge de garde plus bas).
   function playPreview(url: string, startAt = 0, attempt = 0) {
+    if (buzzActiveRef.current) return; // buzz en cours → pas de démarrage d'extrait
     const a = audioRef.current; if (!a || !url) return;
     previewRef.current = { url, startAt };
     wantAudioRef.current = true;
@@ -785,9 +791,9 @@ export default function Host() {
             </div>
           )}
           {/* ÉTAPE 1 — QUI A RÉPONDU QUOI (+ points gagnés). Disparaît quand le classement arrive (revealStep>=1). */}
-          {revealStep < 1 && !round.mj && reveal.results && reveal.results.filter((r: any) => !r.isMJ).length > 0 && (
+          {revealStep < 1 && !round.mj && reveal.results && reveal.results.filter((r: any) => !r.isMJ && (round.mode !== 'buzzer' || r.tried)).length > 0 && (
             <div className="verdicts">
-              {reveal.results.filter((r: any) => !r.isMJ).map((r: any) => {
+              {reveal.results.filter((r: any) => !r.isMJ && (round.mode !== 'buzzer' || r.tried)).map((r: any) => {
                 const good = r.points > 0;
                 return (
                   <div className={`verdict ${good ? 'good' : 'bad'}`} key={r.id}>
