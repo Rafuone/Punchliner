@@ -52,7 +52,7 @@ const FORMATS = [
   { rounds: 'inf' as const, label: 'Sans fin', desc: 'On enchaîne jusqu’à ce que quelqu’un lâche.' },
 ];
 const REBALANCE = [
-  { key: 'comeback', name: 'Comeback', desc: 'À la traîne = jauge plus rapide (façon TowerFall).' },
+  { key: 'comeback', name: 'Comeback', desc: 'À la traîne = jauge qui monte plus vite.' },
   { key: 'snowball', name: 'Snowball', desc: 'Plus tu gagnes, plus ta jauge monte.' },
   { key: 'off', name: 'Neutre', desc: 'Même vitesse de jauge pour tout le monde.' },
 ];
@@ -104,7 +104,7 @@ const vhsOverlay = '<div class="vhs"><div class="lines"></div><div class="band">
 // crunch/grésille fin par-dessus la vidéo Blind Test (reprise de la DA showcase perso : scanlines + bruit chroma + bande + voile froid)
 const keyvidFx = '<i class="kvl"></i><i class="kvt"></i><i class="kvn"></i><i class="kvb"></i>';
 // vidéo « diffusion télé » de fond, par mode (jouée UNIQUEMENT quand la carte est sélectionnée). Blind + Buzzer + Quiz.
-const VID_GAMES: Record<string, string> = { blind: '/blind-test.mp4', buzz: '/buzzer.mp4', quiz: '/quiz.mp4' };
+const VID_GAMES: Record<string, string> = { blind: '/blind-test.mp4', buzz: '/buzzer.mp4', quiz: '/quiz.mp4', rush: '/cypher.mp4' };
 function dial(active: boolean) {
   const c = active ? 'var(--fluo)' : 'rgba(255,255,255,.28)';
   return `<svg class="dial" viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="16" fill="rgba(0,0,0,.35)" stroke="${c}" stroke-width="2"/><g stroke="${c}" stroke-width="1.4" opacity=".7"><line x1="20" y1="6" x2="20" y2="9"/><line x1="34" y1="20" x2="31" y2="20"/><line x1="20" y1="34" x2="20" y2="31"/><line x1="6" y1="20" x2="9" y2="20"/></g><line x1="20" y1="20" x2="${active ? 28 : 14}" y2="12" stroke="${active ? 'var(--fluo)' : '#fff'}" stroke-width="2.4" stroke-linecap="round"/><circle cx="20" cy="20" r="3" fill="${c}"/></svg>`;
@@ -382,7 +382,6 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
           </div>
           <div className="sess-right">
             <span className="gpill onair"><span className="dot live" />ON&nbsp;AIR</span>
-            <span className="gpill"><span className="dot" />Salon&nbsp;<span className="roomcode">{roomCode}</span></span>
             <div className="players-wrap">
               <button className="gpill players-btn" onClick={() => setShowPlayers((v) => !v)} aria-expanded={showPlayers}>
                 {players}&nbsp;joueur{players > 1 ? 's' : ''} <span {...H(chevron)} />
@@ -433,7 +432,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 <div className="act-kicker"><span className="actno"><span>ACTE 0{step + 1}</span></span><span className="actlabel">Sélection</span></div>
                 <h2 className="act-title" {...H(stepTitles[step])} />
               </div>
-              <p className="act-sub">{stepSubs[step]}</p>
+              <div className="act-salon"><span className="act-salon-lbl">Salon</span><span className="act-salon-code">{roomCode}</span></div>
             </div>
 
             {step === 0 && (() => {
@@ -453,7 +452,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                   </div>
                   <div className="reccue"><i />REC</div>
                   {g.soon ? <span className="badge-soon"><span><span className="dot" style={{ width: 6, height: 6 }} />Bientôt</span></span> : <span className="badge-live"><span><span className="dot" style={{ width: 6, height: 6 }} />Jouable</span></span>}
-                  <div className="kbody"><div className="kcat">{g.cat}</div><div className="kname">{g.name}</div><div className="kdesc">{g.desc}</div><span className="kfam">{g.family === 'solo' ? '1 joueur · record' : '2 à 8 · soirée'}</span></div>
+                  <div className="kbody"><div className="kcat">{g.cat}</div><div className="kname">{g.name}</div><div className="kdesc">{g.desc}</div><span className="kfam">{g.family === 'solo' ? '1 joueur · record' : '2 à 8 joueurs · soirée'}</span></div>
                   {g.id === 'rush' && onOpenHub && (
                     <span className="kclass" role="button" tabIndex={0}
                       onClick={(e) => { e.stopPropagation(); onOpenHub('leaderboard'); }}
