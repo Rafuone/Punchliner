@@ -104,7 +104,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
       setRadioSource(radioMem.source); setRadioResults(radioMem.results); setRadioQuery(radioMem.query);
       setSelPl(radioMem.selPl); setTracks(radioMem.tracks); setTrkInfo(radioMem.trkInfo); setRadioActiveUri(radioMem.activeUri);
       if (radioMem.nowPlaying) { setNowPlaying({ ...radioMem.nowPlaying, paused: true }); posRef.current = { base: radioMem.posBase, at: Date.now() }; }
-    } else if (rdy) { runStation(RADIO_STATIONS[0]); }
+    } else if (rdy) { loadMine(); } // à l'arrivée : MES playlists (les seules lisibles + le plus utile)
     return () => { off(); spotifyPause(); onRadioStop?.(); }; // quitter la radio → stop radio + reprise musique du menu
   }, [mode]);
   // sauvegarde live de la session radio → restaurable au prochain retour (cf. radioMem)
@@ -274,10 +274,10 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
           RETOUR
         </button>
+        <span className={`sp-badge radio-spbadge ${spReady ? 'on' : ''}`}><span className="srclogo" dangerouslySetInnerHTML={{ __html: SPOTIFY_ICO }} />Spotify</span>
         <div className="radio-wrap" style={{ position: 'relative', zIndex: 1, paddingBottom: nowPlaying ? 116 : 26 }}>
           <div className="radio-topbar">
             <h1 className="wm radio-title">RADIO PUNCHLINR</h1>
-            <span className={`sp-badge ${spReady ? 'on' : ''}`}><span className="srclogo" dangerouslySetInnerHTML={{ __html: SPOTIFY_ICO }} />Spotify</span>
           </div>
 
           {!spReady ? (
@@ -291,7 +291,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
               <div className="radio-main">
                 <div className="radio-head">
                   <div className="radio-stations">
-                    <button className={`radio-chip ${radioSource === 'mine' ? 'on' : ''}`} onClick={loadMine}>★ Mes playlists</button>
+                    <button className={`radio-chip chip-mine ${radioSource === 'mine' ? 'on' : ''}`} onClick={loadMine}><span className="rc-star">★</span>Mes playlists</button>
                     {RADIO_STATIONS.map((st) => (
                       <button key={st.q} className={`radio-chip ${radioSource === st.label ? 'on' : ''}`} onClick={() => runStation(st)}>{st.label}</button>
                     ))}
@@ -341,7 +341,9 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                     </div>
                     <button className="rpl-close" onClick={() => setSelPl(null)} aria-label="Fermer">×</button>
                   </div>
-                  <button className="btn warm rpl-play" onClick={() => playWhole(selPl)}><span className="rpl-play-ic">{PLAY(15)}</span> Lancer la playlist</button>
+                  {radioActiveUri === selPl.uri
+                    ? <button className="btn rpl-play playing" onClick={() => spotifyTogglePlay()}><span className="rpl-eq"><i /><i /><i /></span> Playlist en lecture</button>
+                    : <button className="btn warm rpl-play" onClick={() => playWhole(selPl)}><span className="rpl-play-ic">{PLAY(15)}</span> Lancer la playlist</button>}
                   <div className="rpl-tracks">
                     {trkInfo.loading ? (
                       Array.from({ length: 8 }).map((_, i) => (
