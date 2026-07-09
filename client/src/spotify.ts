@@ -71,21 +71,28 @@ export async function spotifyLogin() {
   const w = 480, h = 720;
   const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
   const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+  // marqueur : le prochain retour ?code sur /host = notre fenêtre popup. FIABLE même si window.opener est neutralisé
+  // par la politique COOP (auquel cas postMessage ne marche pas → on passe par un event localStorage, cf. main.tsx).
+  try { localStorage.setItem('pl_sp_popup', '1'); } catch {}
   const popup = window.open(url, 'pl-spotify-auth', `width=${w},height=${h},left=${left},top=${top}`);
-  if (!popup) { window.location.href = url; } // popup bloquée → repli sur l'ancien comportement
+  if (!popup) { try { localStorage.removeItem('pl_sp_popup'); } catch {} window.location.href = url; } // popup bloquée → repli redirection
 }
 
-// À appeler dans la fenêtre PRINCIPALE : reçoit le code renvoyé par la popup (postMessage) et échange le token
-// SANS rechargement. onDone(true) = session prête → l'appelant réinitialise le lecteur (SDK).
+// Échange le code OAuth contre le token (exporté pour que la POPUP le fasse elle-même — le verifier est en
+// localStorage, partagé). Renvoie true si OK.
+export async function exchangeSpotifyCode(code: string): Promise<boolean> {
+  try { await exchangeCode(code); return true; } catch { return false; }
+}
+
+// À appeler dans la fenêtre PRINCIPALE : la popup a échangé le token et signale via postMessage (si window.opener
+// dispo) OU via un event localStorage `pl_sp_done` (repli anti-COOP). onDone(true) = session prête → réinit du SDK.
 export function listenSpotifyAuth(onDone: (ok: boolean) => void) {
-  const h = async (e: MessageEvent) => {
-    if (e.origin !== window.location.origin || !e.data || !e.data.__spotify_auth) return;
-    const { code, error } = e.data.__spotify_auth;
-    if (error) { setErr('Spotify a refusé l’autorisation : ' + error); onDone(false); return; }
-    if (code) { try { await exchangeCode(code); onDone(true); } catch { onDone(false); } }
-  };
-  window.addEventListener('message', h);
-  return () => window.removeEventListener('message', h);
+  const finish = (ok: boolean, error?: string) => { if (error) setErr('Spotify a refusé l’autorisation : ' + error); onDone(!!ok); };
+  const onMsg = (e: MessageEvent) => { if (e.origin !== window.location.origin || !e.data || !e.data.__spotify_auth) return; finish(!!e.data.__spotify_auth.ok, e.data.__spotify_auth.error); };
+  const onStorage = (e: StorageEvent) => { if (e.key !== 'pl_sp_done' || !e.newValue) return; try { const d = JSON.parse(e.newValue); finish(!!d.ok, d.error); } catch {} };
+  window.addEventListener('message', onMsg);
+  window.addEventListener('storage', onStorage); // storage event = fiable entre fenêtres même origine, indépendant de window.opener
+  return () => { window.removeEventListener('message', onMsg); window.removeEventListener('storage', onStorage); };
 }
 
 async function exchangeCode(code: string) {
