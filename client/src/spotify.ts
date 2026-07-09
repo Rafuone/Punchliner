@@ -17,13 +17,19 @@
 // (Compromis assumé : la MUSIQUE prime. À améliorer plus tard si besoin.)
 
 const CLIENT_ID = '4b5842ddb3ef4a1f9f14b789a0a35706';
-const SCOPES = 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state';
+// playlist-read-private/-collaborative = nécessaires pour /v1/me/playlists (« Mes playlists »), sinon 403 "Insufficient client scope".
+const SCOPES = 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative';
 const KEY = 'pl_spotify';
 const VERIFIER_KEY = 'pl_sp_verifier';
 // DOIT correspondre EXACTEMENT à la redirect URI déclarée dans le dashboard (http://127.0.0.1:5173/host).
 const REDIRECT_URI = window.location.origin + '/host';
 
 type Tokens = { access_token: string; refresh_token?: string; expires_at: number };
+
+// Dernière erreur Spotify lisible par l'humain → affichée à l'écran (radio) pour diagnostiquer sans la console.
+let lastError = '';
+export function spotifyLastError() { return lastError; }
+const setErr = (m: string) => { lastError = m; if (m) console.warn('[SPOTIFY] ' + m); };
 
 /* ---------- stockage token ---------- */
 function load(): Tokens | null { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } }
@@ -51,7 +57,10 @@ function randStr(n = 64) {
 export async function spotifyLogin() {
   const verifier = randStr(64);
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
-  sessionStorage.setItem(VERIFIER_KEY, verifier);
+  // verifier en localStorage (PAS sessionStorage) : un aller-retour OAuth peut vider le sessionStorage sur
+  // certains navigateurs → code_verifier perdu → échange 400 (invalid_grant). localStorage survit à coup sûr.
+  localStorage.setItem(VERIFIER_KEY, verifier);
+  setErr('');
   const p = new URLSearchParams({
     client_id: CLIENT_ID, response_type: 'code', redirect_uri: REDIRECT_URI,
     code_challenge_method: 'S256', code_challenge: challenge, scope: SCOPES,
@@ -60,12 +69,18 @@ export async function spotifyLogin() {
 }
 
 async function exchangeCode(code: string) {
-  const verifier = sessionStorage.getItem(VERIFIER_KEY) || '';
+  const verifier = localStorage.getItem(VERIFIER_KEY) || sessionStorage.getItem(VERIFIER_KEY) || '';
+  if (!verifier) { setErr('Reconnexion : code de sécurité (verifier) introuvable — reclique « Reconnecter ».'); throw new Error('no verifier'); }
   const body = new URLSearchParams({ client_id: CLIENT_ID, grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI, code_verifier: verifier });
   const r = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-  if (!r.ok) throw new Error('spotify token exchange failed');
+  if (!r.ok) {
+    const txt = await r.text().catch(() => '');
+    setErr('Échange du code refusé par Spotify (HTTP ' + r.status + ') — ' + txt + ' · redirect_uri=' + REDIRECT_URI);
+    throw new Error('spotify token exchange failed');
+  }
   store(await r.json());
-  sessionStorage.removeItem(VERIFIER_KEY);
+  localStorage.removeItem(VERIFIER_KEY); sessionStorage.removeItem(VERIFIER_KEY);
+  setErr('');
 }
 
 // ⚠️ Spotify FAIT TOURNER le refresh_token à chaque refresh (rotation) → deux refresh concurrents (SDK + app)
@@ -76,10 +91,18 @@ async function doRefresh(): Promise<Tokens | null> {
   const body = new URLSearchParams({ client_id: CLIENT_ID, grant_type: 'refresh_token', refresh_token: t.refresh_token });
   try {
     const r = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    if (!r.ok) return null; // token invalide → on NE vide PAS la session (l'utilisateur pourra recliquer), mais pas de crash
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      console.warn('[SPOTIFY] refresh HTTP ' + r.status + ' — ' + txt);
+      // 400 (invalid_grant) / 401 = refresh_token DÉFINITIVEMENT mort (rotation désynchro / révoqué).
+      // On VIDE la session morte : sinon hasSpotifySession() reste true et on reste bloqué en
+      // « connecté mais cassé » à chaque rechargement → l'UI doit reproposer une VRAIE reconnexion.
+      if (r.status === 400 || r.status === 401) { localStorage.removeItem(KEY); ready = false; deviceId = ''; }
+      return null;
+    }
     store(await r.json());
     return load();
-  } catch { return null; }
+  } catch (e) { console.warn('[SPOTIFY] refresh réseau KO', e); return null; }
 }
 function refresh(): Promise<Tokens | null> {
   if (!refreshing) refreshing = doRefresh().finally(() => { refreshing = null; });
@@ -95,12 +118,13 @@ async function getToken(): Promise<string | null> {
 // À appeler au montage de l'hôte : si on revient de Spotify (?code=), on échange le code.
 export async function handleSpotifyRedirect(): Promise<boolean> {
   const p = new URLSearchParams(window.location.search);
+  const err = p.get('error');
+  if (err) { setErr('Spotify a refusé l’autorisation : ' + err); window.history.replaceState({}, '', window.location.pathname); return false; }
   if (p.get('code')) {
-    try { await exchangeCode(p.get('code')!); } catch (e) { /* échange raté → l'utilisateur pourra recliquer */ }
+    try { await exchangeCode(p.get('code')!); } catch (e) { /* setErr déjà positionné dans exchangeCode → visible à l'écran */ }
     window.history.replaceState({}, '', window.location.pathname);
     return true;
   }
-  if (p.get('error')) window.history.replaceState({}, '', window.location.pathname);
   return false;
 }
 
@@ -147,30 +171,47 @@ export async function initSpotifyPlayer(onState: (s: string) => void) {
   // état de lecture (now-playing) → pour la barre de lecture de la Radio
   player.addListener('player_state_changed', (s: any) => {
     const t = s?.track_window?.current_track;
-    const np = t ? { paused: !!s.paused, name: t.name, artist: (t.artists || []).map((a: any) => a.name).join(', '), image: t.album?.images?.[0]?.url || '' } : null;
+    const np = t ? { paused: !!s.paused, name: t.name, artist: (t.artists || []).map((a: any) => a.name).join(', '), image: t.album?.images?.[0]?.url || '', position: s.position || 0, duration: s.duration || t.duration_ms || 0, shuffle: !!s.shuffle, repeat: s.repeat_mode || 0 } : null;
     stateSubs.forEach((cb) => { try { cb(np); } catch {} });
   });
   player.connect();
 }
 
 /* ---------- Radio : now-playing + lecture de playlists ---------- */
-type NowPlaying = { paused: boolean; name: string; artist: string; image: string } | null;
+type NowPlaying = { paused: boolean; name: string; artist: string; image: string; position: number; duration: number; shuffle: boolean; repeat: number } | null;
 const stateSubs: Array<(s: NowPlaying) => void> = [];
 export function onPlayerState(cb: (s: NowPlaying) => void) { stateSubs.push(cb); return () => { const i = stateSubs.indexOf(cb); if (i >= 0) stateSubs.splice(i, 1); }; }
 
 // Recherche des playlists (stations + recherche libre). Renvoie les résultats ET un code d'info (pour AFFICHER la
-// vraie cause quand c'est vide : token mort, 401, bug "items null" de Spotify…). limit haute = on dépasse les
-// playlists éditoriales que Spotify renvoie en `null` (bug connu) pour atteindre des playlists lisibles.
-export type PlaylistItem = { name: string; uri: string; image: string; owner: string };
-export async function searchPlaylists(query: string, limit = 40): Promise<{ items: PlaylistItem[]; info: string }> {
+// vraie cause quand c'est vide : token mort, 401, bug "items null" de Spotify…).
+// ⚠️ limit MAX = 20 : au-delà (ex. 40) Spotify renvoie 400 "Invalid limit" (cap réel < doc, découvert au playtest).
+export type PlaylistItem = { id: string; name: string; uri: string; image: string; owner: string; total: number };
+export type PlaylistTrack = { uri: string; title: string; artist: string; durationMs: number; cover: string };
+export async function searchPlaylists(query: string, limit = 20): Promise<{ items: PlaylistItem[]; info: string }> {
   const token = await getToken(); if (!token) return { items: [], info: 'no-token' };
+  const lim = Math.min(Math.max(1, Math.floor(limit) || 20), 50);
+  const mapItems = (raw: any[]) => raw.filter(Boolean).map((p: any) => ({ id: p.id, name: p.name || 'Playlist', uri: p.uri, image: p.images?.[0]?.url || '', owner: p.owner?.display_name || 'Spotify', total: p.tracks?.total || 0 }));
+  const q = encodeURIComponent(query);
+  // Spotify renvoie parfois des 400 à MESSAGE TROMPEUR ("Invalid limit") sur la recherche selon les paramètres.
+  // → on essaie de la variante la + riche à la + basique et on garde la 1re qui rend des résultats (auto-réparation).
+  const variants = [
+    `type=playlist&q=${q}&limit=${lim}&market=FR`,
+    `type=playlist&q=${q}&limit=${lim}`,
+    `type=playlist&q=${q}&market=FR`,
+    `type=playlist&q=${q}`,
+  ];
+  let lastStatus = 0, lastBody = '', lastVariant = '';
   try {
-    const r = await fetch('https://api.spotify.com/v1/search?type=playlist&market=FR&limit=' + limit + '&q=' + encodeURIComponent(query), { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) return { items: [], info: 'http-' + r.status };
-    const raw = (await r.json())?.playlists?.items || [];
-    const items = raw.filter(Boolean).map((p: any) => ({ name: p.name || 'Playlist', uri: p.uri, image: p.images?.[0]?.url || '', owner: p.owner?.display_name || 'Spotify' }));
-    if (!items.length) return { items: [], info: raw.length ? 'all-null' : 'empty' };
-    return { items, info: '' };
+    for (const v of variants) {
+      const r = await fetch('https://api.spotify.com/v1/search?' + v, { headers: { Authorization: 'Bearer ' + token } });
+      if (!r.ok) { lastStatus = r.status; lastBody = (await r.text().catch(() => '')).slice(0, 120); lastVariant = v; continue; }
+      const items = mapItems((await r.json())?.playlists?.items || []);
+      if (items.length) { setErr(''); return { items, info: '' }; } // 1re variante qui rend des playlists → gagné
+      lastStatus = 200; lastVariant = v; // 200 mais items null/vides → on tente une variante + simple
+    }
+    // rien n'a donné de résultat : on remonte la vraie cause à l'écran (statut + variante + corps Spotify)
+    if (lastStatus && lastStatus !== 200) { setErr('[v3] Recherche playlists HTTP ' + lastStatus + ' · token=' + token.length + ' car. · [' + lastVariant + '] · ' + lastBody); return { items: [], info: 'http-' + lastStatus }; }
+    setErr(''); return { items: [], info: lastStatus === 200 ? 'all-null' : 'empty' };
   } catch { return { items: [], info: 'network' }; }
 }
 
@@ -188,6 +229,57 @@ export async function spotifyPlayContext(contextUri: string): Promise<boolean> {
 }
 export async function spotifyTogglePlay() { try { await player?.togglePlay(); } catch {} }
 export async function spotifyNext() { try { await player?.nextTrack(); } catch {} }
+export async function spotifyPrev() { try { await player?.previousTrack(); } catch {} }
+export async function spotifySeek(ms: number) { try { await player?.seek(Math.max(0, ms)); } catch {} }
+async function playerCmd(path: string) { // repeat/shuffle passent par l'API REST (le SDK ne les expose pas)
+  const token = await getToken(); if (!token || !deviceId) return;
+  try { await fetch('https://api.spotify.com/v1/me/player/' + path + (path.includes('?') ? '&' : '?') + 'device_id=' + deviceId, { method: 'PUT', headers: { Authorization: 'Bearer ' + token } }); } catch {}
+}
+export async function spotifyRepeat(state: 'off' | 'context' | 'track') { await playerCmd('repeat?state=' + state); }
+export async function spotifyShuffle(on: boolean) { await playerCmd('shuffle?state=' + (on ? 'true' : 'false')); }
+
+// Les playlists de l'utilisateur (= sa bibliothèque → le vrai « Tout »). Renvoie [] + info si vide/erreur.
+export async function getMyPlaylists(limit = 50): Promise<{ items: PlaylistItem[]; info: string }> {
+  const token = await getToken(); if (!token) return { items: [], info: 'no-token' };
+  try {
+    const r = await fetch('https://api.spotify.com/v1/me/playlists?limit=' + Math.min(50, limit), { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) { const txt = await r.text().catch(() => ''); setErr('[v3] Mes playlists HTTP ' + r.status + ' · ' + txt.slice(0, 120)); return { items: [], info: 'http-' + r.status }; }
+    const raw = ((await r.json())?.items || []) as any[];
+    const items = raw.filter(Boolean).map((p: any) => ({ id: p.id, name: p.name || 'Playlist', uri: p.uri, image: p.images?.[0]?.url || '', owner: p.owner?.display_name || 'moi', total: p.tracks?.total || 0 }));
+    setErr('');
+    return { items, info: items.length ? '' : 'empty' };
+  } catch { return { items: [], info: 'network' }; }
+}
+
+// Les titres d'une playlist : cover/titre/artiste/durée + meta (nom, owner, nb, durée totale).
+export async function getPlaylistTracks(id: string): Promise<{ tracks: PlaylistTrack[]; total: number; durationMs: number; info: string }> {
+  const token = await getToken(); if (!token) return { tracks: [], total: 0, durationMs: 0, info: 'no-token' };
+  try {
+    // pas de `fields` (rejet silencieux possible) ni de `market` (relinking null) : on prend la réponse complète.
+    const r = await fetch('https://api.spotify.com/v1/playlists/' + id + '/tracks?limit=50', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) { const txt = await r.text().catch(() => ''); setErr('[v4] Titres playlist HTTP ' + r.status + ' · id=' + id + ' · ' + txt.slice(0, 140)); return { tracks: [], total: 0, durationMs: 0, info: 'http-' + r.status }; }
+    const raw = ((await r.json())?.items || []) as any[];
+    const tracks: PlaylistTrack[] = raw.map((it: any) => it?.track).filter(Boolean).map((t: any) => ({
+      uri: t.uri, title: t.name || '?', artist: (t.artists || []).map((a: any) => a.name).join(', ') || '?',
+      durationMs: t.duration_ms || 0, cover: t.album?.images?.[t.album.images.length - 1]?.url || t.album?.images?.[0]?.url || '',
+    }));
+    const durationMs = tracks.reduce((s, t) => s + t.durationMs, 0);
+    setErr('');
+    return { tracks, total: tracks.length, durationMs, info: tracks.length ? '' : 'empty' };
+  } catch { return { tracks: [], total: 0, durationMs: 0, info: 'network' }; }
+}
+
+// Joue UN morceau précis (par uri) sur notre device — clic sur une ligne de la tracklist.
+export async function spotifyPlayUri(uri: string): Promise<boolean> {
+  const token = await getToken(); if (!token || !deviceId) return false;
+  try {
+    const r = await fetch('https://api.spotify.com/v1/me/player/play?device_id=' + deviceId, {
+      method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uris: [uri] }),
+    });
+    return r.ok || r.status === 204;
+  } catch { return false; }
+}
 
 /* ---------- recherche + lecture ---------- */
 const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');

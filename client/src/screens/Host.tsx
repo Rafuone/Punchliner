@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
-import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon, REACTIONS, END_REACTIONS, CERTIF_TIER, UNLOCKS, AVATARS } from '../data';
+import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon, REACTIONS, END_REACTIONS, CERTIF_TIER, UNLOCKS, AVATARS, CATEGORY_COLORS } from '../data';
 import ConfigWizard from './ConfigWizard';
 import HubBrowse from './HubBrowse';
 import ChallengerReveal from './ChallengerReveal';
 import GrungeBg from '../GrungeBg';
 import { sfx, sfxLoopStop, playAirhorns } from '../sfx';
-import { handleSpotifyRedirect, hasSpotifySession, initSpotifyPlayer, spotifyPlay, spotifyPause, spotifyLogin, spotifyLogout } from '../spotify';
+import { handleSpotifyRedirect, hasSpotifySession, initSpotifyPlayer, spotifyPlay, spotifyPause, spotifyTogglePlay, spotifyLogin, spotifyLogout } from '../spotify';
 
 // Fond du lobby (écran du code) : instru d'Alpha Wann. Crossfade vers la playlist (Bishok) à l'entrée du ConfigWizard.
 const LOBBY_TRACK = '/music/alphawann-philly-flingo.mp3';
@@ -61,8 +61,15 @@ function CertifDisc({ score, rounds, size = 92, avatarId }: { score: number; rou
   );
 }
 
+// CLASH : couleur d'un combattant = couleur de SA CATÉGORIE (via l'id du rappeur choisi = player.avatar).
+const catColor = (id?: string) => CATEGORY_COLORS[avatarById(id)?.cat || ''] || 'var(--fluo)';
+// nom du RAPPEUR (l'avatar) — le pseudo du joueur reste .name côté données
+const rapName = (id?: string) => avatarById(id)?.name || id || '';
+// Vrai/Faux : classe couleur (vert = Vrai, rouge = Faux)
+const vfClass = (c: string) => (c === 'Vrai' ? ' vrai' : c === 'Faux' ? ' faux' : '');
+
 export default function Host() {
-  const [phase, setPhase] = useState<'connecting' | 'lobby' | 'prep' | 'countdown' | 'playing' | 'reveal' | 'final' | 'rushend'>('connecting');
+  const [phase, setPhase] = useState<'connecting' | 'lobby' | 'prep' | 'countdown' | 'playing' | 'reveal' | 'final' | 'rushend' | 'battle-intro' | 'battle-bet' | 'battle-play' | 'battle-reveal'>('connecting');
   const [countdown, setCountdown] = useState(0);
   const [code, setCode] = useState('');
   const [poolSize, setPoolSize] = useState(0);
@@ -91,6 +98,7 @@ export default function Host() {
   const [answered, setAnswered] = useState<string[]>([]);
   const [buzzWinner, setBuzzWinner] = useState<{ name: string; avatar?: string | null; endsAt?: number; answerMs?: number } | null>(null);
   const [reveal, setReveal] = useState<any>(null);
+  const [battle, setBattle] = useState<any>(null); // manche CLASH (1v1 + paris) : {a,b,flavor,tallyA,tallyB,endsAt,betMs,durationMs,reveal}
   const [revealStep, setRevealStep] = useState(0); // 0 = réponses seules · 1 = + classement (on affiche l'un PUIS l'autre)
   const [finalScores, setFinalScores] = useState<any[]>([]);
   const [awards, setAwards] = useState<any[]>([]);       // trophées de la partie qui vient de finir
@@ -159,10 +167,15 @@ export default function Host() {
   useEffect(() => {
     (async () => {
       await handleSpotifyRedirect();
+      let backToRadio = false;
+      try { backToRadio = localStorage.getItem('pl_radio_return') === '1'; if (backToRadio) localStorage.removeItem('pl_radio_return'); } catch {}
       if (hasSpotifySession()) {
         setSpState('connecting');
         initSpotifyPlayer((s) => { setSpState(s); spReadyRef.current = (s === 'ready'); });
       }
+      // reconnexion lancée DEPUIS la radio → on rouvre la radio au retour (sinon on retombe au lobby = boucle)
+      // que le token soit OK (playlists) ou KO (message d'erreur ⚙ précis affiché) — plus de retour au lobby dans le vide.
+      if (backToRadio) setHubView('radio');
     })();
   }, []);
 
@@ -181,6 +194,10 @@ export default function Host() {
       setReveal(state.reveal); setPlayers(state.reveal.scores); setPhase('reveal');
     } else if (state.phase === 'final' && state.final) {
       setFinalScores(state.final.scores); setAwards(state.final.awards || []); setSeries(state.final.series || null); setFinalRounds(state.final.rounds || round.total || 0); setPhase('final');
+    } else if (typeof state.phase === 'string' && state.phase.startsWith('battle') && state.battle) {
+      // reprise en pleine manche CLASH : on restaure l'état si le serveur le fournit, sinon repli lobby
+      setBattle(state.battle); setNow(Date.now()); setPhase(state.phase);
+      if (state.phase === 'battle-play' && state.battle.preview) playRound(state.battle);
     } else setPhase('lobby');
   }
 
@@ -210,8 +227,11 @@ export default function Host() {
     socket.on('rush:state', (d: any) => { setRound(d); if (d.scores) setPlayers(d.scores); });
     socket.on('rush:end', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); clearTimeout(audioRetryRef.current); setRushEnd(d); setPhase('rushend'); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
-    socket.on('buzz:winner', (d: any) => { setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 8000 }); setNow(Date.now()); });
-    socket.on('buzz:open', () => setBuzzWinner(null));
+    // buzz : le son SE COUPE (sinon on buzze, on écoute tranquille, puis on répond = trop facile)
+    socket.on('buzz:winner', (d: any) => { wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 8000 }); setNow(Date.now()); });
+    // le buzzeur a raté → le buzzer rouvre et le son REPREND pour les autres (SEULEMENT la source active de la manche,
+    // sinon on relancerait une piste Spotify périmée EN PLUS de Deezer = double son)
+    socket.on('buzz:open', () => { wantAudioRef.current = true; if (spotifyOnRef.current && spReadyRef.current) spotifyTogglePlay(); else try { audioRef.current?.play().catch(() => {}); } catch {} setBuzzWinner(null); });
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // le son continue de tourner ; plus de "scratch" (jugé désagréable)
     socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(computeUnlock(d)); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées
     socket.on('power:used', (d: any) => { setPowerFeed((f) => [...f.slice(-4), { ...d, key: powerKeyRef.current++ }]); sfx('scratch'); });
@@ -224,10 +244,16 @@ export default function Host() {
       setTimeout(() => setReactions((rs) => rs.filter((r) => r.key !== key)), 4800);
     });
     socket.on('room:closed', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); setError(d.reason || 'Salon fermé.'); localStorage.removeItem(HKEY); sfxLoopStop(); });
-    return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'round:countdown', 'round:host', 'rush:host', 'rush:state', 'rush:end', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'reaction', 'room:closed'].forEach((e) => socket.off(e as any));
+    // ---- Manche CLASH (battle 1v1 + paris) ----
+    socket.on('battle:intro', (d: any) => { wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBattle({ a: d.a, b: d.b, flavor: d.flavor, betBonus: d.betBonus, win: d.win, tallyA: [], tallyB: [] }); setPhase('battle-intro'); });
+    socket.on('battle:bets', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, betMs: d.betMs })); setNow(Date.now()); setPhase('battle-bet'); });
+    socket.on('battle:tally', (d: any) => setBattle((b: any) => ({ ...b, tallyA: d.a || [], tallyB: d.b || [] })));
+    socket.on('battle:go', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, durationMs: d.durationMs })); setNow(Date.now()); setPhase('battle-play'); playRound(d); });
+    socket.on('battle:reveal', (d: any) => { setBattle((b: any) => ({ ...b, reveal: d })); if (d.scores) setPlayers(d.scores); wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setPhase('battle-reveal'); });
+    return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'round:countdown', 'round:host', 'rush:host', 'rush:state', 'rush:end', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'reaction', 'room:closed', 'battle:intro', 'battle:bets', 'battle:tally', 'battle:go', 'battle:reveal'].forEach((e) => socket.off(e as any));
   }, []);
 
-  useEffect(() => { if (phase !== 'playing' && phase !== 'prep') return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
+  useEffect(() => { if (!['playing', 'prep', 'battle-bet', 'battle-play'].includes(phase)) return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
   useEffect(() => { if (phase !== 'countdown') return; const id = setInterval(() => setCountdown((c) => Math.max(1, c - 1)), 1000); return () => clearInterval(id); }, [phase]);
   useEffect(() => { if (phase === 'countdown') sfx('countdown'); }, [countdown, phase]); // tick raccord avec chaque chiffre du décompte
   const prepSec = phase === 'prep' ? Math.max(0, Math.ceil((prepEndsAt - now) / 1000)) : -1;
@@ -249,7 +275,7 @@ export default function Host() {
   // doit jouer, si le navigateur le coupe (suspension autoplay, onglet en veille, hoquet réseau), on le
   // relance : au moindre geste, au retour de l'onglet, et via une horloge de garde toutes les 2,5 s.
   useEffect(() => {
-    const musicPhase = (phase === 'playing' || phase === 'reveal') && round.mode !== 'quiz';
+    const musicPhase = (phase === 'playing' || phase === 'reveal' || phase === 'battle-play') && round.mode !== 'quiz';
     if (!musicPhase) return;
     const kick = () => { const a = audioRef.current; if (a && wantAudioRef.current && a.paused && !a.ended && previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); };
     const onVis = () => { if (document.visibilityState === 'visible') kick(); };
@@ -448,10 +474,15 @@ export default function Host() {
   const buzzSec = Math.ceil(buzzRemain / 1000);
   const buzzFrac = buzzWinner?.answerMs ? Math.max(0, Math.min(1, buzzRemain / buzzWinner.answerMs)) : 0;
   const rushFrac = round.rushMax ? Math.max(0, Math.min(1, remaining / round.rushMax)) : 0; // jauge de temps Cypher
+  // décomptes CLASH (paris puis duel) — mêmes formules que la manche standard
+  const btRemain = battle?.endsAt ? Math.max(0, battle.endsAt - now) : 0;
+  const btSec = Math.ceil(btRemain / 1000);
+  const btBetFrac = battle?.betMs ? Math.max(0, Math.min(1, btRemain / battle.betMs)) : 0;
+  const btPlayFrac = battle?.durationMs ? Math.max(0, Math.min(1, btRemain / battle.durationMs)) : 0;
 
   return (
     <>
-    {hubView && <HubBrowse mode={hubView} onClose={() => setHubView(null)} onRadioPlay={() => { musicOnRef.current = false; menuAudioRef.current?.pause(); const la = lobbyAudioRef.current; if (la) la.pause(); }} />}
+    {hubView && <HubBrowse mode={hubView} onClose={() => setHubView(null)} onRadioPlay={() => { musicOnRef.current = false; menuAudioRef.current?.pause(); const la = lobbyAudioRef.current; if (la) la.pause(); }} onRadioStop={() => { musicOnRef.current = true; if (configuringRef.current) { menuAudioRef.current?.play().catch(() => {}); } else playLobby(); }} />}
     {cheat && (
       <div className="cheat-fx" aria-hidden="true">
         <div className="cheat-flash" />
@@ -464,7 +495,7 @@ export default function Host() {
       </div>
     )}
     {showReveal && pendingUnlock && <ChallengerReveal charId={pendingUnlock} onClose={() => { setShowReveal(false); setPendingUnlock(null); }} />}
-    {((phase === 'lobby' && !configuring) || ['prep', 'countdown', 'playing', 'reveal', 'final', 'rushend'].includes(phase)) && <GrungeBg />}
+    {((phase === 'lobby' && !configuring) || ['prep', 'countdown', 'playing', 'reveal', 'final', 'rushend', 'battle-intro', 'battle-bet', 'battle-play', 'battle-reveal'].includes(phase)) && <GrungeBg />}
     {reactions.length > 0 && (
       <div className="reactfloat">
         {reactions.map((r) => {
@@ -579,7 +610,7 @@ export default function Host() {
       )}
 
       {phase === 'playing' && (
-        <div className="center">
+        <div className={round.mode === 'quiz' ? 'center qz-tv' : 'center'}>
           {round.mode === 'rush' ? (
             <div style={{ width: '100%', maxWidth: 960, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
               <span className="playmeta">Cypher — contre-la-montre · {round.difficulty}</span>
@@ -606,8 +637,10 @@ export default function Host() {
                 </div>
               )}
             </div>
-          ) : round.mode === 'quiz' ? (
-            <div style={{ width: '100%', maxWidth: 840, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
+          ) : round.mode === 'quiz' ? (() => {
+            const vf = (round.quiz?.choices?.length || 0) === 2;
+            return (
+            <>
               <div className="row" style={{ gap: 18, alignItems: 'center', justifyContent: 'center' }}>
                 <span className="gpill" style={{ color: 'var(--fluo)' }}>{round.quiz?.cat}</span>
                 <div className="ring" style={{ width: 92, height: 92 }}>
@@ -619,15 +652,18 @@ export default function Host() {
                   <span className="n" style={{ fontSize: 36 }}>{seconds}</span>
                 </div>
               </div>
-              <h2 className="title-xl" style={{ maxWidth: 760 }}>{round.quiz?.q}</h2>
-              <div className="qz-grid host">
+              <h2 className="qtitle host">{round.quiz?.q}</h2>
+              <div className={'qz-grid host' + (vf ? ' vf' : '')}>
                 {round.quiz?.choices?.map((c: string, i: number) => (
-                  <div className="qz-opt host" key={i}><b>{String.fromCharCode(65 + i)}</b> {c}</div>
+                  vf
+                    ? <div className={'qz-opt host vf' + vfClass(c)} key={i}>{c}</div>
+                    : <div className="qz-opt host" key={i}><b>{String.fromCharCode(65 + i)}</b> {c}</div>
                 ))}
               </div>
               {answered.length > 0 && <div className="answered">{answered.map((n) => <span className="abadge" key={n}>{n}</span>)}</div>}
-            </div>
-          ) : round.mode === 'buzzer' ? (
+            </>
+            );
+          })() : round.mode === 'buzzer' ? (
             buzzWinner ? (
               /* QUELQU'UN A BUZZÉ — spotlight géant + décompte de réponse */
               <div className="buzzstage">
@@ -639,7 +675,7 @@ export default function Host() {
                   <div className="buzzav"><Med avatarId={buzzWinner.avatar || undefined} size={128} /></div>
                 </div>
                 <h2 className="title-xl" style={{ margin: 0 }}>À <span style={{ color: 'var(--ember)' }}>{buzzWinner.name}</span> !</h2>
-                <p className="buzzmeta" style={{ color: buzzSec <= 3 ? '#ff5a4d' : 'var(--muted)' }}>répond au micro · <b style={{ color: buzzSec <= 3 ? '#ff5a4d' : 'var(--fluo)' }}>{buzzSec}s</b></p>
+                <p className="buzzmeta" style={{ color: buzzSec <= 3 ? '#ff5a4d' : 'var(--muted)' }}>tape sa réponse · <b style={{ color: buzzSec <= 3 ? '#ff5a4d' : 'var(--fluo)' }}>{buzzSec}s</b></p>
               </div>
             ) : (
               /* BUZZER OUVERT — invitation géante */
@@ -647,7 +683,7 @@ export default function Host() {
                 <div className="buzzdisc"><span>BUZZ</span></div>
                 <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
                 <span className="playmeta">Mode buzzer · {round.difficulty}</span>
-                <p className="buzzmeta" style={{ color: 'var(--fluo)' }}>Le premier qui buzze prend la main</p>
+                <p className="lead">Le premier qui reconnaît le son prend la main.</p>
               </div>
             )
           ) : (
@@ -685,11 +721,10 @@ export default function Host() {
         <div className="center" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(16px,4vh,52px)', gap: 22 }}>
           <span className="eyebrow">{reveal.quiz ? 'La réponse' : "C'était…"}</span>
           {reveal.quiz ? (
-            <div style={{ textAlign: 'center', maxWidth: 720 }}>
-              <span className="gpill" style={{ color: 'var(--fluo)' }}>{reveal.quiz.cat}</span>
-              <h2 className="title-xl" style={{ margin: '12px 0' }}>{reveal.quiz.q}</h2>
-              <div className="gpill" style={{ fontSize: 'clamp(16px,2.4vw,22px)', padding: '12px 22px', color: 'var(--green)', borderColor: 'rgba(166,255,0,.5)' }}>{reveal.quiz.choices[reveal.quiz.answer]}</div>
-            </div>
+            <>
+              <h2 className="qtitle host">{reveal.quiz.q}</h2>
+              <div className="qz-answer">{reveal.quiz.choices[reveal.quiz.answer]}</div>
+            </>
           ) : (
             <div className="row" style={{ gap: 26, flexWrap: 'wrap', justifyContent: 'center' }}>
               {reveal.track.cover && <img className="cover" src={reveal.track.cover} alt="" style={{ width: 'clamp(160px,26vw,240px)', height: 'clamp(160px,26vw,240px)' }} />}
@@ -765,8 +800,122 @@ export default function Host() {
           {revealStep < 1
             ? <button className="btn warm" onClick={() => setRevealStep(1)}>Voir les scores →</button>
             : <button className="btn warm" onClick={() => socket.emit('host:next')}>{round.index + 1 >= round.total ? 'Voir le podium' : 'Manche suivante'}</button>}
+          {(import.meta as any).env?.DEV && <button className="btn ghost" style={{ fontSize: 11, padding: '5px 11px', opacity: .5 }} title="DEV — déclenche un clash entre les 2 premiers" onClick={() => socket.emit('host:forceBattle', {}, (r: any) => r?.error && setError(r.error))}>⚔ Forcer un clash (test)</button>}
         </div>
       )}
+
+      {/* ====================== MANCHE CLASH (1v1 + paris) ====================== */}
+      {phase === 'battle-intro' && battle?.a && (
+        <div className="center" style={{ justifyContent: 'center' }}>
+          <div className="bt bt-intro">
+            <div className="bt-head">
+              <div className="bt-clashword">CLASH</div>
+              <div className="bt-clashsub">{battle.flavor === 'rattrapage' ? 'Duel pour la remontée' : 'Duel au sommet'}</div>
+            </div>
+            <div className="bt-versus">
+              <div className="bt-portrait a" style={{ ['--cc' as any]: catColor(battle.a.avatar) }}><Med avatarId={battle.a.avatar} size={228} /></div>
+              <div className="bt-vsbig">VS</div>
+              <div className="bt-portrait b" style={{ ['--cc' as any]: catColor(battle.b.avatar) }}><Med avatarId={battle.b.avatar} size={228} /></div>
+              <div className="bt-caption a" style={{ ['--cc' as any]: catColor(battle.a.avatar) }}><div className="bt-fightname">{rapName(battle.a.avatar)}</div><div className="bt-fightpseudo cc">{battle.a.name}</div></div>
+              <div aria-hidden="true" />
+              <div className="bt-caption b" style={{ ['--cc' as any]: catColor(battle.b.avatar) }}><div className="bt-fightname">{rapName(battle.b.avatar)}</div><div className="bt-fightpseudo cc">{battle.b.name}</div></div>
+            </div>
+            <div className="bt-bonuspill"><b>Manche bonus</b><span>Face à face</span></div>
+          </div>
+        </div>
+      )}
+
+      {phase === 'battle-bet' && battle?.a && (
+        <div className="center" style={{ justifyContent: 'center' }}>
+          <div className="bt bt-bets">
+            <div className="bt-head"><div className="bt-clashword">CLASH</div><div className="bt-clashsub">Les paris sont ouverts</div></div>
+            <div className="bt-betgrid">
+              <div className="bt-camp a">
+                <div className="bt-camphead"><Med avatarId={battle.a.avatar} size={112} /><div className="bt-campnames"><div className="bt-fightname sm">{rapName(battle.a.avatar)}</div><div className="bt-fightpseudo">{battle.a.name}</div></div></div>
+                <div className="bt-camplist">{(battle.tallyA || []).map((b: any) => <div className="bt-bettor" key={b.id}><Med avatarId={b.avatar} size={56} /><span className="nm">{b.name}</span></div>)}</div>
+              </div>
+              <div className="bt-betmid">
+                <div className="bt-betring">
+                  <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="54" stroke="rgba(255,255,255,.1)" strokeWidth="9" fill="none" /><circle cx="60" cy="60" r="54" stroke="var(--fluo)" strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - btBetFrac)} /></svg>
+                  <span className="n">{btSec}</span>
+                </div>
+                <div className="bt-betcta">Misez sur le vainqueur</div>
+                <div className="bt-betreward">+{fmtAud(battle.betBonus ?? 4000)} si vous visez juste</div>
+              </div>
+              <div className="bt-camp b">
+                <div className="bt-camphead"><Med avatarId={battle.b.avatar} size={112} /><div className="bt-campnames"><div className="bt-fightname sm">{rapName(battle.b.avatar)}</div><div className="bt-fightpseudo">{battle.b.name}</div></div></div>
+                <div className="bt-camplist">{(battle.tallyB || []).map((b: any) => <div className="bt-bettor" key={b.id}><Med avatarId={b.avatar} size={56} /><span className="nm">{b.name}</span></div>)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {phase === 'battle-play' && battle?.a && (
+        <div className="center" style={{ justifyContent: 'center' }}>
+          <div className="bt bt-duel">
+            <div className="bt-head"><div className="bt-clashword sm">CLASH</div><div className="bt-clashsub">En duel</div></div>
+            <div className="bt-duelstage">
+              <div className="bt-duelside" style={{ ['--cc' as any]: catColor(battle.a.avatar) }}><Med avatarId={battle.a.avatar} size={116} /><div className="bt-duelpseudo">{battle.a.name}</div><div className="bt-duelrap">{rapName(battle.a.avatar)}</div></div>
+              <div className="bt-duelcore">
+                <div className="vinyl"><div className="grooves spin" aria-hidden="true" /><span className="q">?</span></div>
+                <div className="ring big">
+                  <svg viewBox="0 0 120 120"><defs><linearGradient id="tgb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a6ff00" /><stop offset="1" stopColor="#e4ff1a" /></linearGradient></defs><circle cx="60" cy="60" r="54" stroke="rgba(255,255,255,.10)" strokeWidth="9" fill="none" /><circle cx="60" cy="60" r="54" stroke="url(#tgb)" strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - btPlayFrac)} /></svg>
+                  <span className="n">{btSec}</span>
+                </div>
+              </div>
+              <div className="bt-duelside" style={{ ['--cc' as any]: catColor(battle.b.avatar) }}><Med avatarId={battle.b.avatar} size={116} /><div className="bt-duelpseudo">{battle.b.name}</div><div className="bt-duelrap">{rapName(battle.b.avatar)}</div></div>
+            </div>
+            <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
+            <div className="bt-duelmeta">Le <b>1ᵉʳ des deux</b> qui reconnaît le son rafle le clash.</div>
+          </div>
+        </div>
+      )}
+
+      {phase === 'battle-reveal' && battle?.reveal && (() => {
+        const d = battle.reveal;
+        const winA = !d.draw && d.a === d.winnerId;
+        const winB = !d.draw && d.b === d.winnerId;
+        const betsWon = (d.bets || []).filter((x: any) => x.won);
+        const betsLost = (d.bets || []).filter((x: any) => !x.won);
+        const pl = (id: string) => players.find((p: any) => p.id === id) || {};
+        const bettorsA = d.draw ? [] : (winA ? betsWon : betsLost);
+        const bettorsB = d.draw ? [] : (winB ? betsWon : betsLost);
+        const camp = (fighter: any, win: boolean, bettors: any[]) => (
+          <div className={`bt-revcamp ${win ? 'win' : 'lose'}`}>
+            <div className="bt-revfighter">
+              <div className="bt-crown">{win ? '👑' : ''}</div>
+              <Med avatarId={fighter.avatar} size={148} />
+              <div className="bt-fightname">{fighter.name}</div>
+              <div className={`bt-revtag ${win ? 'win' : 'lose'}`}>{d.draw ? 'Personne n’a trouvé' : win ? `A trouvé · +${fmtAud(d.points || 0)}` : 'N’a pas trouvé'}</div>
+            </div>
+            <div className="bt-teamlab">{win ? 'Ont bien parié' : 'Se sont loupés'}</div>
+            <div className="bt-revbettors">
+              {bettors.map((b: any) => { const who = pl(b.id); return (
+                <div className={`bt-bettor ${win ? 'win' : 'lose'}`} key={b.id}>
+                  <Med avatarId={who.avatar} size={50} /><span className="nm">{who.name || '?'}</span>
+                  <span className={`gain ${win ? '' : 'zero'}`}>{win ? `+${fmtAud(d.betBonus || 0)}` : '+0'}</span>
+                </div>
+              ); })}
+            </div>
+          </div>
+        );
+        return (
+          <div className="center" style={{ justifyContent: 'center' }}>
+            <div className="bt bt-rev">
+              <div className="bt-revealtrack big">
+                {d.track?.cover ? <div className="bt-cover" style={{ backgroundImage: `url(${d.track.cover})`, backgroundSize: 'cover', backgroundPosition: 'center' }} /> : <div className="bt-cover">♪</div>}
+                <div className="bt-covermeta"><div className="eyebrow">La réponse</div><div className="ttl">{d.track ? `${d.track.title} — ${d.track.artist}` : '—'}</div></div>
+              </div>
+              <div className="bt-revgrid">
+                {camp(battle.a, winA, bettorsA)}
+                {camp(battle.b, winB, bettorsB)}
+              </div>
+              <button className="btn warm" onClick={() => socket.emit('host:next')}>Manche suivante →</button>
+            </div>
+          </div>
+        );
+      })()}
 
       {phase === 'rushend' && rushEnd && (() => {
         const res = rushEnd.results || [];

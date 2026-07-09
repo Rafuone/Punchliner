@@ -30,6 +30,8 @@ function RMed({ id, size = 34 }: { id?: string; size?: number }) {
 // met en gras les chiffres-clés d'un effet (montants, ×N, N %) → on repère vite le point fort du pouvoir
 const FX_FIG = /([×x]\s?\d+(?:[.,]\d+)?|[+\-−]?\d[\d   ]*\d\s?%?|\d+\s?%)/g;
 const boldFx = (text: string) => text.split(FX_FIG).map((seg, i) => (i % 2 === 1 ? <b key={i}>{seg}</b> : seg));
+// Quiz Vrai/Faux : classe couleur (vert = Vrai, rouge = Faux) — même convention que le showroom.
+const vfClass = (c: string) => (c === 'Vrai' ? ' vrai' : c === 'Faux' ? ' faux' : '');
 
 export default function Player() {
   const [step, setStep] = useState<'form' | 'char' | 'roster' | 'trophies'>('form'); // avant d'avoir rejoint (+ pages hub : roster / palmarès)
@@ -45,7 +47,7 @@ export default function Player() {
   const [error, setError] = useState('');
   const [joining, setJoining] = useState(false);
 
-  const [phase, setPhase] = useState<'lobby' | 'prep' | 'countdown' | 'playing' | 'reveal' | 'final' | 'rushend'>('lobby');
+  const [phase, setPhase] = useState<'lobby' | 'prep' | 'countdown' | 'playing' | 'reveal' | 'final' | 'rushend' | 'battle-intro' | 'battle-bet' | 'battle-play' | 'battle-reveal'>('lobby');
   const [countdown, setCountdown] = useState(0);
   const [round, setRound] = useState<any>({ index: 0, total: 0, endsAt: 0, durationMs: 25000, mode: 'multi', difficulty: '' });
   const [guess, setGuess] = useState('');
@@ -53,6 +55,8 @@ export default function Player() {
   const [submitted, setSubmitted] = useState(false); // a validé cette manche → verrouille (1 seule tentative, résultat à la révélation)
   const [reveal, setReveal] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
+  const [battle, setBattle] = useState<any>(null);        // manche CLASH (1v1 + paris) : {a,b,flavor,endsAt,reveal}
+  const [betPick, setBetPick] = useState<'a' | 'b' | null>(null); // camp sur lequel ce spectateur a parié
   const [rushEnd, setRushEnd] = useState<any>(null); // fin de run Cypher (mon rang mondial + top 10)
   const rushTrackRef = useRef(0);                    // n° de morceau courant → reset de l'input à chaque enchaînement
   const [now, setNow] = useState(Date.now());
@@ -86,13 +90,15 @@ export default function Player() {
       setRound(state.round); setPrepEndsAt(state.round.endsAt || 0); setPrepDone(false); setNow(Date.now()); setPhase('prep');
     } else if (state.phase === 'reveal' && state.reveal) { setReveal(state.reveal); setPlayers(state.reveal.scores); setPhase('reveal'); }
     else if (state.phase === 'final' && state.final) { setPlayers(state.final.scores); setAwards(state.final.awards || []); setSeries(state.final.series || null); setFinalRounds(state.final.rounds || 0); setPhase('final'); }
+    // reconnexion en pleine manche CLASH : a/b ne viennent que d'ici (battle:bets/go ne portent que les IDs) → sans ça, crash au rendu
+    else if (typeof state.phase === 'string' && state.phase.startsWith('battle') && state.battle) { setBattle(state.battle); setNow(Date.now()); setPhase(state.phase); }
     else setPhase('lobby');
   }
   function applyBuzz(b: any) {
     if (!b) return setBuzz('idle');
     if (b.winnerId === meId.current) { setBuzz('mine'); setBuzzEndsAt(b.endsAt || 0); setNow(Date.now()); }
     else if (b.winnerId) { setBuzz('locked'); setBuzzMsg(`${b.winnerName} a buzzé`); }
-    else if ((b.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — attends la prochaine'); }
+    else if ((b.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — au tour des autres'); }
     else setBuzz('idle');
   }
 
@@ -147,14 +153,19 @@ export default function Player() {
       if (mineAw.length) setUnlockedTrophies((prev) => { const s = Array.from(new Set([...prev, ...mineAw])); try { localStorage.setItem('pl_trophies', JSON.stringify(s)); } catch {} return s; });
       // Déblocage des CHALLENGERS désactivé pour l'instant (Alexandre : conditions à refondre + affichage à repenser).
     });
+    // Manche CLASH (1v1 + paris) — additif, contrat serveur fixe.
+    socket.on('battle:intro', (d: any) => { setBattle({ a: d.a, b: d.b, flavor: d.flavor }); setBetPick(null); setGuess(''); setFeedback(null); setPhase('battle-intro'); });
+    socket.on('battle:bets', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, betMs: d.betMs })); setNow(Date.now()); setPhase('battle-bet'); });
+    socket.on('battle:go', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, durationMs: d.durationMs })); setNow(Date.now()); setGuess(''); setFeedback(null); setPhase('battle-play'); });
+    socket.on('battle:reveal', (d: any) => { setBattle((b: any) => ({ ...b, reveal: d })); if (d.scores) setPlayers(d.scores); setPhase('battle-reveal'); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) { setBuzz('mine'); setBuzzEndsAt(d.endsAt || 0); setNow(Date.now()); } else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
-    socket.on('buzz:open', (d: any) => { setBuzzEndsAt(0); if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — attends la prochaine'); } else setBuzz('idle'); });
+    socket.on('buzz:open', (d: any) => { setBuzzEndsAt(0); if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — au tour des autres'); } else setBuzz('idle'); });
     socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); setJoined(false); localStorage.removeItem(SKEY); });
-    return () => ['connect', 'lobby', 'round:prep', 'round:countdown', 'round:go', 'rush:state', 'rush:end', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed'].forEach((e) => socket.off(e as any));
+    return () => ['connect', 'lobby', 'round:prep', 'round:countdown', 'round:go', 'rush:state', 'rush:end', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed', 'battle:intro', 'battle:bets', 'battle:go', 'battle:reveal'].forEach((e) => socket.off(e as any));
   }, []);
 
-  useEffect(() => { if (phase !== 'playing' && phase !== 'prep') return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
+  useEffect(() => { if (phase !== 'playing' && phase !== 'prep' && phase !== 'battle-bet' && phase !== 'battle-play') return; const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, [phase]);
   useEffect(() => { if (phase !== 'countdown') return; const id = setInterval(() => setCountdown((c) => Math.max(1, c - 1)), 1000); return () => clearInterval(id); }, [phase]);
   // jauge de pouvoir : synchro depuis le serveur
   useEffect(() => { const m = players.find((p) => p.id === meId.current); if (m) { if (typeof m.charge === 'number') setCharge(m.charge); if (typeof m.charges === 'number') setCharges(m.charges); } }, [players]);
@@ -245,6 +256,20 @@ export default function Player() {
     socket.emit('quiz:answer', { choice: i }, (res: any) => { if (res?.error) setQuizPick(null); });
   }
   function submitBuzzerAnswer(e?: any) { e?.preventDefault(); if (!guess.trim()) return; socket.emit('buzzer:answer', { text: guess.trim() }, (res: any) => { if (res?.correct) { setFeedback({ points: res.points, titleHit: true, artistHit: true }); } else if (res?.ok) { setFeedback({ points: 0 }); setGuess(''); } }); }
+  // CLASH — spectateur : parier sur un camp (aucun risque). Optimiste, on annule si le serveur refuse.
+  function placeBet(pick: 'a' | 'b') {
+    setBetPick(pick);
+    socket.emit('battle:bet', { pick }, (res: any) => { if (res?.error) setBetPick(null); else if (res?.pick) setBetPick(res.pick); });
+  }
+  // CLASH — duelliste : répond en boucle (pas de verrou), le 1er des deux qui trouve rafle le clash.
+  function submitBattleAnswer(e?: any) {
+    e?.preventDefault();
+    if (!guess.trim()) return;
+    socket.emit('battle:answer', { text: guess.trim() }, (res: any) => {
+      if (res?.correct) setFeedback({ battleWin: true });
+      else if (res && !res.error) { setFeedback({ battleWrong: true }); setGuess(''); }
+    });
+  }
   function usePower() {
     socket.emit('player:power', {}, (res: any) => {
       if (res?.error) return setPowerMsg(res.error);
@@ -652,18 +677,24 @@ export default function Player() {
               </>
             );
           })() : round.mode === 'quiz' ? (
-            <>
-              <span className="gpill" style={{ color: 'var(--fluo)' }}>{round.quiz?.cat}</span>
-              <h2 className="title-xl" style={{ maxWidth: 520 }}>{round.quiz?.q}</h2>
-              <div className="qz-grid">
-                {round.quiz?.choices.map((c: string, i: number) => {
-                  const answered = quizPick !== null;
-                  const cls = 'qz-opt' + (quizPick === i ? ' pick' : ''); // choix retenu = neutre (pas de bon/mauvais avant la révélation)
-                  return <button key={i} className={cls} disabled={answered} onClick={() => submitQuiz(i)}>{c}</button>;
-                })}
-              </div>
-              {quizPick !== null && <p className="muted">Réponse enregistrée — résultat à la révélation.</p>}
-            </>
+            (() => {
+              const vf = (round.quiz?.choices?.length || 0) === 2; // Vrai/Faux = 2 choix → grille + couleurs dédiées
+              return (
+                <>
+                  <span className="gpill" style={{ color: 'var(--fluo)' }}>{round.quiz?.cat}</span>
+                  <h2 className="qtitle qz-q">{round.quiz?.q}</h2>
+                  <div className={'qz-grid' + (vf ? ' vf' : '')}>
+                    {round.quiz?.choices.map((c: string, i: number) => {
+                      const answered = quizPick !== null;
+                      // choix retenu = neutre (pas de bon/mauvais avant la révélation) ; VF = vert/rouge, QCM = lettre A/B/C/D
+                      const cls = 'qz-opt' + (vf ? ' vf' + vfClass(c) : '') + (quizPick === i ? ' pick' : '');
+                      return <button key={i} className={cls} disabled={answered} onClick={() => submitQuiz(i)}>{vf ? c : <><b>{String.fromCharCode(65 + i)}</b>{c}</>}</button>;
+                    })}
+                  </div>
+                  {quizPick !== null && <p className="muted">Réponse enregistrée — résultat à la révélation.</p>}
+                </>
+              );
+            })()
           ) : round.mj ? (
             <><h2 className="title-xl">Crie ta réponse !</h2><p className="muted" style={{ maxWidth: 380 }}>Le Maître du jeu écoute et distribue les points. Sois le plus rapide à balancer le bon titre / artiste à voix haute.</p></>
           ) : round.mode === 'buzzer' ? (
@@ -720,6 +751,135 @@ export default function Player() {
           {av && <p className="muted" style={{ fontSize: 13, margin: '2px 0 0', maxWidth: 400, lineHeight: 1.45 }}>Ton pouvoir — <b style={{ color: 'var(--ember)' }}>{av.power.name}</b> : {av.power.effect}</p>}
           </div>
       )}
+
+      {/* ---- CLASH (1v1 + paris) — 4 phases additives ---- */}
+      {phase === 'battle-intro' && battle?.a && (() => {
+        const amDuelist = meId.current === battle.a?.id || meId.current === battle.b?.id;
+        return (
+          <div className="ph-center">
+            <span className="eyebrow" style={{ color: 'var(--fluo)' }}>⚔ Clash !</span>
+            <div className="row" style={{ gap: 16, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}><RMed id={battle.a.avatar} size={72} /><b style={{ color: 'var(--green)' }}>{battle.a.name}</b></div>
+              <span className="ph-pickname" style={{ color: 'var(--muted)' }}>VS</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}><RMed id={battle.b.avatar} size={72} /><b style={{ color: 'var(--fluo)' }}>{battle.b.name}</b></div>
+            </div>
+            {amDuelist
+              ? <h2 className="ph-q" style={{ color: 'var(--bad)' }}>C'est TON clash !</h2>
+              : <p className="lead">Prépare ton pari…</p>}
+          </div>
+        );
+      })()}
+
+      {phase === 'battle-bet' && battle?.a && (() => {
+        const amDuelist = meId.current === battle.a?.id || meId.current === battle.b?.id;
+        const secs = Math.max(0, Math.ceil(((battle.endsAt || 0) - now) / 1000));
+        const bonus = battle.betBonus ?? 4000;
+        if (amDuelist) {
+          const opp = meId.current === battle.a.id ? battle.b : battle.a;
+          return (
+            <div className="ph-center">
+              <span className="eyebrow" style={{ color: 'var(--bad)' }}>⚔ C'est ton clash</span>
+              <h2 className="ph-q">Les autres parient…</h2>
+              <div className="big-num" style={{ color: 'var(--fluo)' }}>{secs}</div>
+              <p className="lead">Prépare-toi à reconnaître le son avant <b style={{ color: 'var(--fluo)' }}>{opp.name}</b>.</p>
+            </div>
+          );
+        }
+        const pickName = betPick === 'a' ? battle.a.name : battle.b.name;
+        return (
+          <div className="ph-center">
+            <span className="eyebrow" style={{ color: 'var(--fluo)' }}>⚔ Clash — parie sur le vainqueur</span>
+            {betPick ? (
+              <>
+                <div className="ph-mid">Tu paries sur</div>
+                <div className="ph-pickname" style={{ color: betPick === 'a' ? 'var(--green)' : 'var(--fluo)' }}>{pickName}</div>
+                <div className="big-num" style={{ color: 'var(--fluo)' }}>{secs}</div>
+                <div className="ph-stake solo"><span className="v">+{fmtAud(bonus)}</span><span className="l">si {pickName} gagne</span></div>
+                <button className="btn ghost" onClick={() => setBetPick(null)}>Changer de camp</button>
+              </>
+            ) : (
+              <>
+                <h2 className="ph-q">Qui gagne ?</h2>
+                <div className="ph-betbtns">
+                  <button className="ph-betbtn a" onClick={() => placeBet('a')}><RMed id={battle.a.avatar} size={80} /><span>{battle.a.name}</span></button>
+                  <button className="ph-betbtn b" onClick={() => placeBet('b')}><RMed id={battle.b.avatar} size={80} /><span>{battle.b.name}</span></button>
+                </div>
+                <div className="ph-stakes">
+                  <div className="ph-stake good"><span className="v">+{fmtAud(bonus)}</span><span className="l">bon pari</span></div>
+                  <div className="ph-stake safe"><span className="v">0</span><span className="l">tu ne risques rien</span></div>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
+
+      {phase === 'battle-play' && battle?.a && (() => {
+        const amDuelist = meId.current === battle.a?.id || meId.current === battle.b?.id;
+        if (!amDuelist) {
+          return (
+            <div className="ph-center">
+              <span className="eyebrow" style={{ color: 'var(--fluo)' }}>⚔ Clash lancé</span>
+              <h2 className="ph-q"><span style={{ color: 'var(--green)' }}>{battle.a.name}</span> vs <span style={{ color: 'var(--fluo)' }}>{battle.b.name}</span></h2>
+              <p className="lead">Le <b>1ᵉʳ des deux</b> qui reconnaît le son rafle le clash.</p>
+            </div>
+          );
+        }
+        const opp = meId.current === battle.a.id ? battle.b : battle.a;
+        return (
+          <div className="ph-center">
+            <span className="eyebrow" style={{ color: 'var(--bad)' }}>⚔ C'est ton clash</span>
+            <h2 className="ph-duelq">Trouve avant <span style={{ color: 'var(--fluo)' }}>{opp.name}</span> !</h2>
+            <div className="ph-reward"><b>+{fmtAud(battle.win ?? 20000)}</b><span>au 1ᵉʳ qui trouve</span></div>
+            <form style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }} onSubmit={submitBattleAnswer}>
+              <input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre et/ou artiste…" autoFocus />
+              <button className="btn warm big send" type="submit">Valider</button>
+            </form>
+            {feedback?.battleWin ? <p className="feedback good">Trouvé ! On attend la révélation…</p> : feedback?.battleWrong ? <p className="feedback bad">Pas ça… réessaie</p> : null}
+          </div>
+        );
+      })()}
+
+      {phase === 'battle-reveal' && battle?.reveal && (() => {
+        const d = battle.reveal;
+        const amDuelist = meId.current === battle.a?.id || meId.current === battle.b?.id;
+        const track = d.track;
+        const check = <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12.5l5 5L20 6.5" /></svg>;
+        const cross = <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>;
+        if (amDuelist) {
+          const won = !d.draw && d.winnerId === meId.current;
+          return (
+            <div className="ph-center">
+              {won && <span className="sent-check" style={{ background: 'var(--green)' }}>{check}</span>}
+              <h2 className="ph-q">{d.draw ? 'Égalité !' : won ? 'Clash remporté !' : 'Clash perdu'}</h2>
+              {track && <p className="lead">C'était <b style={{ color: 'var(--txt)' }}>{track.title}</b> — {track.artist}</p>}
+              <div className="big-num" style={{ color: won ? 'var(--green)' : 'var(--muted)' }}>{won ? `+${fmtAud(d.points || 0)}` : d.draw ? '±0' : '+0'}</div>
+            </div>
+          );
+        }
+        const myBet = (d.bets || []).find((x: any) => x.id === meId.current);
+        const winnerName = d.winnerName || (d.winnerId === battle.a?.id ? battle.a.name : battle.b?.name);
+        if (!myBet) {
+          return (
+            <div className="ph-center">
+              <h2 className="ph-q">{d.draw ? 'Égalité !' : `${winnerName} gagne`}</h2>
+              {track && <p className="lead">C'était <b style={{ color: 'var(--txt)' }}>{track.title}</b> — {track.artist}</p>}
+              <p className="muted">Tu n'avais pas parié.</p>
+            </div>
+          );
+        }
+        const won = !!myBet.won;
+        const pickName = betPick === 'a' ? battle.a.name : betPick === 'b' ? battle.b.name : winnerName;
+        return (
+          <div className="ph-center">
+            <span className="sent-check" style={{ background: won ? 'var(--green)' : 'var(--surf3)' }}>{won ? check : cross}</span>
+            <h2 className="ph-q">{won ? 'Bien vu !' : d.draw ? 'Égalité…' : 'Raté'}</h2>
+            <p className="lead">Tu avais parié sur <b style={{ color: won ? 'var(--green)' : 'var(--fluo)' }}>{pickName}</b></p>
+            {track && <p className="muted" style={{ fontSize: 13 }}>C'était <b style={{ color: 'var(--txt)' }}>{track.title}</b> — {track.artist}</p>}
+            <div className="big-num" style={{ color: won ? 'var(--green)' : 'var(--muted)' }}>{won ? `+${fmtAud(d.betBonus || 0)}` : '+0'}</div>
+          </div>
+        );
+      })()}
 
       {phase === 'rushend' && rushEnd && (() => {
         const res = rushEnd.results || [];

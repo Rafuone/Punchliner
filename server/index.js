@@ -377,6 +377,12 @@ function snapshot(room, isHost) {
     s.final = room.lastFinal || { scores: publicPlayers(room) };
   } else if (room.phase === 'rushend') {
     s.rushEnd = room.lastRushEnd;
+  } else if (typeof room.phase === 'string' && room.phase.startsWith('battle') && room.battle) {
+    // reconnexion en pleine manche CLASH : on renvoie de quoi restaurer l'écran (a/b viennent seulement d'ici)
+    const P = (id) => { const p = room.players.get(id); return p ? { id: p.id, name: p.name, avatar: p.avatar, score: p.score } : null; };
+    s.battle = { a: P(room.battle.a), b: P(room.battle.b), flavor: room.battle.flavor, endsAt: room.battle.endsAt, betBonus: BATTLE_BET_BONUS, win: BATTLE_WIN };
+    if (room.phase === 'battle-reveal') s.battle.reveal = room.lastBattleReveal || null;
+    if (isHost && room.phase === 'battle-play' && room.battle.track) Object.assign(s.battle, { preview: room.battle.track.preview, startAt: 0, durationMs: BATTLE_PLAY_MS, sp: { title: room.battle.track.title, artist: room.battle.track.artist } });
   }
   return s;
 }
@@ -618,7 +624,7 @@ function startBattle(room, aId, bId, flavor) {
   room.battle = { a: aId, b: bId, flavor, bets: new Map(), winnerId: null, points: 0, track: null, endsAt: 0 };
   room.phase = 'battle-intro';
   const pinfo = (p) => ({ id: p.id, name: p.name, avatar: p.avatar, score: p.score });
-  io.to(room.code).emit('battle:intro', { a: pinfo(A), b: pinfo(B), flavor });
+  io.to(room.code).emit('battle:intro', { a: pinfo(A), b: pinfo(B), flavor, betBonus: BATTLE_BET_BONUS, win: BATTLE_WIN });
   room.cdTimer = setTimeout(() => startBattleBets(room), BATTLE_INTRO_MS);
 }
 
@@ -669,12 +675,14 @@ function endBattle(room, winnerId) {
   }
   room.phase = 'battle-reveal';
   const nm = (id) => room.players.get(id)?.name || '';
-  io.to(room.code).emit('battle:reveal', {
+  const payload = {
     winnerId, winnerName: winnerId ? nm(winnerId) : null, points: b.points, draw: !winnerId,
     a: b.a, b: b.b, betBonus: BATTLE_BET_BONUS, bets: betResults,
     track: b.track ? { title: b.track.title, artist: b.track.artist, cover: b.track.cover } : null,
     scores: publicPlayers(room),
-  });
+  };
+  room.lastBattleReveal = payload; // mémorisé pour la reconnexion pendant la révélation du clash
+  io.to(room.code).emit('battle:reveal', payload);
 }
 
 // Fin d'une partie : on fige le classement, on cumule dans la SÉRIE (total d'auditeurs + parties gagnées)
@@ -908,7 +916,8 @@ io.on('connection', (socket) => {
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
     const wantMode = MODES.includes(mode) ? mode : 'multi';
     const isQuiz = wantMode === 'quiz';
-    const useMj = !!mj && !isQuiz && wantMode !== 'rush'; // quiz / Cypher : objectifs, pas de Maître du jeu
+    // MJ = uniquement le Blind Test (multi). Quiz/Cypher = objectifs ; Buzzer = 100% auto (buzz puis saisie notée seule).
+  const useMj = !!mj && wantMode === 'multi';
     if (!isQuiz && !POOL.length) return cb?.({ error: 'Aucun morceau disponible (réseau ?).' });
     if (room.players.size < 1) return cb?.({ error: 'Il faut au moins un joueur.' });
     if (useMj && room.players.size < 2) return cb?.({ error: 'Le mode Maître du jeu demande au moins 2 joueurs (1 anime, 1 joue).' });
@@ -1053,6 +1062,10 @@ io.on('connection', (socket) => {
     room.buzz.endsAt = Date.now() + BUZZ_ANSWER_MS; // échéance de réponse (décompte affiché TV + tel)
     cb?.({ ok: true, winner: true, endsAt: room.buzz.endsAt, answerMs: BUZZ_ANSWER_MS });
     io.to(room.code).emit('buzz:winner', { id: p.id, name: p.name, avatar: p.avatar, endsAt: room.buzz.endsAt, answerMs: BUZZ_ANSWER_MS });
+    // on MET LA MANCHE EN PAUSE pendant qu'il répond (le son est coupé côté hôte) — sinon la manche
+    // pourrait se terminer en plein milieu de sa réponse. On mémorise le temps restant.
+    room.roundRemainingMs = Math.max(0, room.roundEndsAt - Date.now());
+    clearTimeout(room.timer);
     // le gagnant a 8 s pour répondre, sinon il est verrouillé et le buzzer rouvre
     clearTimeout(room.buzzTimer);
     room.buzzTimer = setTimeout(() => buzzerFail(room, p.id), BUZZ_ANSWER_MS);
@@ -1089,12 +1102,26 @@ io.on('connection', (socket) => {
 
   function buzzerFail(room, pid) {
     if (room.phase !== 'playing' || room.buzz.winnerId !== pid) return;
+    clearTimeout(room.buzzTimer);
     room.buzz.lockedOut.add(pid);
-    room.buzz.winnerId = null; room.buzz.winnerName = null; room.buzz.open = true; room.buzz.endsAt = 0;
+    room.buzz.winnerId = null; room.buzz.winnerName = null; room.buzz.endsAt = 0;
+    // RÈGLE : tant que tout le monde n'a pas tenté (ou trouvé), le buzzeur qui a raté est verrouillé.
+    // Si TOUT LE MONDE (connecté, hors MJ/attente) a tenté et loupé → on efface les lockouts : chacun peut re-buzzer.
+    const eligible = [...room.players.values()].filter((p) => p.connected && !p.isMJ && !p.waiting);
+    const allTried = eligible.length > 0 && eligible.every((p) => room.buzz.lockedOut.has(p.id));
+    if (allTried) room.buzz.lockedOut.clear();
+    room.buzz.open = true;
     io.to(room.code).emit('buzz:open', { lockedOut: [...room.buzz.lockedOut] });
-    // tout le monde a raté → fin de manche (hors MJ / en attente)
-    const active = [...room.players.values()].filter((p) => p.connected && !p.isMJ && !p.waiting && !room.buzz.lockedOut.has(p.id));
-    if (active.length === 0) endRound(room);
+    // le buzzeur a raté → la manche REPREND (le son redémarre côté hôte via buzz:open) avec le temps restant
+    resumeBuzzRound(room);
+  }
+  // reprend le chrono de la manche là où il s'était arrêté au buzz (le son était coupé pendant la réponse)
+  function resumeBuzzRound(room) {
+    const remaining = room.roundRemainingMs != null ? room.roundRemainingMs : Math.max(0, room.roundEndsAt - Date.now());
+    room.roundRemainingMs = null;
+    room.roundEndsAt = Date.now() + remaining;
+    clearTimeout(room.timer);
+    room.timer = setTimeout(() => endRound(room), remaining);
   }
 
   // Activation d'un pouvoir de rappeur (1x/partie)
@@ -1286,6 +1313,10 @@ io.on('connection', (socket) => {
     if (pick !== 'a' && pick !== 'b') return cb?.({ error: 'Choix invalide.' });
     room.battle.bets.set(p.id, pick);
     cb?.({ ok: true, pick });
+    // diffuse à l'HÔTE la liste des parieurs par camp (pour afficher les avatars qui arrivent sur Paris TV)
+    const tally = (side) => [...room.battle.bets.entries()].filter(([, v]) => v === side)
+      .map(([id]) => { const q = room.players.get(id); return { id, name: q?.name || '', avatar: q?.avatar || null }; });
+    io.to(room.hostId).emit('battle:tally', { a: tally('a'), b: tally('b') });
   });
 
   // Clash : un duelliste répond — le 1er correct des deux GAGNE

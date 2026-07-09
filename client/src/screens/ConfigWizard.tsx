@@ -167,6 +167,10 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const [themeExp, setThemeExp] = useState(false);
   const [showPlayers, setShowPlayers] = useState(false); // popover "qui est dans le salon"
 
+  // Le Maître du jeu ne s'applique qu'au Blind Test : Buzzer = 100% auto, Quiz/Cypher = objectifs.
+  const mjAllowed = game === 'blind';
+  useEffect(() => { if (!mjAllowed && orch === 'mj') setOrch('auto'); }, [mjAllowed, orch]);
+
   const themeName = [...THEMES_MAIN, ...THEMES_EXTRA].find((t) => t.id === theme)?.name || '';
   const eraName = era === 'all' ? 'Toutes époques' : (ERAS.find((e) => e.id === era)!.big + 's · ' + ERAS.find((e) => e.id === era)!.lab);
   const rows = [
@@ -179,7 +183,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const last = step === 4;
   function launch() {
     const r = rounds === 'inf' ? Math.min(poolSize, 50) : Math.min(rounds, poolSize);
-    const isMj = orch === 'mj';
+    const isMj = orch === 'mj' && mjAllowed;
     const mode = game === 'buzz' ? 'buzzer' : game === 'quiz' ? 'quiz' : game === 'rush' ? 'rush' : 'multi';
     onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance, era, theme });
   }
@@ -484,10 +488,15 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 </div>
                 <div className="setblock">
                   <div className="set-lbl"><span className="axis-chip"><span>Orchestration</span></span></div>
-                  <div className="opt-stack">{ORCHESTRATION.map((o) => (
-                    <button key={o.key} className={`opt ${orch === o.key ? 'sel' : ''}`} onClick={() => setOrch(o.key)}><span className="ol"><b>{o.name}</b><small>{o.desc}</small></span></button>
-                  ))}</div>
-                  {orch === 'mj' && (
+                  <div className="opt-stack">{ORCHESTRATION.map((o) => {
+                    const locked = o.key === 'mj' && !mjAllowed;
+                    return (
+                      <button key={o.key} className={`opt ${orch === o.key ? 'sel' : ''}`} disabled={locked} style={locked ? { opacity: .4, cursor: 'not-allowed' } : undefined} onClick={() => !locked && setOrch(o.key)}>
+                        <span className="ol"><b>{o.name}</b><small>{locked ? 'Uniquement en Blind Test — le Buzzer se note tout seul.' : o.desc}</small></span>
+                      </button>
+                    );
+                  })}</div>
+                  {orch === 'mj' && mjAllowed && (
                     <div style={{ marginTop: 14 }}>
                       <div className="eyebrow" style={{ marginBottom: 8 }}>Qui anime ? <span className="muted" style={{ fontWeight: 600 }}>(ne joue pas)</span></div>
                       {playerList.length === 0
