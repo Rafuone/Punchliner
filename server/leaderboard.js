@@ -31,21 +31,19 @@ function persist() {
   }, 400);
 }
 
-// Tous les scores ne se valent pas : ils dépendent de la CONFIG (difficulté + chrono de départ + pace).
-// On stocke donc la config avec chaque score → classements comparables (« plusieurs ladders »).
-const cfgOf = (e) => ({ difficulty: e.difficulty || 'normal', startSec: e.startSec || 60, pace: e.pace || 'normal' });
-const sameCfg = (a, b) => a.difficulty === b.difficulty && (a.startSec || 60) === (b.startSec || 60) && (a.pace || 'normal') === (b.pace || 'normal');
+// Le Survivor a une SEULE config qui compte : le CRÉNEAU DE DÉPART (startSec). La difficulté est PROGRESSIVE
+// (commune à tous) et il n'y a plus de "pace" → un score n'est comparable qu'aux autres du même chrono de départ.
+// Un classement (ladder) par créneau. (Les vieux champs difficulty/pace des entrées existantes sont ignorés.)
+const sameCfg = (a, b) => (a.startSec || 60) === (b.startSec || 60);
 
-// Enregistre un score et renvoie l'entrée normalisée + son rang DANS SA CONFIG (comparable).
+// Enregistre un score et renvoie l'entrée normalisée + son rang DANS SON CRÉNEAU (comparable).
 export function addScore(entry) {
   const e = {
     name: String(entry.name || '—').slice(0, 16),
     avatar: entry.avatar || null,
     score: Math.max(0, Math.round(entry.score || 0)),
     tracks: entry.tracks | 0,
-    difficulty: entry.difficulty || 'normal',
-    startSec: entry.startSec | 0 || 60, // config Survivor (chrono de départ)
-    pace: entry.pace || 'normal',       // config Survivor (pression du chrono)
+    startSec: entry.startSec | 0 || 60, // SEULE config du Survivor : le chrono de départ
     at: Date.now(),
   };
   BOARD.push(e);
@@ -56,15 +54,15 @@ export function addScore(entry) {
   return { ...e, rank: inCfg.indexOf(e) + 1, configTotal: inCfg.length };
 }
 
-// getTop(n) = classement global (toutes configs). getTop(n, {difficulty,startSec,pace}) = classement d'UNE config.
+// getTop(n) = tout. getTop(n, {startSec}) = le classement d'UN créneau de départ.
 export const getTop = (n = 10, filter = null) => {
-  const list = filter ? BOARD.filter((e) => sameCfg(e, { difficulty: filter.difficulty, startSec: filter.startSec, pace: filter.pace })) : BOARD;
+  const list = filter ? BOARD.filter((e) => sameCfg(e, { startSec: filter.startSec })) : BOARD;
   return list.slice(0, n);
 };
-// Les configs distinctes présentes dans le classement (pour proposer les différents ladders).
+// Les créneaux de départ présents dans le classement (pour proposer les onglets de ladders).
 export function getConfigs() {
   const seen = new Map();
-  for (const e of BOARD) { const c = cfgOf(e); const k = `${c.difficulty}|${c.startSec}|${c.pace}`; if (!seen.has(k)) seen.set(k, { ...c, count: 0 }); seen.get(k).count++; }
-  return [...seen.values()].sort((a, b) => b.count - a.count);
+  for (const e of BOARD) { const s = e.startSec || 60; if (!seen.has(s)) seen.set(s, { startSec: s, count: 0 }); seen.get(s).count++; }
+  return [...seen.values()].sort((a, b) => a.startSec - b.startSec);
 }
 export const boardSize = () => BOARD.length;

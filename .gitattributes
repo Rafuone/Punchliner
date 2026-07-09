@@ -1,3 +1,4 @@
 client/public/music/*.mp3 filter=lfs diff=lfs merge=lfs -text
 client/public/avatars/*.png filter=lfs diff=lfs merge=lfs -text
 client/public/*.mp4 filter=lfs diff=lfs merge=lfs -text
+client/public/trophies/*.png filter=lfs diff=lfs merge=lfs -text

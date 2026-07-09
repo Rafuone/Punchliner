@@ -354,7 +354,14 @@ export default function Player() {
             const shown = revealTrophies || has(t.id);
             return (
               <div className={`troph ${has(t.id) ? 'got' : ''} ${shown ? '' : 'locked'} ${t.salty ? 'salty' : ''}`} key={t.id}>
-                <span className="troph-ic" dangerouslySetInnerHTML={{ __html: shown ? awardIcon(t.icon) : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 9a3 3 0 1 1 4 2.8c-.8.4-1 .8-1 1.7"/><circle cx="12" cy="17.5" r="1" fill="currentColor" stroke="none"/></svg>' }} />
+                <span className="troph-ic">
+                  {shown ? (<>
+                    <img className="troph-img" src={`/trophies/${t.id}.png`} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                    <span className="troph-svg" dangerouslySetInnerHTML={{ __html: awardIcon(t.icon) }} />
+                  </>) : (
+                    <span className="troph-svg" dangerouslySetInnerHTML={{ __html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 9a3 3 0 1 1 4 2.8c-.8.4-1 .8-1 1.7"/><circle cx="12" cy="17.5" r="1" fill="currentColor" stroke="none"/></svg>' }} />
+                  )}
+                </span>
                 <div className="troph-title">{shown ? t.title : '???'}</div>
                 <div className="troph-desc">{shown ? t.blurb : 'À découvrir'}</div>
                 {has(t.id) && <span className="troph-badge">débloqué</span>}
@@ -906,7 +913,7 @@ export default function Player() {
           <span className="eyebrow" style={{ marginTop: 8 }}>Top 10 mondial</span>
           <div className="board" style={{ width: '100%', maxWidth: 420 }}>
             {top.map((t: any, i: number) => (
-              <div className={`prow ${i === 0 ? 'lead' : ''}`} key={i}>
+              <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={i}>
                 <span className="who" style={{ minWidth: 0 }}><span className="rk">{i + 1}</span>{t.avatar && <RMed id={t.avatar} size={26} />}<span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span></span>
                 <span className="pts">{fmtAud(t.score)}</span>
               </div>

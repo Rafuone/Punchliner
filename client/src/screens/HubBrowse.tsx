@@ -67,7 +67,9 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
   const sel = avatarById(selId) || AVATARS[0];
   const lockedSel = LOCKED_SLOTS.find((s) => s.id === selId) || null;
   const bio = bioOf(selId);
-  const [board, setBoard] = useState<any[]>([]); // classement mondial Survivor (chargé quand mode = leaderboard)
+  const [board, setBoard] = useState<any[]>([]); // classement mondial Survivor (un ladder = un créneau de départ)
+  const [lbConfigs, setLbConfigs] = useState<{ startSec: number; count: number }[]>([]); // créneaux dispos (onglets)
+  const [lbSec, setLbSec] = useState<number | null>(null); // créneau (startSec) affiché
   const [radioResults, setRadioResults] = useState<any[]>([]); // playlists (bibliothèque, station ou recherche)
   const [radioQuery, setRadioQuery] = useState('');
   const [radioLoading, setRadioLoading] = useState(false);
@@ -91,7 +93,18 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
   }, [selPl]);
   useEffect(() => {
     if (mode !== 'leaderboard') return;
-    socket.emit('leaderboard:get', { n: 30 }, (r: any) => { if (r?.ok) setBoard(r.top || []); });
+    socket.emit('leaderboard:get', { n: 30 }, (r: any) => {
+      if (!r?.ok) return;
+      const counts = new Map<number, number>((r.configs || []).map((c: any) => [c.startSec, c.count]));
+      const brackets = [45, 60, 90, 120]; // créneaux STANDARD (= RUSH_STARTS) toujours présents comme onglets, même vides
+      for (const c of (r.configs || [])) if (!brackets.includes(c.startSec)) brackets.push(c.startSec); // + d'éventuels non-standard
+      brackets.sort((a, b) => a - b);
+      const list = brackets.map((s) => ({ startSec: s, count: counts.get(s) || 0 }));
+      setLbConfigs(list);
+      const def = list.slice().sort((a, b) => b.count - a.count)[0]?.startSec ?? 60; // défaut : le créneau le + joué (sinon 60)
+      setLbSec(def);
+      socket.emit('leaderboard:get', { n: 30, filter: { startSec: def } }, (r2: any) => { if (r2?.ok) setBoard(r2.top || []); });
+    });
   }, [mode]);
   // Radio : now-playing + défaut « Découvertes ». À la SORTIE : on coupe la radio + on relance la musique du menu.
   useEffect(() => {
@@ -228,10 +241,9 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
   }
 
   if (mode === 'leaderboard') {
-    // les scores dépendent de la config (difficulté + chrono + pression) → on l'affiche pour comparer à config égale
-    const DIFF_LB: any = { facile: 'Facile', normal: 'Connaisseur', difficile: 'Digger', puriste: 'Puriste' };
-    const PACE_LB: any = { chill: 'Clément', normal: 'Équilibré', hardcore: 'Sous pression' };
-    const cfgChip = (t: any) => `${DIFF_LB[t.difficulty] || t.difficulty || 'Normal'} · ${t.startSec || 60}s · ${PACE_LB[t.pace || 'normal']}`;
+    // Un ladder = un CRÉNEAU DE DÉPART. La difficulté est progressive (la même pour tous) → les scores d'un même
+    // créneau sont comparables. Onglets = les créneaux présents ; on charge le tableau du créneau sélectionné.
+    const loadLadder = (sec: number) => { setLbSec(sec); socket.emit('leaderboard:get', { n: 30, filter: { startSec: sec } }, (r: any) => { if (r?.ok) setBoard(r.top || []); }); };
     return (
       <div className="hub-overlay">
         <GrungeBg />
@@ -241,17 +253,31 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
         </button>
         <div className="wrap" style={{ position: 'relative', zIndex: 1, maxWidth: 'none', padding: '62px clamp(24px,4vw,64px) 40px' }}>
           <div className="topbar" style={{ justifyContent: 'center', gap: 16 }}>
-            <h1 className="wm" style={{ fontSize: 'clamp(28px,3.2vw,46px)' }}>CLASSEMENT <span className="d">MONDIAL</span></h1>
+            <h1 className="wm" style={{ fontSize: 'clamp(28px,3.2vw,46px)' }}>CLASSEMENT</h1>
             <span className="gpill">Survivor</span>
           </div>
-          <p className="muted" style={{ textAlign: 'center', margin: '2px 0 30px', fontSize: 15 }}>Le contre-la-montre — meilleurs scores, tous salons confondus. <b style={{ color: 'var(--txt)' }}>Chaque score porte sa config</b> (les options changent tout).</p>
+          <p className="muted" style={{ textAlign: 'center', margin: '2px auto 20px', maxWidth: 820, fontSize: 'clamp(17px,1.9vw,25px)', lineHeight: 1.4 }}>Un tableau <b style={{ color: 'var(--txt)' }}>par créneau de départ</b> — la difficulté monte toute seule, seul le temps de départ sépare les classements.</p>
+          {lbConfigs.length > 1 && (
+            <div className="row" style={{ justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 26 }}>
+              {lbConfigs.map((c) => {
+                const on = lbSec === c.startSec;
+                return (
+                  <button key={c.startSec} onClick={() => loadLadder(c.startSec)}
+                    style={{ padding: '11px 24px', borderRadius: 3, cursor: 'pointer', fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 'clamp(16px,1.7vw,21px)', textTransform: 'uppercase', letterSpacing: '.03em',
+                      border: `1px solid ${on ? 'var(--fluo)' : 'var(--line2)'}`, background: on ? 'rgba(166,255,0,.12)' : 'rgba(10,11,14,.6)', color: on ? 'var(--fluo)' : 'var(--muted)' }}>
+                    Départ {c.startSec}s<span style={{ opacity: .55, fontWeight: 400, fontSize: '.72em' }}> · {c.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {board.length === 0 ? (
-            <p className="muted" style={{ textAlign: 'center', marginTop: 70, fontSize: 'clamp(18px,2vw,24px)' }}>Aucun score pour l'instant.<br />Lance un <b style={{ color: 'var(--fluo)' }}>Survivor</b> pour ouvrir le classement.</p>
+            <p className="muted" style={{ textAlign: 'center', marginTop: 60, fontSize: 'clamp(18px,2vw,24px)' }}>Aucun score{lbSec != null ? ` sur le créneau ${lbSec}s` : ''}.<br />Lance un <b style={{ color: 'var(--fluo)' }}>Survivor</b> pour ouvrir le classement.</p>
           ) : (
             <div className="board tvbig" style={{ maxWidth: 1080, margin: '0 auto' }}>
               {board.map((t: any, i: number) => (
-                <div className={`prow ${i === 0 ? 'lead' : ''}`} key={i} style={{ animation: `rowin .3s ease ${Math.min(i, 12) * 0.035}s both` }}>
-                  <span className="who"><span className="rk">{i + 1}</span>{avNode(t.avatar)}<span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>{t.name}<span className="lb-cfg">{cfgChip(t)}</span></span></span>
+                <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={i} style={{ animation: `rowin .3s ease ${Math.min(i, 12) * 0.035}s both` }}>
+                  <span className="who"><span className="rk">{i + 1}</span>{avNode(t.avatar)}{t.name}</span>
                   <span className="row" style={{ gap: 24, alignItems: 'baseline' }}>
                     <span className="gain zero" style={{ fontSize: 'clamp(16px,1.7vw,22px)' }}>{t.tracks} ✓</span>
                     <span className="pts">{fmtAud(t.score)}</span>

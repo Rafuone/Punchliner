@@ -820,7 +820,7 @@ export default function Host() {
               const r = reveal.results.find((x: any) => x.id === p.id);
               const d = p.rankDelta || 0;
               return (
-                <div className={`prow ${i === 0 ? 'lead' : ''}`} key={p.id} style={{ animation: `rowin .32s ease ${i * 0.05}s both` }}>
+                <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={p.id} style={{ animation: `rowin .32s ease ${i * 0.05}s both` }}>
                   <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={46} />{p.name}</span>
                   <span className="row" style={{ gap: 12 }}>
                     {d !== 0 && (
@@ -975,7 +975,7 @@ export default function Host() {
           {res.length > 1 && (
             <div className="board tvbig" style={{ maxWidth: 620 }}>
               {res.map((r: any, i: number) => (
-                <div className={`prow ${i === 0 ? 'lead' : ''}`} key={r.id} style={{ animation: `rowin .32s ease ${i * 0.05}s both` }}>
+                <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={r.id} style={{ animation: `rowin .32s ease ${i * 0.05}s both` }}>
                   <span className="who"><span className="rk">{i + 1}</span><Med avatarId={r.avatar} size={46} />{r.name}</span>
                   <span className="row" style={{ gap: 16, alignItems: 'baseline' }}>
                     <span className="gain zero">{r.tracks} ✓</span>
@@ -989,7 +989,7 @@ export default function Host() {
           <div className="board" style={{ maxWidth: 560 }}>
             {top.length === 0 && <p className="feedback" style={{ color: 'var(--muted)' }}>Premier score enregistré — le classement démarre !</p>}
             {top.map((t: any, i: number) => (
-              <div className={`prow ${i === 0 ? 'lead' : ''}`} key={i}>
+              <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={i}>
                 <span className="who"><span className="rk">{i + 1}</span><Med avatarId={t.avatar} size={30} />{t.name}</span>
                 <span className="row" style={{ gap: 12, alignItems: 'baseline' }}>
                   <span className="gain zero">{t.tracks} ✓</span>
@@ -1062,7 +1062,7 @@ export default function Host() {
               </div>
               <div className="board" style={{ maxWidth: 560 }}>
                 {standings.map((p: any, i: number) => (
-                  <div className={`prow ${i === 0 ? 'lead' : ''}`} key={p.id}>
+                  <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={p.id}>
                     <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={26} />{p.name}
                       {p.gameWins > 0 && <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>{p.gameWins} gagnée{p.gameWins > 1 ? 's' : ''}</span>}</span>
                     <span className="pts">{fmtAud(p.total)}</span>

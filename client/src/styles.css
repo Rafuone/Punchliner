@@ -172,12 +172,19 @@ button, input { font-family: inherit; }
 .board { display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .prow { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 3px;
   background: var(--surf); border: 1px solid var(--line); }
-.prow.lead { border-color: var(--fluo); background: rgba(228, 255, 26, .08); }
+.prow.lead { border-color: var(--fluo); background: rgba(228, 255, 26, .08); max-width: none; } /* max-width:none : annule le cap 46ch de la classe générique .lead (sinon la 1re ligne du classement ne fait pas toute la largeur) */
 .prow .who { display: flex; align-items: center; gap: 11px; font-weight: 700; }
 .rk { width: 26px; height: 26px; border-radius: 3px; display: grid; place-items: center; font-weight: 700; font-size: 13px; color: var(--txt); background: var(--surf3); }
 .prow.lead .rk { background: var(--fluo); color: var(--ink); }
 .pts { font-family: var(--disp); font-weight: 700; font-size: 20px; font-variant-numeric: tabular-nums; }
 .prow.lead .pts { color: var(--fluo); }
+/* podium : 1er VERT (lead) · 2e ARGENT BLEUTÉ (pas gris, sinon trop proche du blanc) · 3e BRONZE (le reste = neutre) */
+.prow.p2 { border-color: #8ea3c4; background: rgba(142, 163, 196, .08); }
+.prow.p2 .rk { background: #a9bcd8; color: var(--ink); }
+.prow.p2 .pts { color: #bcccea; }
+.prow.p3 { border-color: #c67f38; background: rgba(198, 127, 56, .08); }
+.prow.p3 .rk { background: #cd7f32; color: var(--ink); }
+.prow.p3 .pts { color: #e0975a; }
 .gain { color: var(--green); font-weight: 800; }
 .gain.zero { color: var(--muted2); }
 .gain.loss { color: var(--bad); font-weight: 800; }
@@ -998,30 +1005,31 @@ button, input { font-family: inherit; }
 /* ===== page Palmarès (galerie de trophées) ===== */
 .troph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; width: 100%; max-width: 760px; margin: 0 auto; padding-bottom: 24px; }
 /* galerie PLEINE LARGEUR + GROSSE (TV, visible de loin, prête pour des IMAGES) — beaucoup d'éléments → on scrolle */
-.troph-grid.big { max-width: none; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 20px; }
+.troph-grid.big { max-width: none; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 22px; }
 .tro-head { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 2px; }
 .tro-title { font-size: clamp(32px, 3.6vw, 54px); letter-spacing: -.01em; }
 .tro-sub { text-align: center; margin: 6px 0 30px; font-size: 17px; }
 .troph { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 14px 12px 13px;
   background: var(--surf2); border: 1px solid var(--line2); border-top: 2px solid var(--fluo); border-radius: 4px; }
-.troph-grid.big .troph { gap: 14px; padding: 26px 18px 24px; border: 1px solid var(--line2); border-radius: 12px; } /* pas de bordure verte en haut (inutile) */
+.troph-grid.big .troph { gap: 0; padding: 0 0 18px; border: 1px solid var(--line2); border-radius: 12px; overflow: hidden; background: rgba(0, 0, 0, .28); } /* carte IMAGE-FORWARD : l'illustration carrée en grand en haut, titre/desc dessous */
 .troph.salty { border-top-color: var(--ember); }
 .troph.locked { opacity: .5; border-top-color: var(--line2); }
 .troph.got { box-shadow: 0 0 0 1px var(--fluo); }
-.troph-ic { position: relative; color: var(--fluo); display: grid; place-items: center; min-height: 40px; }
+.troph-ic { position: relative; color: var(--fluo); display: grid; place-items: center; width: 100%; aspect-ratio: 1; min-height: 0; overflow: hidden; border-radius: 8px; background: rgba(0, 0, 0, .3); } /* case CARRÉE qui accueille l'illustration (repli SVG centré si pas d'image) */
 .troph.salty .troph-ic { color: var(--ember); }
 .troph.locked .troph-ic { color: var(--muted); }
-.troph-ic svg { width: 30px; height: 30px; display: block; }
+.troph-ic svg { width: 44px; height: 44px; display: block; }
 .troph-grid.big .troph-svg svg { width: 92px; height: 92px; }               /* gros icône SVG = repli tant qu'il n'y a pas d'image */
 /* image du trophée : couvre le SVG si le fichier existe ; onError la masque (404) → le SVG repli reste */
 .troph-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: 1; }
-.troph-grid.big .troph-ic { width: 120px; height: 120px; }
+.troph-grid.big .troph-ic { width: 100%; height: auto; aspect-ratio: 1; min-height: 0; margin-bottom: 15px; } /* illustration carrée PLEINE LARGEUR */
+.troph-grid.big .troph-img { object-fit: cover; }
 .troph-title { font-family: var(--disp); font-weight: 700; text-transform: uppercase; font-size: 13.5px; color: var(--txt); line-height: 1; }
-.troph-grid.big .troph-title { font-size: 20px; line-height: 1.12; }
+.troph-grid.big .troph-title { font-size: 21px; line-height: 1.12; padding: 0 14px; }
 .troph.locked .troph-title { color: var(--muted); }
 .troph-grid.big .troph.salty { border-top-color: var(--line2); } /* uniforme : aucun accent en haut (ni vert ni ambre) sur les grosses cartes */
 .troph-desc { font-size: 11px; line-height: 1.35; color: var(--muted); }
-.troph-grid.big .troph-desc { font-size: 15px; line-height: 1.45; }
+.troph-grid.big .troph-desc { font-size: 14.5px; line-height: 1.42; padding: 0 16px; margin-top: 6px; }
 .troph-badge { margin-top: 2px; font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); background: var(--fluo); border-radius: 2px; padding: 2px 7px; }
 
 /* =====================================================================
@@ -1207,9 +1215,12 @@ button, input { font-family: inherit; }
 .pod.p1 .p-permanche { font-size: 13px; color: var(--muted); }
 .pod .ped { width: 100%; min-width: 96px; border-radius: 6px 6px 0 0; background: linear-gradient(180deg,var(--surf2),var(--surf)); border: 1px solid var(--line2); border-bottom: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; color: var(--muted2); }
 .pod.p1 .ped { height: 132px; border-color: var(--fluo); background: linear-gradient(180deg,rgba(228,255,26,.14),rgba(228,255,26,.03)); color: var(--fluo); font-size: 52px; }
-.pod.p2 .ped { height: 96px; font-size: 40px; } .pod.p3 .ped { height: 70px; font-size: 36px; }
+/* 2e = ARGENT BLEUTÉ · 3e = BRONZE (le 1er est vert plus haut) */
+.pod.p2 .ped { height: 96px; font-size: 40px; border-color: #8ea3c4; background: linear-gradient(180deg,rgba(142,163,196,.16),rgba(142,163,196,.03)); color: #b6c7e4; }
+.pod.p3 .ped { height: 70px; font-size: 36px; border-color: #c67f38; background: linear-gradient(180deg,rgba(198,127,56,.16),rgba(198,127,56,.03)); color: #e0975a; }
 .pod.p1 .p-name { font-size: clamp(22px,3vw,30px); } .pod.p2 .p-name, .pod.p3 .p-name { font-size: 20px; }
 .pod.p1 .p-aud { font-size: clamp(22px,3vw,28px); color: var(--fluo); } .pod.p2 .p-aud, .pod.p3 .p-aud { font-size: 20px; }
+.pod.p2 .p-aud { color: #b6c7e4; } .pod.p3 .p-aud { color: #e0975a; }
 
 /* ====================== ARRIVÉE DU CHALLENGER (ChallengerReveal) ====================== */
 .uk { position: fixed; inset: 0; z-index: 200; display: none; place-items: center; overflow: hidden; color: var(--txt); }

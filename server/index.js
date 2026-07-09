@@ -69,26 +69,22 @@ const PREVIEW_MS = 30000; // durée d'un extrait Deezer
 const QUIZ_MS = FAST ? 1500 : 22000; // durée d'une question de quiz (QCM)
 const HOST_GRACE_MS = 120000; // délai avant de fermer un salon dont l'hôte a disparu
 
-// Mode Survivor (contre-la-montre) — jauge de temps PARTAGÉE (bonne réponse = +temps, "passer" = -temps)
-const RUSH_START_MS = FAST ? 8000 : 60000; // budget de départ (≥ 1 min : 45 s était trop court au lancement)
-const RUSH_BONUS_MS = FAST ? 3000 : 6000;  // +temps par bonne réponse
-const RUSH_PASS_MS  = FAST ? 3000 : 8000;  // -temps sur "passer"
+// Mode Survivor (contre-la-montre) — jauge de temps PARTAGÉE (bonne réponse = +temps, "passer" = -temps).
+// PAS de choix de difficulté ni de "pace" : la difficulté est PROGRESSIVE (commune à tous), le seul réglage est le
+// CHRONO DE DÉPART → un classement mondial par créneau de départ (scores comparables). Barème de temps FIXE.
+const RUSH_START_MS = FAST ? 8000 : 60000; // budget de départ (repli)
+const RUSH_BONUS_MS = FAST ? 3000 : 6000;  // +temps par bonne réponse (fixe)
+const RUSH_PASS_MS  = FAST ? 3000 : 8000;  // -temps sur "passer" (fixe)
 const RUSH_MAX_MS   = 90000;               // plafond de la jauge (anti-inflation)
 const RUSH_REF_MS   = 10000;               // fenêtre de référence pour la prime de vitesse
-const RUSH_TRACK_MAX_MS = FAST ? 3000 : 30000; // durée MAX d'un morceau : si ni trouvé ni passé, on enchaîne
-                                           // tout seul (jamais bloqué sur un son). = durée du clip Deezer.
-// Barème du chrono selon le "pace" (option hôte) + delta selon la difficulté générique : plus dur = on gagne
-// moins de temps par bonne réponse et "passer" coûte plus cher → la difficulté touche ENFIN le ressenti temporel.
-const RUSH_PACE = { chill: { bonus: 8000, pass: 5000 }, normal: { bonus: 6000, pass: 8000 }, hardcore: { bonus: 5000, pass: 10000 } };
-const RUSH_DIFF_STEP = { facile: 0, normal: 1, difficile: 2, puriste: 3 };
-function rushParams(settings) {
-  const p = RUSH_PACE[settings.rushPace] || RUSH_PACE.normal;
-  const k = RUSH_DIFF_STEP[settings.difficulty] ?? 1;
-  return {
-    bonusMs: FAST ? 3000 : Math.max(3000, p.bonus - k * 500), // plus dur → moins de temps gagné
-    passMs:  FAST ? 3000 : (p.pass + k * 1000),               // plus dur → passer coûte plus cher
-  };
-}
+const RUSH_TRACK_MAX_MS = FAST ? 3000 : 30000; // durée MAX d'un morceau : si ni trouvé ni passé, on enchaîne seul
+// Difficulté PROGRESSIVE : p(n) ∈ [0,1] (0 = le plus reconnaissable → 1 = le plus obscur) pour le n-ième morceau.
+// Courbe CONVEXE (exposant > 1) : démarre TRÈS facile, monte lentement puis accélère → jamais ultra-dur dès la 4e
+// question, l'intérêt monte en crescendo maîtrisé. Le morceau n vient de cette tranche de recognizabilité.
+const RUSH_RAMP_SCALE = 42; // vers le morceau ~43, on atteint le fond du bac
+const RUSH_RAMP_EXP   = 1.7; // > 1 = facile longtemps puis ça grimpe
+function rushDifficulty(n) { return Math.min(1, Math.pow(Math.max(0, (n || 1) - 1) / RUSH_RAMP_SCALE, RUSH_RAMP_EXP)); }
+function rushLabel(p) { return p < 0.30 ? 'Grand public' : p < 0.55 ? 'Connaisseur' : p < 0.80 ? 'Digger' : 'Puriste'; } // libellé affiché, évolue avec p
 
 // Difficulté = QUELS morceaux tombent (popularité via le rank Deezer), PAS la durée.
 // Le son joue toujours généreusement ; offset = on démarre en plein milieu sur les niveaux durs.
@@ -796,32 +792,41 @@ function rushBoard(room) {
     .map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0 }))
     .sort((a, b) => b.score - a.score);
 }
-function rushEmitTrack(room, evt = {}) {
-  const cur = room.rushPlaylist[room.rushIndex];
-  room.current = cur; // pour /api/dev/answer + le grade
+function rushRankedPool(room) { // pool trié du + reconnaissable au + obscur (recoScore), filtré époque/thème
+  const peaks = artistPeaks();
+  const rank = (arr) => arr.map((t) => ({ t, r: recoScore(t, peaks) })).sort((a, b) => b.r - a.r).map((x) => x.t);
+  let s = rank(selectPool(room.settings.era, room.settings.theme));
+  if (s.length < 20) s = rank(livePool()); // filtre trop restrictif → tout le pool jouable
+  return s;
+}
+function rushPickTrack(room, n) { // un morceau de la tranche de difficulté du moment (fenêtre glissante sur le pool trié)
+  const ranked = room.rushRanked, M = ranked.length; if (!M) return { track: null, p: 0 };
+  const p = rushDifficulty(n);
+  const center = Math.round(p * (M - 1));
+  const half = Math.max(4, Math.floor(M * 0.08)); // fenêtre ±8 % du pool autour de la cible
+  const lo = Math.max(0, center - half), hi = Math.min(M, center + half + 1);
+  const fresh = []; for (let i = lo; i < hi; i++) if (!room.rushUsed.has(ranked[i].id)) fresh.push(ranked[i]);
+  const cand = fresh.length ? fresh : ranked.slice(lo, hi); // fenêtre épuisée (run très long) → on ré-autorise
+  const track = cand[Math.floor(Math.random() * cand.length)] || ranked[center];
+  if (track) room.rushUsed.add(track.id);
+  return { track, p };
+}
+function rushSetTrack(room, evt = {}) {
+  room.rushTrackNo = (room.rushTrackNo || 0) + 1;
+  const { track, p } = rushPickTrack(room, room.rushTrackNo);
+  if (!track) return endRush(room);
+  room.current = track;              // pour /api/dev/answer + le grade
+  room.mult = 1 + p;                 // 1.0 (facile) → 2.0 (le + dur) : les morceaux durs rapportent plus (récompense la survie)
   room.rushTrackStartAt = Date.now();
-  // Auto-enchaînement : si ce morceau n'est ni trouvé ni passé au bout de RUSH_TRACK_MAX_MS, on passe au suivant
-  // tout seul (jamais bloqué à écouter un son qu'on ne reconnaît pas). Reset à chaque nouveau morceau.
-  clearTimeout(room.rushTrackTimer);
-  const idxAtSet = room.rushIndex;
-  room.rushTrackTimer = setTimeout(() => { if (room.phase === 'playing' && room.settings.mode === 'rush' && room.rushIndex === idxAtSet) rushAdvance(room, { reason: 'timeout' }); }, RUSH_TRACK_MAX_MS);
-  const common = { mode: 'rush', trackNo: room.rushIndex + 1, endsAt: room.rushEndsAt, rushMax: room.rushMaxMs || RUSH_MAX_MS, passMs: room.rushPassMs, bonusMs: room.rushBonusMs, difficulty: room.diffLabel, scores: rushBoard(room), rushPlayerId: room.rushPlayerId, rushPlayerName: room.rushPlayerId ? (room.players.get(room.rushPlayerId)?.name || '') : '', event: evt };
-  io.to(room.hostId).emit('rush:host', { ...common, preview: cur.preview, startAt: 0, sp: { title: cur.title, artist: cur.artist } }); // l'hôte joue le son (sp = résolution Spotify, hôte only)
-  io.to(room.code).emit('rush:state', common); // les joueurs : chrono + score, pas d'audio
+  cacheTrack(track);                 // rapatrie l'extrait du morceau courant
+  clearTimeout(room.rushTrackTimer); // auto-enchaînement si ni trouvé ni passé (jamais bloqué sur un son)
+  const noAtSet = room.rushTrackNo;
+  room.rushTrackTimer = setTimeout(() => { if (room.phase === 'playing' && room.settings.mode === 'rush' && room.rushTrackNo === noAtSet) rushAdvance(room, { reason: 'timeout' }); }, RUSH_TRACK_MAX_MS);
+  const common = { mode: 'rush', trackNo: room.rushTrackNo, endsAt: room.rushEndsAt, rushMax: room.rushMaxMs || RUSH_MAX_MS, passMs: room.rushPassMs, bonusMs: room.rushBonusMs, difficulty: rushLabel(p), diffP: Math.round(p * 100) / 100, scores: rushBoard(room), rushPlayerId: room.rushPlayerId, rushPlayerName: room.rushPlayerId ? (room.players.get(room.rushPlayerId)?.name || '') : '', event: evt };
+  io.to(room.hostId).emit('rush:host', { ...common, preview: track.preview, startAt: 0, sp: { title: track.title, artist: track.artist } }); // l'hôte joue le son
+  io.to(room.code).emit('rush:state', common); // les joueurs : chrono + score + difficulté du moment, pas d'audio
 }
-function rushAdvance(room, evt) {
-  room.rushIndex += 1;
-  if (room.rushIndex >= room.rushPlaylist.length) { // POOL épuisé → on recycle en re-mélangeant
-    const last = room.rushPlaylist[room.rushPlaylist.length - 1];
-    const tier = (DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal).tier;
-    const next = pickPlaylist(POOL.length, tier, room.settings.era, room.settings.theme);
-    if (next[0] && last && next[0].id === last.id && next.length > 1) [next[0], next[1]] = [next[1], next[0]]; // pas de doublon immédiat
-    room.rushPlaylist = next; room.rushIndex = 0;
-    cacheTracks(next.slice(0, 12)); // rapatrie le prochain paquet en fond
-  }
-  room.rushResolving = false;
-  rushEmitTrack(room, evt);
-}
+function rushAdvance(room, evt) { room.rushResolving = false; rushSetTrack(room, evt); }
 function rushApplyDelta(room, deltaMs) {
   room.rushEndsAt = Math.min(Date.now() + (room.rushMaxMs || RUSH_MAX_MS), room.rushEndsAt + deltaMs);
   clearTimeout(room.rushTimer);
@@ -830,37 +835,33 @@ function rushApplyDelta(room, deltaMs) {
   room.rushTimer = setTimeout(() => endRush(room), left);
 }
 function startRush(room) {
-  const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
   room.phase = 'playing';
-  room.mult = diff.mult; room.diffLabel = diff.label;
-  const rp = rushParams(room.settings); room.rushBonusMs = rp.bonusMs; room.rushPassMs = rp.passMs; // barème (pace + difficulté)
+  room.rushBonusMs = RUSH_BONUS_MS; room.rushPassMs = RUSH_PASS_MS; // barème FIXE (plus de pace)
   // Survivor = SOLO : un seul joueur joue. Celui désigné par l'hôte, sinon le 1er connecté.
   room.rushPlayerId = room.settings.rushPlayerId || ([...room.players.values()].find((p) => p.connected && !p.waiting) || [...room.players.values()][0])?.id || null;
-  const startMs = FAST ? RUSH_START_MS : (room.settings.rushStartSec || 60) * 1000;                // chrono de départ choisi
-  room.rushMaxMs = FAST ? RUSH_MAX_MS : Math.max(RUSH_MAX_MS, startMs + 30000);                     // plafond ≥ départ (les longs chronos ne se font pas raboter)
-  room.rushPlaylist = pickPlaylist(POOL.length, diff.tier, room.settings.era, room.settings.theme);
-  cacheTracks(room.rushPlaylist.slice(0, 12)); // Survivor enchaîne vite → on rapatrie le 1er paquet en fond
-  room.rushIndex = 0;
+  const startMs = FAST ? RUSH_START_MS : (room.settings.rushStartSec || 60) * 1000; // chrono de départ choisi
+  room.rushMaxMs = FAST ? RUSH_MAX_MS : Math.max(RUSH_MAX_MS, startMs + 30000);
+  room.rushRanked = rushRankedPool(room); room.rushUsed = new Set(); room.rushTrackNo = 0; // difficulté PROGRESSIVE
   room.rushEndsAt = Date.now() + startMs;
   room.rushResolving = false;
   for (const p of room.players.values()) { p.rushScore = 0; p.rushTracks = 0; }
   clearTimeout(room.rushTimer);
   room.rushTimer = setTimeout(() => endRush(room), startMs);
-  rushEmitTrack(room, { reason: 'start' });
+  rushSetTrack(room, { reason: 'start' });
 }
 function endRush(room) {
   clearTimeout(room.rushTimer);
   clearTimeout(room.rushTrackTimer);
   if (room.phase !== 'playing') return;
   room.phase = 'rushend';
-  const cfg = { difficulty: room.settings.difficulty, startSec: room.settings.rushStartSec || 60, pace: room.settings.rushPace || 'normal' };
+  const cfg = { startSec: room.settings.rushStartSec || 60 }; // SEULE config : le créneau de départ
   const players = [...room.players.values()].filter((p) => !p.waiting);
   const scorers = room.rushPlayerId ? players.filter((p) => p.id === room.rushPlayerId) : players; // 1 seul joueur désigné joue (sinon tous, compat)
   const results = scorers.map((p) => {
     const placed = addScore({ name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0, ...cfg });
     return { id: p.id, name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0, rank: placed.rank, configTotal: placed.configTotal };
   }).sort((a, b) => b.score - a.score);
-  const payload = { results, top: getTop(10, cfg), config: cfg }; // top de LA MÊME config → comparable
+  const payload = { results, top: getTop(10, cfg), config: cfg }; // top du MÊME créneau → comparable
   room.lastRushEnd = payload;
   io.to(room.code).emit('rush:end', payload);
 }
@@ -1015,8 +1016,7 @@ io.on('connection', (socket) => {
       rebalance: ['comeback', 'snowball', 'off'].includes(rebalance) ? rebalance : 'comeback',
       era: typeof era === 'string' ? era : 'all',     // ÉPOQUE (année) — filtre le pool musical
       theme: typeof theme === 'string' ? theme : 'all', // THÈME/STYLE — filtre le pool musical
-      rushStartSec: Math.min(180, Math.max(30, (rushStartSec | 0) || 60)), // Survivor : chrono de départ (s)
-      rushPace: ['chill', 'normal', 'hardcore'].includes(rushPace) ? rushPace : 'normal', // Survivor : barème du chrono
+      rushStartSec: Math.min(180, Math.max(30, (rushStartSec | 0) || 60)), // Survivor : SEUL réglage = chrono de départ (difficulté progressive)
       quizNoVf: !!quizNoVf, // Quiz : exclure les Vrai/Faux
       rushPlayerId: (rushPlayerId && room.players.has(rushPlayerId)) ? rushPlayerId : null, // Survivor : le SEUL joueur qui joue
     };

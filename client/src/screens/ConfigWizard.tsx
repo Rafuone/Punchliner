@@ -68,11 +68,8 @@ const RUSH_STARTS = [
   { sec: 90, label: 'Longue', desc: 'De la marge pour scorer.' },
   { sec: 120, label: 'Endurance', desc: 'Pour tenir un max de temps.' },
 ];
-const RUSH_PACES = [
-  { key: 'chill', name: 'Chrono clément', desc: '+8 s par bonne · −5 s si tu passes.' },
-  { key: 'normal', name: 'Équilibré', desc: '+6 s par bonne · −8 s si tu passes.' },
-  { key: 'hardcore', name: 'Sous pression', desc: '+5 s par bonne · −10 s si tu passes.' },
-];
+// (Le "pace"/pression du chrono a été retiré : le Survivor n'a plus qu'UN réglage, le chrono de départ,
+//  et une difficulté progressive — pour des classements mondiaux comparables par créneau.)
 const STEP_TITLES = ['LE <span class="em">JEU</span>', 'LA <span class="em">PLAYLIST</span>', 'LA <span class="em">DIFFICULTÉ</span>', 'LE <span class="em">FORMAT</span>', 'LES <span class="em">RÉGLAGES</span>'];
 const STEP_SUB = [
   'Choisis la station. Chaque mode est un gameplay à part entière.',
@@ -179,10 +176,8 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const [rebalance, setRebalance] = useState('comeback');
   const [orch, setOrch] = useState('auto');
   const [mjId, setMjId] = useState('');
-  const [themeExp, setThemeExp] = useState(false);
   const [showPlayers, setShowPlayers] = useState(false); // popover "qui est dans le salon"
-  const [rushStartSec, setRushStartSec] = useState(60); // Survivor : chrono de départ
-  const [rushPace, setRushPace] = useState('normal');   // Survivor : barème du chrono (bonus/malus)
+  const [rushStartSec, setRushStartSec] = useState(60); // Survivor : chrono de départ (SEUL réglage — difficulté progressive)
   const [quizNoVf, setQuizNoVf] = useState(false);       // Quiz : exclure les Vrai/Faux
   const [rushPlayerId, setRushPlayerId] = useState('');  // Survivor : le joueur désigné (solo)
 
@@ -192,22 +187,26 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const powersMode = game === 'blind' || game === 'buzz'; // seuls modes à pouvoirs (jauge de rééquilibrage utile)
   const showRebalance = powersMode && orch !== 'mj';       // jauge cachée en Quiz/Survivor (pas de pouvoirs) et en MJ (pouvoirs off)
   useEffect(() => { if (!mjAllowed && orch === 'mj') setOrch('auto'); }, [mjAllowed, orch]);
+  useEffect(() => { if (isRush && step === 2) setStep(3); }, [isRush, step]); // Survivor n'a pas d'étape difficulté : on ne s'y arrête jamais
 
   const themeName = [...THEMES_MAIN, ...THEMES_EXTRA].find((t) => t.id === theme)?.name || '';
   const eraName = era === 'all' ? 'Toutes époques' : (ERAS.find((e) => e.id === era)!.big + 's · ' + ERAS.find((e) => e.id === era)!.lab);
-  const rushPaceName = RUSH_PACES.find((p) => p.key === rushPace)!.name;
+  // chaque étape porte son index RÉEL (step). Survivor n'a PAS d'étape difficulté (progressive) → on la retire
+  // du parcours : une étape en moins dans la carte de match.
   const rows = [
-    { i: '01', k: 'Le jeu', v: GAMES.find((g) => g.id === game)!.name },
+    { step: 0, k: 'Le jeu', v: GAMES.find((g) => g.id === game)!.name },
     isQuiz
-      ? { i: '02', k: 'Questions', v: quizNoVf ? 'Sans Vrai/Faux' : 'QCM + Vrai/Faux' }
-      : { i: '02', k: 'Playlist', v: themeName + (era === 'all' ? '' : ' · ' + ERAS.find((e) => e.id === era)!.big + 's') },
-    { i: '03', k: 'Difficulté', v: DIFFS.find((d) => d.key === diff)!.name },
+      ? { step: 1, k: 'Questions', v: quizNoVf ? 'Sans Vrai/Faux' : 'QCM + Vrai/Faux' }
+      : { step: 1, k: 'Playlist', v: themeName + (era === 'all' ? '' : ' · ' + ERAS.find((e) => e.id === era)!.big + 's') },
+    ...(isRush ? [] : [{ step: 2, k: 'Difficulté', v: DIFFS.find((d) => d.key === diff)!.name }]),
     isRush
-      ? { i: '04', k: 'Chrono', v: rushStartSec + ' s · ' + rushPaceName }
-      : { i: '04', k: isQuiz ? 'Questions' : 'Format', v: rounds === 'inf' ? 'Sans fin' : rounds + (isQuiz ? ' questions' : ' manches') },
-    { i: '05', k: isRush ? 'Le joueur' : 'Réglages', v: isRush ? (playerList.find((p) => p.id === (rushPlayerId || playerList[0]?.id))?.name || 'Solo · 1er entré') : showRebalance ? (ORCHESTRATION.find((o) => o.key === orch)!.name + ' · ' + REBALANCE.find((r) => r.key === rebalance)!.name) : (orch === 'mj' && mjAllowed ? 'Maître du jeu' : 'Automatique') },
+      ? { step: 3, k: 'Chrono', v: rushStartSec + ' s' }
+      : { step: 3, k: isQuiz ? 'Questions' : 'Format', v: rounds === 'inf' ? 'Sans fin' : rounds + (isQuiz ? ' questions' : ' manches') },
+    { step: 4, k: isRush ? 'Le joueur' : 'Réglages', v: isRush ? (playerList.find((p) => p.id === rushPlayerId)?.name || 'À choisir') : showRebalance ? (ORCHESTRATION.find((o) => o.key === orch)!.name + ' · ' + REBALANCE.find((r) => r.key === rebalance)!.name) : (orch === 'mj' && mjAllowed ? 'Maître du jeu' : 'Automatique') },
   ];
-  const last = step === 4;
+  const visibleSteps = rows.map((r) => r.step);       // étapes réellement présentes pour ce mode
+  const stepPos = Math.max(0, visibleSteps.indexOf(step)); // position visible (0-based) de l'étape courante
+  const last = step === visibleSteps[visibleSteps.length - 1];
   // titres / sous-titres d'étape adaptés au mode (Quiz : pas de playlist ; Survivor : chrono au lieu du format)
   const stepTitles = [
     STEP_TITLES[0],
@@ -219,8 +218,8 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const stepSubs = [
     STEP_SUB[0],
     isQuiz ? 'Le style de questions : QCM seul, ou avec les Vrai/Faux.' : STEP_SUB[1],
-    isRush ? 'La force du signal : quels sons tombent. Plus dur = moins de temps gagné.' : STEP_SUB[2],
-    isRush ? 'Le temps de départ et la pression du chrono.' : isQuiz ? 'Le nombre de questions du quiz.' : STEP_SUB[3],
+    isRush ? 'La difficulté MONTE toute seule : ça démarre facile, puis de plus en plus pointu.' : STEP_SUB[2],
+    isRush ? 'Le temps de départ — c\'est ton créneau au classement mondial.' : isQuiz ? 'Le nombre de questions du quiz.' : STEP_SUB[3],
     STEP_SUB[4],
   ];
   function launch() {
@@ -228,7 +227,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     const isMj = orch === 'mj' && mjAllowed;
     const mode = game === 'buzz' ? 'buzzer' : game === 'quiz' ? 'quiz' : game === 'rush' ? 'rush' : 'multi';
     onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance, era, theme,
-      rushStartSec: isRush ? rushStartSec : undefined, rushPace: isRush ? rushPace : undefined, quizNoVf: isQuiz ? quizNoVf : undefined,
+      rushStartSec: isRush ? rushStartSec : undefined, quizNoVf: isQuiz ? quizNoVf : undefined,
       rushPlayerId: isRush ? (rushPlayerId || playerList[0]?.id) : undefined });
   }
 
@@ -376,7 +375,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
       </defs></svg>
       <div className="backdrop">
         <div className="concrete" /><canvas className="wz-tex" ref={texRef} /><div className="halftone" /><div className="grain" /><div className="xeroxbands" /><div className="scan" /><div className="vignette" />
-        <div className="gaffer" /><div className="ghostnum">{step + 1}</div>
+        <div className="gaffer" /><div className="ghostnum">{stepPos + 1}</div>
       </div>
 
       <div className="hud-top">
@@ -433,7 +432,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
           <div className="act-inner" key={step}>
             <div className="act-head">
               <div className="act-title-wrap">
-                <div className="act-kicker"><span className="actno"><span>ACTE 0{step + 1}</span></span><span className="actlabel">Sélection</span></div>
+                <div className="act-kicker"><span className="actno"><span>ACTE 0{stepPos + 1}</span></span><span className="actlabel">Sélection</span></div>
                 <h2 className="act-title" {...H(stepTitles[step])} />
               </div>
               <div className="act-salon"><span className="act-salon-lbl">Salon</span><span className="act-salon-code">{roomCode}</span></div>
@@ -500,18 +499,15 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 </div>
                 <div className="axis">
                   <div className="axis-head"><span className="axis-chip"><span>Thématique · Ville · Sous-genre</span></span><span className="axis-note">Appuie sur un poussoir</span></div>
-                  <div className="pads">{THEMES_MAIN.map((t) => (
-                    <button key={t.id} className={`pad ${t.wide ? 'wide' : ''} ${theme === t.id ? 'sel' : ''}`} onClick={() => setTheme(t.id)}><span className="led" /><span className="pl"><b>{t.name}</b><small>{t.sub}</small></span></button>
+                  {/* TOUTES les thématiques affichées d'emblée (on a la place) — plus de bouton « plus de thématiques » */}
+                  <div className="pads">{[...THEMES_MAIN, ...THEMES_EXTRA].map((t) => (
+                    <button key={t.id} className={`pad ${(t as any).wide ? 'wide' : ''} ${theme === t.id ? 'sel' : ''}`} onClick={() => setTheme(t.id)}><span className="led" /><span className="pl"><b>{t.name}</b><small>{t.sub}</small></span></button>
                   ))}</div>
-                  {themeExp && <div className="pads extra">{THEMES_EXTRA.map((t) => (
-                    <button key={t.id} className={`pad ${theme === t.id ? 'sel' : ''}`} onClick={() => setTheme(t.id)}><span className="led" /><span className="pl"><b>{t.name}</b><small>{t.sub}</small></span></button>
-                  ))}</div>}
-                  <div className="more-row"><button className={`linkbtn ${themeExp ? 'open' : ''}`} onClick={() => setThemeExp(!themeExp)}>{themeExp ? 'Réduire' : 'Plus de thématiques'} <span {...H(chevron)} /></button></div>
                 </div>
               </>
             )}
 
-            {step === 2 && (
+            {step === 2 && !isRush && (
               <div className="grid-diff">{DIFFS.map((d, i) => (
                 <button key={d.key} className={`diff-tile pick ${diff === d.key ? 'sel on' : ''}`} onClick={() => setDiff(d.key)}>
                   <span {...H(bracketsSvg)} />
@@ -550,12 +546,6 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                     <div className="fmt-desc">{s.desc}</div>
                   </button>
                 ))}</div>
-                <div className="axis" style={{ marginTop: 20, maxWidth: 660 }}>
-                  <div className="axis-head"><span className="axis-chip"><span>Pression du chrono</span></span><span className="axis-note">Bonus / malus de temps</span></div>
-                  <div className="opt-stack">{RUSH_PACES.map((p) => (
-                    <button key={p.key} className={`opt ${rushPace === p.key ? 'sel' : ''}`} onClick={() => setRushPace(p.key)}><span className="ol"><b>{p.name}</b><small>{p.desc}</small></span></button>
-                  ))}</div>
-                </div>
               </>
             )}
 
@@ -575,9 +565,9 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                     {playerList.length === 0
                       ? <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '4px 2px 0' }}>Le Survivor est <b style={{ color: 'var(--txt)' }}>solo</b> : un seul joueur relève le défi. Personne n'a rejoint — le 1er à entrer jouera (ou reviens ici le choisir).</p>
                       : <><div className="opt-stack">{playerList.map((p) => (
-                          <button key={p.id} className={`opt ${(rushPlayerId || playerList[0]?.id) === p.id ? 'sel' : ''}`} onClick={() => setRushPlayerId(p.id)}><span className="ol"><b>{p.name}</b><small>{avatarById(p.avatar)?.name || 'Au contre-la-montre'}</small></span></button>
+                          <button key={p.id} className={`opt ${rushPlayerId === p.id ? 'sel' : ''}`} onClick={() => setRushPlayerId(p.id)}><span className="ol"><b>{p.name}</b><small>{avatarById(p.avatar)?.name || 'Au contre-la-montre'}</small></span></button>
                         ))}</div>
-                        <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, margin: '10px 2px 0' }}>Survivor = solo : ce joueur affronte le chrono, les autres regardent.</p></>}
+                        <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '10px 2px 0' }}>Choisis <b style={{ color: 'var(--txt)' }}>qui joue</b> — les autres regardent.{rushPlayerId ? '' : ' (à défaut, ce sera le 1er entré.)'}</p></>}
                   </div>
                 )}
                 {isQuiz && (
@@ -586,6 +576,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                     <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '4px 2px 0' }}>Le Quiz s’arbitre tout seul : pas de pouvoirs ni d’animateur. Le plus rapide et juste rafle la mise.</p>
                   </div>
                 )}
+                {!isRush && (
                 <div className="setblock">
                   <div className="set-lbl"><span className="axis-chip"><span>Orchestration</span></span></div>
                   <div className="opt-stack">{ORCHESTRATION.map((o) => {
@@ -607,6 +598,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                     </div>
                   )}
                 </div>
+                )}
               </div>
             )}
           </div>
@@ -615,9 +607,9 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
         <aside className="hud-side">
           <div className="mc-head"><div className="mc-title"><span className="lbl">Carte de match</span></div></div>
           <div className="mc-rows">
-            {rows.map((r, i) => (
-              <button key={r.i} className={`mc-row ${i === step ? 'active' : ''}`} onClick={() => setStep(i)}>
-                <span className="mc-badge"><span>{r.i}</span></span>
+            {rows.map((r, idx) => (
+              <button key={r.step} className={`mc-row ${step === r.step ? 'active' : ''}`} onClick={() => setStep(r.step)}>
+                <span className="mc-badge"><span>{String(idx + 1).padStart(2, '0')}</span></span>
                 <span className="mc-l"><span className="k">{r.k}</span><span className="v">{r.v}</span></span>
               </button>
             ))}
@@ -645,7 +637,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
       </div>
 
       <div className="hud-bot">
-        <button className="btn ghost" onClick={() => (step === 0 ? onBack() : setStep(step - 1))}><span {...H(arrowL)} /> Retour</button>
+        <button className="btn ghost" onClick={() => (stepPos === 0 ? onBack() : setStep(visibleSteps[stepPos - 1]))}><span {...H(arrowL)} /> Retour</button>
         <div className="hint"><kbd>↑ ↓ ← →</kbd> se déplacer · <kbd>Entrée</kbd> valider</div>
         <div className="spacer" />
         <button className="btn hublink" onClick={() => onOpenHub?.('roster')}><span {...H(rosterIco)} /> Roster</button>
