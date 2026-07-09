@@ -269,6 +269,10 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
     const sourceLabel = radioSource === 'mine' ? 'Mes playlists' : radioSource === 'search' ? `Recherche « ${radioQuery} »` : radioSource;
     // on masque les playlists ÉDITORIALES de Spotify (owner « Spotify ») hors « Mes playlists » : illisibles/injouables (403).
     const shownResults = radioSource === 'mine' ? radioResults : radioResults.filter((p: any) => (p.owner || '').toLowerCase() !== 'spotify');
+    // morceau en cours : le SDK ne donne que name/artist → on repère la ligne jouée par match du titre (normalisé)
+    const rn = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+    const npName = nowPlaying && !nowPlaying.paused ? rn(nowPlaying.name) : '';
+    const playlistPlaying = !!selPl && (radioActiveUri === selPl.uri || (!!npName && tracks.some((t: any) => rn(t.title) === npName)));
     return (
       <div className="hub-overlay radio-overlay">
         <GrungeBg />
@@ -341,10 +345,9 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                       <div className="rpl-name" title={selPl.name}>{selPl.name}</div>
                       <div className="rpl-meta">{[selPl.owner, trkInfo.total ? `${trkInfo.total} titres` : '', trkInfo.durationMs ? fmtTotal(trkInfo.durationMs) : ''].filter(Boolean).join(' · ')}</div>
                     </div>
-                    <button className="rpl-close" onClick={() => setSelPl(null)} aria-label="Fermer">×</button>
                   </div>
-                  {radioActiveUri === selPl.uri
-                    ? <button className="btn rpl-play playing" onClick={() => spotifyTogglePlay()}><span className="rpl-eq"><i /><i /><i /></span> Playlist en lecture</button>
+                  {playlistPlaying
+                    ? <button className="btn rpl-play playing" onClick={() => spotifyTogglePlay()}><span className="rpl-eq"><i /><i /><i /></span> {nowPlaying && nowPlaying.paused ? 'En pause — reprendre' : 'En cours de lecture'}</button>
                     : <button className="btn warm rpl-play" onClick={() => playWhole(selPl)}><span className="rpl-play-ic">{PLAY(15)}</span> Lancer la playlist</button>}
                   <div className="rpl-tracks">
                     {trkInfo.loading ? (
@@ -361,14 +364,17 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                         )}
                         {spotifyLastError() && <p className="radio-diag" style={{ marginTop: 10 }}>⚙ {spotifyLastError()}</p>}
                       </div>
-                    ) : tracks.map((t: any, i: number) => (
-                      <button className="rtrack" key={t.uri + i} onClick={() => playTrack(t)} title={`${t.title} — ${t.artist}`}>
+                    ) : tracks.map((t: any, i: number) => {
+                      const rowPlaying = !!npName && rn(t.title) === npName; // ce titre est celui qui joue
+                      return (
+                      <button className={`rtrack ${rowPlaying ? 'playing' : ''}`} key={t.uri + i} onClick={() => playTrack(t)} title={`${t.title} — ${t.artist}`}>
                         <span className="rt-idx">{i + 1}</span>
-                        <div className="rt-cov">{t.cover ? <img src={t.cover} alt="" onError={hideOnErr} /> : <span>{NOTE}</span>}<span className="rt-play">{PLAY(13)}</span></div>
+                        <div className="rt-cov">{t.cover ? <img src={t.cover} alt="" onError={hideOnErr} /> : <span>{NOTE}</span>}{rowPlaying ? <span className="rt-eq"><i /><i /><i /></span> : <span className="rt-play">{PLAY(13)}</span>}</div>
                         <div className="rt-main"><div className="rt-t">{t.title}</div><div className="rt-a">{t.artist}</div></div>
                         <span className="rt-dur">{fmtDur(t.durationMs)}</span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </aside>
               )}

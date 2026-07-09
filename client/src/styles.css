@@ -752,11 +752,17 @@ button, input { font-family: inherit; }
 .rt-cov { position: relative; flex: 0 0 auto; width: 46px; height: 46px; border-radius: 4px; overflow: hidden; background: #15161a; display: grid; place-items: center; }
 .rt-cov img { width: 100%; height: 100%; object-fit: cover; }
 .rt-cov > span { font-size: 17px; color: var(--muted2); }
-/* play au survol : BLANC net sur scrim + anneau fluo (fini l'aspect grisé/désactivé) */
-.rt-play { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(6,7,10,.6); color: #fff; opacity: 0; transition: opacity .12s; }
-.rt-play svg { filter: drop-shadow(0 1px 3px rgba(0,0,0,.85)); }
+/* play au survol : PASTILLE BLANCHE nette (triangle sombre) → clairement cliquable, plus du tout "grisé" */
+.rt-play { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(6,7,10,.45); opacity: 0; transition: opacity .12s; }
+.rt-play svg { box-sizing: content-box; width: 13px; height: 13px; padding: 7px; background: #fff; color: #0a0b0c; border-radius: 50%; box-shadow: 0 3px 10px rgba(0,0,0,.6); }
 .rtrack:hover .rt-play { opacity: 1; }
 .rtrack:hover .rt-cov { box-shadow: 0 0 0 2px var(--fluo); }
+/* morceau EN LECTURE dans la tracklist : ligne surlignée fluo + EQ animé sur la pochette (comme les cartes playlist) */
+.rtrack.playing { background: rgba(228,255,26,.1); border-color: rgba(228,255,26,.45); }
+.rtrack.playing .rt-idx, .rtrack.playing .rt-t { color: var(--fluo); }
+.rt-eq { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; gap: 3px; padding: 12px; background: rgba(6,7,10,.5); }
+.rt-eq i { width: 3px; background: var(--fluo); box-shadow: 0 0 6px rgba(228,255,26,.7); animation: radioEq .85s ease-in-out infinite; }
+.rt-eq i:nth-child(2) { animation-delay: .25s; } .rt-eq i:nth-child(3) { animation-delay: .5s; }
 .rt-main { flex: 1 1 auto; min-width: 0; }
 .rt-t { font-weight: 700; font-size: 15px; color: var(--txt); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rt-a { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -452,7 +452,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                   </div>
                   <div className="reccue"><i />REC</div>
                   {g.soon ? <span className="badge-soon"><span><span className="dot" style={{ width: 6, height: 6 }} />Bientôt</span></span> : <span className="badge-live"><span><span className="dot" style={{ width: 6, height: 6 }} />Jouable</span></span>}
-                  <div className="kbody"><div className="kcat">{g.cat}</div><div className="kname">{g.name}</div><div className="kdesc">{g.desc}</div><span className="kfam">{g.family === 'solo' ? '1 joueur · record' : '2 à 8 joueurs · soirée'}</span></div>
+                  <div className="kbody"><div className="kcat">{g.cat}</div><div className="kname">{g.name}</div><div className="kdesc">{g.desc}</div><span className="kfam">{g.family === 'solo' ? '1 joueur · record' : '2 à 8 joueurs'}</span></div>
                   {g.id === 'rush' && onOpenHub && (
                     <span className="kclass" role="button" tabIndex={0}
                       onClick={(e) => { e.stopPropagation(); onOpenHub('leaderboard'); }}
