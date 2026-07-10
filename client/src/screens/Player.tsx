@@ -675,7 +675,7 @@ export default function Player() {
 
       {phase === 'playing' && (
         <div className="center" style={{ gap: 14, justifyContent: 'flex-start', paddingTop: 'clamp(14px,5vh,40px)' }}>
-          {round.mode !== 'rush' && <span className="eyebrow">Manche {round.index + 1} / {round.total} · {round.difficulty}{round.mode === 'quiz' ? ' · Quiz' : round.mj ? ' · Maître du jeu' : round.mode === 'buzzer' ? ' · Buzzer' : ''}</span>}
+          {round.mode !== 'rush' && <span className="eyebrow">Manche {round.index + 1} / {round.total}{round.mode === 'buzzer' || round.mode === 'quiz' ? '' : ` · ${round.difficulty}${round.mj ? ' · Maître du jeu' : ''}`}</span>}
           {round.mode === 'rush' ? (() => {
             const rs = Math.max(0, Math.ceil((round.endsAt - now) / 1000));
             const mine = (round.scores || []).find((p: any) => p.id === meId.current);
@@ -754,7 +754,7 @@ export default function Player() {
       )}
 
       {phase === 'reveal' && reveal && (
-        <div className="center" style={{ gap: 14 }}><span className="eyebrow">Réponse</span>
+        <div className="center" style={{ gap: 12, justifyContent: 'flex-start', paddingTop: 'clamp(6px,3vh,28px)' }}><span className="eyebrow">Réponse</span>
           {reveal.quiz ? (
             <>
               <span className="gpill" style={{ color: 'var(--fluo)' }}>{reveal.quiz.cat}</span>
@@ -779,7 +779,6 @@ export default function Player() {
           )}
           {/* réactions/taunts — s'affichent sur l'écran hôte ; le joueur reste actif entre les manches */}
           <div className="reactbar">{REACTIONS.map((r, i) => <button key={i} type="button" className="reactbtn" onClick={() => sendReaction(i)}><span className="re">{r.e}</span>{r.t}</button>)}</div>
-          {av && <p className="muted" style={{ fontSize: 13, margin: '2px 0 0', maxWidth: 400, lineHeight: 1.45 }}>Ton pouvoir — <b style={{ color: 'var(--ember)' }}>{av.power.name}</b> : {av.power.effect}</p>}
           </div>
       )}
 
