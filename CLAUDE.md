@@ -70,8 +70,8 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
 
 ## Score = AUDITEURS (match.js + index.js)
 - **base** = 10 000 par volet (titre / artiste) **+ 5 000** si les deux (prime de précision).
-- **× vitesse** (`speedMult` : ×1 à la dernière seconde → ×2 instantané) **× difficulté**
-  (facile 1.0 · connaisseur 1.3 · digger 1.6 · puriste 2.0).
+- **× vitesse** (`speedMult` : ×1 dernière seconde → **×2.5** instantané, courbe **convexe** `frac^1.7` → le bonus
+  chute vite quand on tarde) **× difficulté** (facile 1.0 · connaisseur 1.3 · digger 1.6 · puriste 2.0).
 - **Fautes** : `matchQuality` = 1.0 (exact / contient / tous les mots) vs 0.8 (faute ~20 % Levenshtein).
 - **Certification** de fin (`data.ts → certif`, sur auditeurs/manche, indépendant du nb de manches) :
   Espoir → Disque d'Or → Platine → Double → Triple → **Diamant**.
@@ -81,6 +81,29 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
   doit gagner — pas de frustration Mario Kart). Flag `suspense` (round) / `hideBoard` (reveal).
 - **Jauge de pouvoir** (`fillCharges`) : se remplit en fin de manche selon `rebalance`
   (comeback = les derniers rechargent + vite · snowball · off). 1 charge = 1 pouvoir. Cap 5.
+  - **Griser** (2026-07-09) : un pouvoir sans cible (vol sans meneur, sabotage sans cible, comeback si pas à la
+    traîne…) est **grisé** côté joueur. Serveur `canPowerAct(room,p,pw)` → event `power:eligible` par socket au `prep`.
+  - **Anim vol/dîme** : la VICTIME reçoit `power:hit` (temps réel « −X volés par Y ») + `room.powerHits` → badge
+    rejoué au reveal (champ `hitBy` du résultat).
+
+## Difficulté du POOL = liste CURÉE (2026-07-09, remplace le rank/recoScore)
+- **Le rank Deezer était faux** pour « grand public » (deep cuts d'artistes connus classés faciles, vieux rap sous-coté).
+  Remplacé par des **bandes pré-calculées à la main** : `server/difficulty-labels.json` = `{ "artiste|titre" normalisé →
+  'top'|'high'|'mid'|'deep' }` (facile/normal/difficile/puriste). `server/difficulty-exclude.json` = titres **NON-RAP** (variété/
+  pop/EDM : Stromae, Amel Bent, Magic System, Wallen, DJ Snake, Vianney…) écartés du jeu.
+- **Serveur** (`index.js`) : `dnorm()` (normalise la clé), `trackBand(t)` (bande depuis le fichier, défaut 'mid'),
+  `isOffTopic(t)` (exclus → `livePool` les filtre), `computeBands()` (memoïsé : bande + éraNorm pour l'ordre). `tierSlice`
+  filtre par bande + dédup des ré-éditions + backfill adjacent. **Survivor** (`rushRankedPool`) suit AUSSI ces bandes
+  (grand public d'abord) + rampe douce (`RUSH_RAMP_SCALE 58`, `EXP 1.9`). `recoScore`/`artistPeaks` gardés (legacy).
+- **Construction des labels** = flottes d'agents (jugement humain sur les VRAIS titres, PAS le streaming) + vérif, puis
+  scripts offline (scratchpad `expand-pool*.mjs`) qui résolvent un **canon** de tubes sur Deezer et l'ajoutent au pool.
+  `server/canon-grandpublic.json` (≈370 tubes grand public) · `server/canon-difficile-puriste.json` (digger/puriste curés
+  à la main par Alexandre : 1 titre EMBLÉMATIQUE par artiste de niche — pas de deep cut d'artiste connu). Le pool élargi
+  vit dans `.pool-cache.json` (**gitignored, local**) ; `seedHash` inchangé → le serveur charge le cache élargi.
+- **Facile plafonne à ~262** (canon résolu ; ~107 titres introuvables sur Deezer). Pour + de volume PROPRE : replier les
+  canons dans `SEED_TRACKS` + vrai rebuild. **Outil de curation** (artifact, `scratchpad/build-diff-tool.mjs`) : listes
+  complètes recolorables (vert=GP/bleu=Connaisseur/orange=Digger/rose=Puriste/✕=Retirer) → export JSON à réappliquer.
+- ⚠️ **Après tout changement de labels/exclude/pool : REDÉMARRER le serveur** (il garde le pool + le classement en mémoire).
 
 ## Multi-parties : série, trophées, salle d'attente (server/index.js + server/awards.js)
 - **Le salon survit à une partie.** À la fin (`finishGame`), on **cumule dans la série** : par joueur
@@ -169,7 +192,9 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
 - `server/awards.js` — catalogue des **trophées de fin** + `computeAwards` (icônes côté `data.ts`).
 - `server/match.js` — matching des réponses (normalize, levenshtein, gradeAnswer, speedMult).
 - `server/quiz.js` — banque de questions du mode Quiz.
-- `server/tracks.js` — `SEED_TRACKS` (résolus via Deezer).
+- `server/tracks.js` — `SEED_TRACKS` / `SEED_ARTISTS` / `ARTIST_TAGS` (résolus via Deezer → POOL).
+- `server/difficulty-labels.json` — bandes de difficulté curées `{ clé → top/high/mid/deep }` (source de vérité, PAS le rank).
+- `server/difficulty-exclude.json` — titres NON-RAP écartés du jeu. `server/canon-grandpublic.json` / `canon-difficile-puriste.json` — canons curés.
 - `client/src/data.ts` — roster, catégories, certif, fmtAud, difficultés, `MENU_TRACKS`, `isLegend/isGenie`,
   `AWARD_ICONS`/`awardIcon` (icônes SVG des trophées).
 - `sim-balance.mjs` — simulateur d'équilibrage (difficulté-aware). `test-games.mjs` — test d'intégration headless.
