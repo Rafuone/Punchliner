@@ -38,6 +38,9 @@ const RADIO_STATIONS = [
 // Mémoire de session radio (module-level → survit au démontage quand on repart au hub) : on retrouve la playlist
 // où on était (au pire en pause) au lieu de tout remettre à zéro.
 let radioMem: null | { source: string; results: any[]; query: string; selPl: any; tracks: any[]; trkInfo: any; activeUri: string; nowPlaying: any; posBase: number } = null;
+// La radio est-elle MONTÉE ? (module-level → lisible dans les callbacks async). Empêche qu'un play Spotify
+// résolu APRÈS la fermeture laisse tourner une musique fantôme impossible à couper (bug récurrent "le son ne s'arrête plus").
+let radioAlive = false;
 
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
 // icônes note + play en SVG (le glyphe texte ▶/♪ se rendait en EMOJI géant sur certains systèmes → cassé)
@@ -109,6 +112,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
   // Radio : now-playing + défaut « Découvertes ». À la SORTIE : on coupe la radio + on relance la musique du menu.
   useEffect(() => {
     if (mode !== 'radio') return;
+    radioAlive = true;
     if (RADIO_DEMO) { setSpReady(true); setRadioResults(DEMO_PLAYLISTS); setRadioSource('mine'); openPlaylist(DEMO_PLAYLISTS[0]); setNowPlaying({ paused: false, name: 'Otto', artist: 'SCH', image: '', position: 74000, duration: 213000, shuffle: true, repeat: 1 }); posRef.current = { base: 74000, at: Date.now() }; return; }
     const rdy = hasSpotifySession(); setSpReady(rdy);
     const off = onPlayerState((s) => { setNowPlaying(s); posRef.current = { base: s?.position || 0, at: Date.now() }; });
@@ -121,7 +125,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
     // connexion Spotify via popup pendant qu'on est dans la radio → on passe "connecté" + on charge Mes playlists
     const onConnected = () => { setSpReady(true); loadMine(); };
     window.addEventListener('pl-spotify-connected', onConnected);
-    return () => { off(); window.removeEventListener('pl-spotify-connected', onConnected); spotifyPause(); onRadioStop?.(); }; // quitter la radio → stop
+    return () => { radioAlive = false; spotifyPause(); off(); window.removeEventListener('pl-spotify-connected', onConnected); onRadioStop?.(); }; // quitter la radio → stop (radioAlive=false annule aussi un play Spotify qui se résout APRÈS la fermeture)
   }, [mode]);
   // sauvegarde live de la session radio → restaurable au prochain retour (cf. radioMem)
   useEffect(() => {
@@ -153,8 +157,8 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
     const r = await getPlaylistTracks(p.id);
     setTracks(r.tracks); setTrkInfo({ loading: false, total: r.total, durationMs: r.durationMs, info: r.info });
   }
-  async function playWhole(p: any) { const ok = await spotifyPlayContext(p.uri); if (ok) { setRadioActiveUri(p.uri); onRadioPlay?.(); } }
-  async function playTrack(t: any) { const ok = await spotifyPlayUri(t.uri); if (ok) onRadioPlay?.(); }
+  async function playWhole(p: any) { const ok = await spotifyPlayContext(p.uri); if (!radioAlive) { spotifyPause(); return; } if (ok) { setRadioActiveUri(p.uri); onRadioPlay?.(); } } // radio fermée pendant le PUT → on RE-coupe (sinon la playlist part en fond, incoupable)
+  async function playTrack(t: any) { const ok = await spotifyPlayUri(t.uri); if (!radioAlive) { spotifyPause(); return; } if (ok) onRadioPlay?.(); }
   const radioMsg = (i: string) => (({ 'no-token': 'Spotify déconnecté — reconnecte-toi.', 'http-400': 'Session Spotify invalide — reconnecte-toi.', 'http-401': 'Session Spotify expirée — reconnecte-toi.', 'http-403': 'Accès refusé par Spotify (403) — reconnecte-toi.', 'all-null': 'Spotify n’a renvoyé que des playlists non lisibles (bug connu). Essaie une autre station.', 'empty': 'Aucune playlist ici. Choisis une station ou cherche.', 'network': 'Spotify injoignable (réseau).' } as any)[i] || (i.startsWith('http-') ? `Erreur Spotify (${i.slice(5)}) — reconnecte-toi.` : 'Rien à afficher.'));
   const fmtDur = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
   const fmtTotal = (ms: number) => { const m = Math.round(ms / 60000); return m >= 60 ? (Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0')) : (m + ' min'); };

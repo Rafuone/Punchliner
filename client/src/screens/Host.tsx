@@ -160,16 +160,33 @@ export default function Host() {
   const audioReadyRef = useRef(false);   // l'autoplay a-t-il été débloqué par un geste ? false au reload à froid (TV rechargée en pleine partie)
   const [audioLocked, setAudioLocked] = useState(false); // reload en pleine partie sans geste → autoplay bloqué → on affiche « cliquer pour le son »
 
+  // ── COORDINATEUR AUDIO : UNE SEULE musique à la fois + arrêt FIABLE. musicGenRef = jeton de génération
+  // incrémenté à chaque coupure → invalide toute résolution async en vol (fix du son fantôme Spotify : un
+  // spotifyPlay() résolu APRÈS un stop lançait une piste ENTIÈRE que rien ne repausait). Toute lecture passe par ici.
+  const musicGenRef = useRef(0);
+  function stopAllMusicExcept(keep?: 'menu' | 'lobby' | 'deezer' | 'spotify') {
+    musicGenRef.current++;
+    const killFade = (el: HTMLAudioElement | null) => { if (el) { try { clearInterval((el as any)._fade); } catch {} } };
+    if (keep !== 'menu') { killFade(menuAudioRef.current); try { menuAudioRef.current?.pause(); } catch {} }
+    if (keep !== 'lobby') { killFade(lobbyAudioRef.current); try { lobbyAudioRef.current?.pause(); } catch {} }
+    if (keep !== 'deezer') { wantAudioRef.current = false; clearTimeout(audioRetryRef.current); try { audioRef.current?.pause(); } catch {} } // wantAudioRef=false AVANT pause → l'onPause self-heal ne relance PAS l'extrait
+    if (keep !== 'spotify') { usingSpotifyRef.current = false; try { spotifyPause(); } catch {} }
+  }
+  function stopAllMusic() { buzzActiveRef.current = false; stopAllMusicExcept(); }
+
   // Lecture d'une manche : Spotify si activé+prêt (extrait au milieu contrôlé), sinon Deezer.
   function playRound(d: any) {
     if (buzzActiveRef.current) return; // un buzz est en cours → on NE (re)démarre PAS le son (il doit rester coupé le temps de la réponse)
     const useSp = spotifyOnRef.current && spReadyRef.current && d?.sp?.title;
     if (useSp) {
+      stopAllMusicExcept('spotify'); // coupe menu/lobby/Deezer + jeton++ AVANT de jouer Spotify
       usingSpotifyRef.current = true;
-      wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} // on laisse la main à Spotify
-      // introuvable sur Spotify → on retombe TOUJOURS sur Deezer (au moins une source doit sonner, même si Deezer est « éteint » côté préférence : mieux vaut du son que le silence)
-      spotifyPlay(d.sp.title, d.sp.artist, (d.startAt || 0) > 0).then((ok) => { if (buzzActiveRef.current) { try { spotifyPause(); } catch {} return; } if (!ok) { usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); } }); // un buzz arrivé PENDANT le play() Spotify en vol (recherche réseau) serait avalé → on recoupe à la résolution (buzzActiveRef seul : wantAudioRef reste volontairement false en lecture Spotify)
-    } else { usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); }
+      const gen = musicGenRef.current;
+      spotifyPlay(d.sp.title, d.sp.artist, (d.startAt || 0) > 0).then((ok) => {
+        if (gen !== musicGenRef.current || buzzActiveRef.current) { try { spotifyPause(); } catch {} return; } // résolution PÉRIMÉE (fin de manche/partie, buzz, autre source) → on recoupe : plus de piste Spotify fantôme
+        if (!ok) { usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); } // introuvable sur Spotify → repli Deezer
+      });
+    } else { stopAllMusicExcept('deezer'); usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); }
   }
   // Bascule d'une source (au moins UNE reste toujours active → jamais de silence).
   function toggleSpotify() {
@@ -248,16 +265,16 @@ export default function Host() {
     if (socket.connected) boot();
     socket.on('connect', boot);
     socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); setWaiting(d.waiting || 0); if (typeof d.poolSize === 'number') setPoolSize(d.poolSize); if (d.phase === 'lobby') { setPhase('lobby'); sfxLoopStop(); } });
-    socket.on('round:prep', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
+    socket.on('round:prep', (d: any) => { stopAllMusicExcept('lobby'); if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
     socket.on('round:countdown', (d: any) => { sfxStop('scratch'); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
     socket.on('round:host', (d: any) => { sfxStop('scratch'); if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setReveal(null); setAnswered([]); setBuzzWinner(null); buzzActiveRef.current = false; setRound(d); setPhase('playing');
-      if (d.mode === 'quiz') { wantAudioRef.current = false; clearTimeout(audioRetryRef.current); previewRef.current = { url: '', clipMs: 30000, startAt: 0 }; try { audioRef.current?.pause(); } catch {} spotifyPause(); } // QUIZ = pas d'extrait de jeu ; on garde l'instru de menu (Alpha Wann) en fond
+      if (d.mode === 'quiz') { previewRef.current = { url: '', clipMs: 30000, startAt: 0 }; stopAllMusicExcept('lobby'); } // QUIZ = pas d'extrait ; on garde l'instru lobby (Alpha Wann) en fond, on coupe menu/Deezer/Spotify de façon fiable
       else playRound(d); });
     // Mode Survivor (contre-la-montre) : le son s'enchaîne automatiquement à chaque nouveau morceau
     socket.on('rush:host', (d: any) => { setError(''); setRound(d); if (d.scores) setPlayers(d.scores); setPhase('playing'); playRound(d); });
     socket.on('rush:state', (d: any) => { setRound(d); if (d.scores) setPlayers(d.scores); });
-    socket.on('rush:end', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); clearTimeout(audioRetryRef.current); setRushEnd(d); setPhase('rushend'); });
+    socket.on('rush:end', (d: any) => { stopAllMusic(); setRushEnd(d); setPhase('rushend'); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
     // buzz : le son SE COUPE (sinon on buzze, on écoute tranquille, puis on répond = trop facile)
     socket.on('buzz:winner', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); buzzActiveRef.current = true; wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 15000 }); setNow(Date.now()); }); // buzzActiveRef : verrou anti-relance du son PENDANT que le buzzeur répond (course avec playRound)
@@ -268,7 +285,7 @@ export default function Host() {
       // BUZZER : le son avait été coupé au buzz → on le REMET pour la révélation (titre + artiste). En Blind Test wantAudioRef reste true → no-op.
       if (!wantAudioRef.current && previewRef.current.url) { wantAudioRef.current = true; if (usingSpotifyRef.current) { try { spotifyTogglePlay(); } catch {} } else playPreview(previewRef.current.url, previewRef.current.startAt, 0); }
     });
-    socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(null); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées ; un challenger déjà débloqué ne réapparaît plus
+    socket.on('game:final', (d: any) => { stopAllMusic(); previewRef.current = { url: '', startAt: 0 }; setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(null); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées ; un challenger déjà débloqué ne réapparaît plus
     socket.on('power:used', (d: any) => { const key = powerKeyRef.current++; setPowerFeed((f) => [...f.slice(-4), { ...d, key }]); sfx('scratch'); setPowerBanner({ ...d, key }); clearTimeout(powerBannerTimer.current); powerBannerTimer.current = setTimeout(() => setPowerBanner((b: any) => (b && b.key === key ? null : b)), 4600); }); // + bannière géante 4,6 s (déborde volontairement sur le décompte → entre dans la manche)
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('reaction', (d: any) => {
@@ -278,13 +295,13 @@ export default function Host() {
       setReactions((rs) => [...rs.slice(-5), { ...d, key, side, pos }]);
       setTimeout(() => setReactions((rs) => rs.filter((r) => r.key !== key)), 4800);
     });
-    socket.on('room:closed', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); setError(d.reason || 'Salon fermé.'); localStorage.removeItem(HKEY); sfxLoopStop(); });
+    socket.on('room:closed', (d: any) => { stopAllMusic(); setError(d.reason || 'Salon fermé.'); localStorage.removeItem(HKEY); sfxLoopStop(); });
     // ---- Manche CLASH (battle 1v1 + paris) ----
-    socket.on('battle:intro', (d: any) => { wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBattle({ a: d.a, b: d.b, flavor: d.flavor, betBonus: d.betBonus, win: d.win, tallyA: [], tallyB: [] }); setPhase('battle-intro'); });
+    socket.on('battle:intro', (d: any) => { stopAllMusic(); setBattle({ a: d.a, b: d.b, flavor: d.flavor, betBonus: d.betBonus, win: d.win, tallyA: [], tallyB: [] }); setPhase('battle-intro'); });
     socket.on('battle:bets', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, betMs: d.betMs })); setNow(Date.now()); setPhase('battle-bet'); });
     socket.on('battle:tally', (d: any) => setBattle((b: any) => ({ ...b, tallyA: d.a || [], tallyB: d.b || [] })));
     socket.on('battle:go', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, durationMs: d.durationMs })); setNow(Date.now()); setPhase('battle-play'); playRound(d); });
-    socket.on('battle:reveal', (d: any) => { setBattle((b: any) => ({ ...b, reveal: d })); if (d.scores) setPlayers(d.scores); wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setPhase('battle-reveal'); });
+    socket.on('battle:reveal', (d: any) => { setBattle((b: any) => ({ ...b, reveal: d })); if (d.scores) setPlayers(d.scores); stopAllMusic(); setPhase('battle-reveal'); });
     return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'round:countdown', 'round:host', 'rush:host', 'rush:state', 'rush:end', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'reaction', 'room:closed', 'battle:intro', 'battle:bets', 'battle:tally', 'battle:go', 'battle:reveal'].forEach((e) => socket.off(e as any));
   }, []);
 
@@ -425,9 +442,11 @@ export default function Host() {
   }
   function toggleMusic() {
     const on = !musicOn; setMusicOn(on); musicOnRef.current = on;
-    const a = menuAudioRef.current; if (!a) return;
-    if (on) { if (!startedRef.current) startMenu(); else a.play().catch(() => {}); }
-    else a.pause();
+    if (!on) { stopAllMusicExcept(); return; } // COUPE net TOUTES les sources (menu, instru lobby loop, extrait, Spotify) → l'instru cesse d'être increvable
+    // rallume : la BONNE source selon l'écran
+    if (configuringRef.current) { const a = menuAudioRef.current; if (a) { if (!startedRef.current) startMenu(); else a.play().catch(() => {}); } }
+    else if (phase === 'lobby') playLobby();
+    else if (round.mode === 'quiz') playLobby(0.2);
   }
   // LOBBY (écran du code) = instru d'Alpha Wann (pas la playlist → pas de spoil du son de Bishok, qui
   // n'ouvre la playlist qu'au ConfigWizard). On tente l'autoplay ; à défaut, le 1er geste la lance.
@@ -453,7 +472,7 @@ export default function Host() {
   useEffect(() => {
     const quizGame = round.mode === 'quiz';
     if (phase === 'lobby') { if (!configuring && musicOnRef.current) playLobby(); }                 // lobby (hors config) : instru normale (0.32)
-    else if (quizGame && musicOnRef.current) playLobby(0.2);                                          // QUIZ en jeu : Alpha Wann en fond DOUX, JAMAIS coupée entre les questions (dépend de round.mode → démarre dès la 1re manche quiz, plus de course de fade)
+    else if (quizGame && musicOnRef.current && ['prep', 'countdown', 'playing', 'reveal'].includes(phase)) playLobby(0.2);                                          // QUIZ en jeu : Alpha Wann en fond DOUX, JAMAIS coupée entre les questions (dépend de round.mode → démarre dès la 1re manche quiz, plus de course de fade)
     else { menuAudioRef.current?.pause(); const la = lobbyAudioRef.current; if (la && !la.paused) fadeTo(la, 0, 500, true); } // autres modes en jeu : on coupe menu/lobby (le son de manche prend le relais)
   }, [phase, round.mode]);
 
@@ -542,7 +561,7 @@ export default function Host() {
 
   return (
     <>
-    {hubView && <HubBrowse mode={hubView} onClose={() => setHubView(null)} onRadioPlay={() => { musicOnRef.current = false; menuAudioRef.current?.pause(); const la = lobbyAudioRef.current; if (la) la.pause(); }} onRadioStop={() => { musicOnRef.current = true; if (configuringRef.current) { menuAudioRef.current?.play().catch(() => {}); } else playLobby(); }} />}
+    {hubView && <HubBrowse mode={hubView} onClose={() => setHubView(null)} onRadioPlay={() => { musicOnRef.current = false; stopAllMusicExcept('spotify'); }} onRadioStop={() => { musicOnRef.current = true; if (configuringRef.current) { menuAudioRef.current?.play().catch(() => {}); } else playLobby(); }} />}
     {cheat && (
       <div className="cheat-fx" aria-hidden="true">
         <div className="cheat-flash" />
