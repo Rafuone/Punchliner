@@ -1539,28 +1539,24 @@ button, input { font-family: inherit; }
 .topbar.gamebar .gmeta, .topbar.gamebar .salontag, .topbar.gamebar .btn { min-height: 52px; }
 .topbar.gamebar .salontag, .topbar.gamebar .btn { display: inline-flex; align-items: center; }
 
-/* ── SHOWROOM : itérations visuelles du bouton BUZZ (bzv-1..5), inertes hors /showroom ── */
-.bzv-1 .buzzer { box-shadow: 0 8px 22px rgba(0,0,0,.4); }
-.bzv-1 .buzzer::after { border-color: rgba(10,11,12,.18); }
-.bzv-1 .buzzer:active { transform: scale(.96); box-shadow: 0 4px 12px rgba(0,0,0,.4); }
-
-.bzv-2 .buzzer { background: rgba(166,255,0,.05); color: var(--fluo); border: 4px solid var(--fluo);
-  box-shadow: 0 0 0 2px rgba(166,255,0,.15), 0 0 40px rgba(166,255,0,.35), inset 0 0 30px rgba(166,255,0,.14); animation: bzv2glow 1.4s ease-in-out infinite; }
-.bzv-2 .buzzer::after { border: none; }
-.bzv-2 .buzzer:active { transform: scale(.96); }
-@keyframes bzv2glow { 0%,100% { box-shadow: 0 0 0 2px rgba(166,255,0,.15), 0 0 32px rgba(166,255,0,.3), inset 0 0 26px rgba(166,255,0,.12); } 50% { box-shadow: 0 0 0 3px rgba(166,255,0,.3), 0 0 62px rgba(166,255,0,.55), inset 0 0 34px rgba(166,255,0,.22); } }
-
-.bzv-3 .buzzer { background: radial-gradient(circle at 50% 32%, #ff8a3d, #ff4d2e 70%); color: #1a0a04;
-  box-shadow: 0 12px 0 #9c2a12, 0 16px 26px rgba(0,0,0,.5), inset 0 8px 16px rgba(255,255,255,.4); animation: buzzpulse 1s ease-in-out infinite; }
-.bzv-3 .buzzer::after { border-color: rgba(26,10,4,.3); }
-.bzv-3 .buzzer:active { transform: translateY(12px) scale(.985); box-shadow: 0 2px 0 #9c2a12, 0 5px 10px rgba(0,0,0,.5); }
-
-.bzv-4 .buzzer { background: var(--fluo); box-shadow: 0 6px 18px rgba(0,0,0,.4); }
-.bzv-4 .buzzer::after { border: none; }
-.bzv-4 .buzzer::before { content:''; position:absolute; inset:-6px; border-radius:50%; border:2px solid rgba(166,255,0,.6); animation: bzv4sonar 1.6s ease-out infinite; pointer-events:none; }
-@keyframes bzv4sonar { 0% { transform: scale(1); opacity:.7; } 100% { transform: scale(1.5); opacity:0; } }
-
-.bzv-5 .buzzer { background: linear-gradient(160deg, #1b1e22, #0e0f11); color: var(--fluo); border: 1px solid rgba(166,255,0,.4);
-  box-shadow: 0 14px 40px rgba(0,0,0,.6), inset 0 1px 0 rgba(166,255,0,.5), inset 0 0 40px rgba(166,255,0,.08); text-shadow: 0 0 18px rgba(166,255,0,.6); }
-.bzv-5 .buzzer::after { border-color: rgba(166,255,0,.18); }
-.bzv-5 .buzzer:active { transform: scale(.97); }
+/* ── SHOWROOM : itérations du BUZZ (bzv-1..5) — toutes SANS ombre portée sombre (idée de la v4 = onde sonar) ── */
+.bzv-1 .buzzer,.bzv-2 .buzzer,.bzv-3 .buzzer,.bzv-4 .buzzer,.bzv-5 .buzzer{ animation:none;
+  box-shadow:0 6px 16px rgba(0,0,0,.26), inset 0 6px 14px rgba(255,255,255,.5), inset 0 -10px 18px rgba(0,0,0,.14); }
+.bzv-1 .buzzer::after,.bzv-2 .buzzer::after,.bzv-3 .buzzer::after,.bzv-4 .buzzer::after,.bzv-5 .buzzer::after{ content:''; position:absolute; inset:0; border-radius:50%; border:none; pointer-events:none; }
+.bzv-1 .buzzer:active,.bzv-2 .buzzer:active,.bzv-3 .buzzer:active,.bzv-4 .buzzer:active,.bzv-5 .buzzer:active{ transform:scale(.955);
+  box-shadow:0 3px 9px rgba(0,0,0,.26), inset 0 4px 12px rgba(255,255,255,.42); }
+.bzv-1 .buzzer::before,.bzv-2 .buzzer::before,.bzv-3 .buzzer::before,.bzv-4 .buzzer::before,.bzv-5 .buzzer::before{ content:''; position:absolute; inset:0; border-radius:50%; pointer-events:none; border:2px solid rgba(166,255,0,.6); }
+@keyframes sonarwave{ 0%{transform:scale(1);opacity:.7} 100%{transform:scale(1.45);opacity:0} }
+/* 1 : onde simple et douce */
+.bzv-1 .buzzer::before{ animation:sonarwave 1.8s ease-out infinite; }
+/* 2 : onde rapide + 2e onde décalée */
+.bzv-2 .buzzer::before{ animation:sonarwave 1.4s ease-out infinite; }
+.bzv-2 .buzzer::after{ border:2px solid rgba(166,255,0,.5); animation:sonarwave 1.4s ease-out .7s infinite; }
+/* 3 : liseré épais + onde large */
+.bzv-3 .buzzer{ border:3px solid rgba(10,11,12,.22); }
+.bzv-3 .buzzer::before{ border:3px solid rgba(166,255,0,.72); animation:sonarwave 2s ease-out infinite; }
+/* 4 (préférée) : onde nette, courbe vive */
+.bzv-4 .buzzer::before{ border:2px solid rgba(166,255,0,.66); animation:sonarwave 1.6s cubic-bezier(.15,.6,.25,1) infinite; }
+/* 5 : le bouton respire + onde */
+.bzv-5 .buzzer{ animation:buzzpulse 1.2s ease-in-out infinite; }
+.bzv-5 .buzzer::before{ animation:sonarwave 1.5s ease-out infinite; }

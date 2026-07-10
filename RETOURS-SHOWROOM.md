@@ -75,3 +75,50 @@ Je pense qu'en fin de partie, il faudrait que les joueurs puissent dire s'ils ve
 
 ### Salle d’attente (rejoint en cours)  `[ph-waiting]` — 2026-07-10 09:34
 Oublie les doubl- essaie d'éviter les double-tirées ça c'est un peu un bug un peu IA c'est pas terrible. T'as tout mis en inline tu es dans le cercle point virgule son nom une partie tourne déjà tiré tiré tu entre dès la prochaine point reste chaud ça mérite peut-être plusieurs lignes ça et peut-être soit un peu plus concis tu vois. et occupe mieux l'espace peut-être que partie en cours tu le remonte un peu et du coup ça te donne plus d'amplitude pour mettre les textes en dessous. Ton perso 2.10 6 pouvoir en fait c'est bien tu donnes la bonne data mais la mise en forme elle est moyenne il y a quand même moyen de faire vachement de ça. La petite animation en bas, elle est très bien, par contre, avec les trois petits points.
+
+### Buzzer (téléphone)  `[ph-buzz]` — 2026-07-10 14:39
+JE prefère la 4 animation mais sans l'ombre portée sur la forme? Ca fait plusieurs fois que je t'ai demandé de l'enlevée d'ailleurs. TU peux me porposer 4 variant en partant de cette idée là ?
+
+### Buzzer (téléphone)  `[ph-buzz]` — 2026-07-10 14:41
+Il manque un son lorsque le joueur est en phjase ecriture de la reponse au buzzer. Ca doit un son comme le decompte a l'accueil.
+LE plus rapide prend le mic, c'est cool mais c'est un tout petit peu trop discret et trop coller au buzzer, je l'aurais mis sous "Reconnais le son" aussi.
+
+### Fin de partie (joueur)  `[ph-final]` — 2026-07-10 14:46
+Quand les textes des cta sont sur plusieurs lignes c'est que le design n'est pas bon. Tu dois revoir ça. Est ce que l'action de "reejouer est ici ou bien sur l'écran qui suit et vachement plus accessible ?
+Il faut y réflechir, je te laisse me faire un atout constructif a ce sujet d'un point de vue UX
+
+### Buzzer — en attente  `[tv-buzz-wait]` — 2026-07-10 14:49
+Retire moi une fois pour toute cette ombre moche. Et il faut que le buzzer mobiule et tv soient identique.
+
+### Fenêtre pouvoirs (Activer/Passer)  `[ph-prep]` — 2026-07-10 14:55
+L'ombnre sous le CTA principal est de trop."Grand public en haut, on s'en fiche.
+C'est peut etre un peu trop abusé la taille du titre du pouvoir.
+Le  text qui explique ce que c'est devrait etre un petit peu plus visible. Idem pour le bouton passer mon tour.
+
+### Quiz (QCM)  `[tv-quiz]` — 2026-07-10 14:57
+Attention tu as mis la musique d'alpha wann ( celle de l'accueil avec le QR code) absolument partout, je la voulais uniquement dans le quiz, ca n'a aucun sens dans le sautres jeux.
+
+### Buzzer — quelqu’un a buzzé  `[tv-buzz-win]` — 2026-07-10 14:57
+Il faudrait que l'animation qui tourne pour le timing change de couleurs progessivement de vert à rouge.
+Enlève la lueur verte autour de l'avatar ca va pas.
+
+### Buzzer — en attente  `[tv-buzz-wait]` — 2026-07-10 14:58
+enlève mode buzzer - grand public, on s'en fou complètement. y'a deja ecri buzz en énorme et les infos en haut dans le header.
+
+### Podium (fin de partie)  `[tv-podium]` — 2026-07-10 15:00
+Pour les podium, ce serait pas mal un petit fade en bas des positions (1 - 2 - 3 )
+Ca s'arrete d'un coup le dégradé, c'est pas très beau.
+J'aurais peut etre mis partie termien dans le header au milieu plutot qu'au dessus du podium.
+
+### Podium (fin de partie)  `[tv-podium]` — 2026-07-10 15:01
+LE classement général devrait également apporter une certification, mais calculée sur le prorata du totaldes parties.
+
+### Révélation + scores  `[tv-reveal]` — 2026-07-10 15:02
+L'animation est un peu rapide encore, en fait il faudrait que les joueurs puisse bien la voir. SI elle se fai de mankèrte trop rapide elle perd en impact et en interet.
+
+### Manche — Blind Test  `[tv-playing]` — 2026-07-10 15:05
+J'ai pensé a un probleme qu'on a eu dans le jeu. Lactivation des pouvoir pouvait déborder sure le debut de la muusique. Parfois autres soucis, le son ne démarrait qu'au bout de 5s. Je me demande si y'a pas un décompte de 3 s avant que ca se lance, qui permettrait de charger correctement la musique et éviter les débordement pour les pouvoirs.
+
+### Révélation + scores  `[tv-reveal]` — 2026-07-10 15:06
+Si on affche le spouvori au dessus des réponses ca fonctionenra pas bien quand y'en aura trop, ca va tout pousser vers le bas. Faut que tu test une autre approche.
+Quand j'active les pouvoir y'a trop de latence, j'aimerais pouvoir spammer et que ca ralentisse pas. D'ailleurs y'a un bug d'affichage quand j'appuie le bouton change de hauteur.
