@@ -82,6 +82,8 @@ export default function Host() {
   const [settings, setSettings] = useState({ difficulty: 'normal', mode: 'multi', rounds: 8, mj: false, rebalance: 'comeback' });
   const lastWizRef = useRef<any>(null); // dernier payload de l'assistant → « Rejouer » (Survivor) sans reperdre era/theme/chrono/pace
   const [configuring, setConfiguring] = useState(false);
+  const introShownRef = useRef<Set<string>>(new Set()); // types de partie À POUVOIRS dont la page d'intro a déjà été montrée dans CE salon
+  const [intro, setIntro] = useState<{ payload: any } | null>(null); // page d'intro pouvoirs (1re partie du type dans le salon, avant démarrage)
   const [hubView, setHubView] = useState<null | 'roster' | 'trophies' | 'leaderboard' | 'radio'>(null); // consultation roster / palmarès / classement / radio sur la TV
   // Easter egg : code Konami (↑↑↓↓←→←→ B A) → pluie des portraits + flash « CHEAT » sur la TV (visuel pur pour l'instant).
   const [cheat, setCheat] = useState<any[] | null>(null);
@@ -481,9 +483,13 @@ export default function Host() {
     lastWizRef.current = s; // mémorise pour un éventuel « Rejouer » (Survivor notamment)
     const a = audioRef.current;
     if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); audioReadyRef.current = true; } // ce clic « Lancer » débloque l'autoplay pour toute la partie
-    sfx('launch');
-    socket.emit('host:start', s, (res: any) => res?.error && setError(res.error));
+    // 1re partie d'un type À POUVOIRS (Blind Test auto) dans ce salon → page d'intro dédiée AVANT de démarrer (1x/type/salon)
+    const hasPowers = s.mode === 'multi' && !s.mj;
+    if (hasPowers && !introShownRef.current.has(s.mode)) { setConfiguring(false); setIntro({ payload: s }); return; }
+    doStart(s);
   }
+  // démarre RÉELLEMENT la partie (émis directement, ou après la page d'intro pouvoirs)
+  function doStart(s: any) { sfx('launch'); socket.emit('host:start', s, (res: any) => res?.error && setError(res.error)); }
   // Relance depuis le podium : retour au salon (cumul de série conservé) ; toConfig → droit dans l'assistant.
   function relance(toConfig: boolean) { socket.emit('host:restart', {}, () => { if (toConfig) setConfiguring(true); }); }
   // TROPHÉES — transition "slot" (défile puis se cale) : la MÊME partout, y compris le 1er
@@ -510,7 +516,7 @@ export default function Host() {
   function newSalon() {
     if (players.length && !confirm('Ouvrir un NOUVEAU salon ? Les joueurs actuels seront éjectés.')) return;
     socket.emit('host:new', {}, (res: any) => {
-      if (res?.ok) { setCode(res.code); setPoolSize(res.poolSize); setPlayers([]); setWaiting(0); setConfiguring(false); setReactions([]); setPhase('lobby');
+      if (res?.ok) { setCode(res.code); setPoolSize(res.poolSize); setPlayers([]); setWaiting(0); setConfiguring(false); setReactions([]); setIntro(null); introShownRef.current.clear(); setPhase('lobby');
         try { localStorage.setItem(HKEY, JSON.stringify({ code: res.code, hostToken: res.hostToken })); } catch {} }
     });
   }
@@ -547,6 +553,21 @@ export default function Host() {
       </div>
     )}
     {showReveal && pendingUnlock && <ChallengerReveal charId={pendingUnlock} onClose={() => { setShowReveal(false); setPendingUnlock(null); }} />}
+    {intro && (
+      <div className="pintro" role="dialog" aria-label="Les pouvoirs">
+        <GrungeBg />
+        <div className="pintro-card">
+          <div className="pintro-eyebrow">Nouveau dans ce salon</div>
+          <h2 className="pintro-title">LES <span className="d">POUVOIRS</span></h2>
+          <div className="pintro-steps">
+            <div className="pintro-step"><span className="pintro-ic">🎤</span><div><b>Chaque rappeur a son pouvoir</b><span>Voler des auditeurs, doubler son score, se protéger…</span></div></div>
+            <div className="pintro-step"><span className="pintro-ic">⚡</span><div><b>Activez-le sur le téléphone</b><span>Entre les manches, tant qu'il reste une charge.</span></div></div>
+            <div className="pintro-step"><span className="pintro-ic">📺</span><div><b>L'effet s'affiche en grand ici</b><span>Tout le monde voit qui a frappé, et combien ça rapporte.</span></div></div>
+          </div>
+          <button className="btn warm big pintro-go" onClick={() => { const p = intro.payload; introShownRef.current.add(p.mode); setIntro(null); doStart(p); }}>C'est parti →</button>
+        </div>
+      </div>
+    )}
     {REVEAL_DEMO && !showReveal && (
       <div className="reveal-demo">
         <div className="rd-title">DÉMO · arrivée d'un challenger</div>
@@ -675,16 +696,7 @@ export default function Host() {
           <h2 className="title-xl">Activation des pouvoirs</h2>
           <div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.max(0, Math.ceil((prepEndsAt - now) / 1000))}</div>
           <span className="url">{prepReady.count}/{prepReady.total} prêt{prepReady.total > 1 ? 's' : ''}</span>
-          {round.index <= 1 && powerFeed.length === 0 && (
-            <div className="pw-explain">
-              <div className="pwx-title">C'est quoi, un pouvoir&nbsp;?</div>
-              <div className="pwx-steps">
-                <div className="pwx-step"><span className="pwx-ic">🎤</span><span>Chaque rappeur a <b>son pouvoir</b>&nbsp;: voler des auditeurs, doubler son score, se protéger…</span></div>
-                <div className="pwx-step"><span className="pwx-ic">⚡</span><span>On l'active sur son <b>téléphone</b>, ici, entre les manches — tant qu'il reste une <b>charge</b>.</span></div>
-                <div className="pwx-step"><span className="pwx-ic">📺</span><span>Son effet s'affiche <b>en grand sur la TV</b>&nbsp;: tout le monde voit qui a frappé, et comment.</span></div>
-              </div>
-            </div>
-          )}
+          {/* explicatif détaillé déplacé en PAGE D'INTRO (1re partie à pouvoirs du salon) ; ici, la phrase simple ci-dessous suffit */}
           {powerFeed.length > 0 ? (
             <div className="pwfeed">
               {powerFeed.map((p) => (
@@ -827,6 +839,23 @@ export default function Host() {
                 <h2 className="title-xl" style={{ marginBottom: 12 }}>{reveal.track.title}</h2>
                 <div className="eyebrow" style={{ color: 'var(--muted2)', marginBottom: 2 }}>Artiste</div>
                 <p className="reveal-artist" style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 'clamp(20px,3vw,32px)', margin: 0, lineHeight: 1.05 }}>{reveal.track.artist}</p>
+              </div>
+            </div>
+          )}
+          {/* COUPS DE POUVOIR — mis en avant : explique pourquoi un score bouge sans (bonne) réponse (effet de fin de manche) */}
+          {revealStep < 1 && reveal.results && reveal.results.some((r: any) => r.power) && (
+            <div className="powerplays">
+              <div className="pp-head"><span className="pp-bolt">⚡</span> Coups de pouvoir</div>
+              <div className="pp-list">
+                {reveal.results.filter((r: any) => r.power).map((r: any) => (
+                  <div className="pp-row" key={r.id} style={{ ['--pc' as any]: catColor(r.avatar) }}>
+                    <Med avatarId={r.avatar} size={54} />
+                    <div className="pp-txt">
+                      <div className="pp-who"><b>{r.name}</b> déclenche <span className="pp-name">{r.power.name}</span></div>
+                      <div className="pp-note">{r.power.note}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

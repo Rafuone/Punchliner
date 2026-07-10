@@ -1226,6 +1226,70 @@ button, input { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) { .powerblast { animation: pb-fade 4.6s linear forwards; } .powerblast .pb-shine { display: none; } }
 @keyframes pb-fade { 0%,86% { opacity: 1; } 100% { opacity: 0; } }
 
+/* ===== PAGE D'INTRO POUVOIRS (TV) — montrée 1x par type de partie à pouvoirs dans le salon ===== */
+.pintro { position: fixed; inset: 0; z-index: 380; display: grid; place-items: center; padding: 4vh 4vw;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(12,14,18,.86), rgba(6,7,9,.97)); animation: pintro-in .4s ease both; }
+.pintro-card { position: relative; z-index: 1; width: min(920px, 94vw); display: flex; flex-direction: column; align-items: center; gap: clamp(14px, 2.4vh, 26px); text-align: center; }
+.pintro-eyebrow { font-family: var(--ui); font-weight: 800; letter-spacing: .18em; text-transform: uppercase; font-size: clamp(12px, 1.3vw, 16px); color: var(--fluo); }
+.pintro-title { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; line-height: .9; font-size: clamp(48px, 9vw, 120px); margin: 0; }
+.pintro-title .d { color: var(--fluo); }
+.pintro-steps { display: flex; flex-direction: column; gap: clamp(10px, 1.8vh, 18px); width: 100%; max-width: 760px; }
+.pintro-step { display: flex; align-items: center; gap: clamp(14px, 2vw, 24px); text-align: left; padding: clamp(12px, 1.6vh, 18px) clamp(16px, 2vw, 24px); border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid var(--line2); }
+.pintro-step .pintro-ic { flex: 0 0 auto; width: clamp(44px, 4.4vw, 62px); height: clamp(44px, 4.4vw, 62px); display: grid; place-items: center; font-size: clamp(24px, 2.6vw, 36px); border-radius: 12px; background: rgba(166,255,0,.08); border: 1px solid rgba(166,255,0,.25); }
+.pintro-step b { display: block; font-family: var(--disp); font-weight: 700; text-transform: uppercase; font-size: clamp(18px, 2.2vw, 30px); line-height: 1.05; }
+.pintro-step > div > span { display: block; color: var(--muted); font-size: clamp(14px, 1.5vw, 20px); margin-top: 3px; }
+.pintro-go { margin-top: clamp(6px, 1.4vh, 16px); min-width: min(360px, 80vw); }
+@keyframes pintro-in { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: scale(1); } }
+
+/* ===== REVEAL — COUPS DE POUVOIR (TV) : pourquoi un score bouge sans (bonne) réponse ===== */
+.powerplays { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 8px; }
+.powerplays .pp-head { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: clamp(15px, 1.7vw, 22px); color: var(--ember); display: flex; align-items: center; justify-content: center; gap: 8px; }
+.powerplays .pp-bolt { filter: drop-shadow(0 0 10px rgba(255,176,46,.6)); }
+.powerplays .pp-list { display: flex; flex-direction: column; gap: 8px; }
+.powerplays .pp-row { display: flex; align-items: center; gap: clamp(12px, 1.6vw, 20px); text-align: left; padding: clamp(10px, 1.4vh, 16px) clamp(16px, 2vw, 24px); border-radius: 10px;
+  background: linear-gradient(100deg, rgba(14,16,20,.96), rgba(20,22,27,.92)); border: 1px solid color-mix(in srgb, var(--pc, var(--ember)) 45%, transparent); border-left: 8px solid var(--pc, var(--ember));
+  box-shadow: 0 0 34px -14px color-mix(in srgb, var(--pc, var(--ember)) 55%, transparent); animation: pp-pop .34s cubic-bezier(.16,.9,.28,1) both; }
+.powerplays .pp-row .med { flex: 0 0 auto; }
+.powerplays .pp-txt { min-width: 0; }
+.powerplays .pp-who { font-family: var(--disp); font-weight: 700; text-transform: uppercase; font-size: clamp(18px, 2.2vw, 30px); line-height: 1; color: var(--muted2); }
+.powerplays .pp-who b { color: #fff; }
+.powerplays .pp-who .pp-name { color: var(--pc, var(--ember)); }
+.powerplays .pp-note { font-family: var(--disp); font-weight: 700; font-size: clamp(16px, 1.9vw, 26px); color: var(--txt); margin-top: 4px; line-height: 1.1; text-wrap: balance; }
+@keyframes pp-pop { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* ===== ACTIVATION ÉPIQUE DU POUVOIR (téléphone) ===== */
+.pw-prep { --cc: var(--ember); }
+.pw-prep.shake { animation: pw-shake .6s cubic-bezier(.36,.07,.19,.97) both; }
+.pw-emblem { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 16px 18px; border-radius: 16px;
+  background: radial-gradient(120% 120% at 50% 0%, color-mix(in srgb, var(--cc) 16%, transparent), rgba(10,11,14,.7)); border: 1px solid color-mix(in srgb, var(--cc) 55%, transparent);
+  box-shadow: inset 0 0 40px -18px var(--cc), 0 0 30px -16px var(--cc); }
+.pw-emblem-name { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; font-size: clamp(24px, 8vw, 34px); line-height: .98; color: var(--cc); text-shadow: 0 2px 18px color-mix(in srgb, var(--cc) 45%, transparent); }
+.pw-emblem-fx { font-size: 14px; color: var(--muted); line-height: 1.42; }
+.pw-emblem-fx b { color: var(--txt); font-weight: 800; }
+.pw-slam { position: relative; overflow: hidden; width: 100%; height: 74px; border-radius: 14px; cursor: pointer; border: 2px solid var(--cc);
+  font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: clamp(22px, 6.4vw, 30px); color: var(--ink);
+  background: var(--cc); box-shadow: 0 10px 0 color-mix(in srgb, var(--cc) 45%, #000), 0 16px 26px -8px color-mix(in srgb, var(--cc) 55%, transparent), inset 0 6px 14px rgba(255,255,255,.35);
+  transition: transform .09s ease, box-shadow .09s ease; -webkit-tap-highlight-color: transparent; }
+.pw-slam:disabled { filter: grayscale(.5) brightness(.7); cursor: default; box-shadow: none; }
+.pw-slam:not(:disabled):active { transform: translateY(10px); box-shadow: 0 0 0 color-mix(in srgb, var(--cc) 45%, #000); }
+.pw-slam-lbl { position: relative; z-index: 1; }
+.pw-slam-charge { position: absolute; inset: 0; z-index: 0; background: rgba(255,255,255,.9); transform: scaleX(0); transform-origin: left; }
+.pw-slam:disabled .pw-slam-charge { display: none; }
+.pw-prep.shake .pw-slam-charge { animation: pw-charge .62s linear both; }
+.pw-skip { background: none; border: none; color: var(--muted); font-family: var(--ui); font-size: 14px; text-decoration: underline; cursor: pointer; padding: 4px; }
+.pw-skip:disabled { opacity: .4; cursor: default; }
+.pw-flash { position: fixed; inset: 0; z-index: 500; pointer-events: none; background: radial-gradient(circle at 50% 45%, var(--cc, var(--fluo)), transparent 70%); mix-blend-mode: screen; animation: pw-flashfx .48s ease-out both; }
+.pw-confirm { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 22px 20px; border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--cc, var(--fluo)) 60%, transparent); background: radial-gradient(120% 120% at 50% 0%, color-mix(in srgb, var(--cc, var(--fluo)) 18%, transparent), rgba(10,11,14,.8)); }
+.pw-confirm-bolt { font-size: 46px; animation: pw-boltpop .5s cubic-bezier(.16,.9,.28,1) both; filter: drop-shadow(0 0 16px var(--cc, var(--fluo))); }
+.pw-confirm-title { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: clamp(26px, 9vw, 38px); line-height: 1; color: var(--cc, var(--fluo)); }
+.pw-confirm-msg { font-family: var(--disp); font-weight: 700; font-size: 17px; color: var(--txt); line-height: 1.15; }
+@keyframes pw-shake { 10%,90% { transform: translateX(-1px); } 20%,80% { transform: translateX(2px); } 30%,50%,70% { transform: translateX(-4px); } 40%,60% { transform: translateX(4px); } }
+@keyframes pw-charge { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes pw-flashfx { 0% { opacity: 0; } 15% { opacity: .85; } 100% { opacity: 0; } }
+@keyframes pw-boltpop { 0% { opacity: 0; transform: scale(.4) rotate(-12deg); } 60% { opacity: 1; transform: scale(1.2); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .pw-prep.shake, .pw-slam-charge, .pw-flash, .pw-confirm-bolt { animation: none !important; } .pw-flash { opacity: .3; } }
+
 /* ===== PODIUM — CD de certification (or / platine / diamant) ===== */
 .champ { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .champ .champ-name { text-align: center; }

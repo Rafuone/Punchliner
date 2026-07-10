@@ -112,6 +112,8 @@ export default function Player() {
   const [quizPick, setQuizPick] = useState<number | null>(null); // choix QCM sélectionné (mode quiz)
   const [prepEndsAt, setPrepEndsAt] = useState(0);   // fin de la fenêtre d'activation des pouvoirs
   const [prepDone, setPrepDone] = useState(false);   // ce joueur a activé ou passé
+  const [pwSeq, setPwSeq] = useState<'idle' | 'charge'>('idle'); // séquence d'activation épique (montée en charge → tir)
+  const [pwFlash, setPwFlash] = useState(false);     // flash plein écran à la couleur du pouvoir au déclenchement
   const [waiting, setWaiting] = useState(false);     // arrivé en pleine partie → salle d'attente
   const [awards, setAwards] = useState<any[]>([]);   // trophées de fin de partie
   const [series, setSeries] = useState<any>(null);   // cumul de la série (multi-parties)
@@ -211,6 +213,7 @@ export default function Player() {
 
   useEffect(() => { if (phase !== 'playing' && phase !== 'prep' && phase !== 'battle-bet' && phase !== 'battle-play') return; const id = setInterval(() => setNow(Date.now() + clockOffset.current), 100); return () => clearInterval(id); }, [phase]);
   useEffect(() => { if (phase !== 'countdown') return; const id = setInterval(() => setCountdown((c) => Math.max(1, c - 1)), 1000); return () => clearInterval(id); }, [phase]);
+  useEffect(() => { if (phase !== 'prep') { setPwSeq('idle'); setPwFlash(false); } }, [phase]); // réinitialise la séquence d'activation hors fenêtre pouvoirs
   // jauge de pouvoir : synchro depuis le serveur
   useEffect(() => { const m = players.find((p) => p.id === meId.current); if (m) { if (typeof m.charge === 'number') setCharge(m.charge); if (typeof m.charges === 'number') setCharges(m.charges); } }, [players]);
   // observe le salon pour voir en direct les persos déjà pris (grisés)
@@ -341,6 +344,12 @@ export default function Player() {
       else setPowerMsg(`${res?.power || 'Pouvoir'} armé pour cette manche !`);
       setPrepDone(true); sfx('scratch');
     });
+  }
+  // Activation ÉPIQUE (jeu vidéo) : secousse + montée en charge (~620 ms), puis flash couleur du pouvoir + confirmation.
+  function activatePower() {
+    if (pwSeq !== 'idle' || charges < 1 || !powerElig.ok) return;
+    setPwSeq('charge'); sfx('scratch');
+    setTimeout(() => { setPwFlash(true); usePower(); setTimeout(() => setPwFlash(false), 480); }, 620); // usePower() bascule prepDone → carte de confirmation
   }
   function passPower() { socket.emit('player:ready', {}); setPrepDone(true); }
   function sendReaction(id: number, end = false) { socket.emit('player:reaction', { id, end }); } // taunt affiché sur l'écran hôte (anti-spam serveur). end = jeu de réactions de fin de partie.
@@ -652,7 +661,8 @@ export default function Player() {
   /* ---- en jeu ---- */
   const powerMode = round.mode === 'multi' && !round.mj; // charges visibles seulement en Blind Test auto (pas Buzzer/Quiz/Survivor/MJ)
   return (
-    <><GrungeBg />
+    <>{pwFlash && <div className="pw-flash" aria-hidden="true" style={av ? { ['--cc' as any]: CATEGORY_COLORS[av.cat] } : undefined} />}
+    <GrungeBg />
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
       {round.mode === 'buzzer' && buzz === 'mine' && buzzEndsAt > 0 && (
         <div className={`buzzglow${buzzLeft <= 3 ? ' hot' : ''}`} aria-hidden="true" style={{ ['--urg' as any]: Math.max(0, Math.min(1, (10 - buzzLeft) / 10)) }} />
@@ -695,31 +705,33 @@ export default function Player() {
       )}
 
       {phase === 'prep' && (
-        <div className="center" style={{ gap: 14 }}>
+        <div className={`center pw-prep${pwSeq === 'charge' ? ' shake' : ''}`} style={{ gap: 14, ...(av ? { ['--cc' as any]: CATEGORY_COLORS[av.cat] } : {}) }}>
           <span className="eyebrow">Manche {round.index + 1} / {round.total} · {round.difficulty}</span>
           <h2 className="title-xl">Pouvoirs</h2>
           <span className="url">à activer avant la musique</span>
           <div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.max(0, Math.ceil((prepEndsAt - now) / 1000))}</div>
           {!prepDone ? (av && (
-            <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="powerbar">
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="row" style={{ justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                    <span className="eyebrow" style={{ fontSize: 12, color: 'var(--ember)' }}>{av.power.name}</span>
-                    <Charges n={charges} charge={charge} />
-                  </div>
-                  <div style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.42, margin: '7px 0 0' }}>{av.power.effect}</div>
-                </div>
+            <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="pw-emblem">
+                <div className="pw-emblem-name">{av.power.name}</div>
+                <div className="pw-emblem-fx">{boldFx(av.power.effect)}</div>
+                <Charges n={charges} charge={charge} />
               </div>
               {charges < 1 && <p className="trashtalk">{TRASH_TALK[round.index % TRASH_TALK.length]}</p>}
-              <div className="row" style={{ gap: 10 }}>
-                <button className="btn" style={{ flex: 1 }} onClick={passPower}>{charges >= 1 ? 'Passer' : 'Prêt'}</button>
-                <button className="btn warm" style={{ flex: 1 }} onClick={usePower} disabled={charges < 1 || !powerElig.ok} title={!powerElig.ok ? powerElig.reason : undefined}>{charges < 1 ? 'Aucune charge' : !powerElig.ok ? (powerElig.reason || 'Sans effet ce tour') : `Activer (${charges})`}</button>
-              </div>
+              <button className="pw-slam" onClick={activatePower} disabled={charges < 1 || !powerElig.ok || pwSeq !== 'idle'} title={!powerElig.ok ? powerElig.reason : undefined}>
+                <span className="pw-slam-charge" aria-hidden="true" />
+                <span className="pw-slam-lbl">{charges < 1 ? 'Aucune charge' : !powerElig.ok ? (powerElig.reason || 'Sans effet') : pwSeq === 'charge' ? 'CHARGE…' : 'DÉCLENCHER'}</span>
+              </button>
+              <button className="pw-skip" onClick={passPower} disabled={pwSeq !== 'idle'}>{charges >= 1 ? 'Passer mon tour' : 'Je suis prêt'}</button>
               {powerMsg && <p className="feedback bad">{powerMsg}</p>}
             </div>
           )) : (
-            <><p className="feedback good">{powerMsg || 'Prêt !'}</p><p className="muted">En attente des autres…</p></>
+            <div className="pw-confirm">
+              <div className="pw-confirm-bolt" aria-hidden="true">⚡</div>
+              <div className="pw-confirm-title">POUVOIR ENCLENCHÉ</div>
+              <div className="pw-confirm-msg">{powerMsg || 'Prêt !'}</div>
+              <p className="muted">En attente des autres…</p>
+            </div>
           )}
         </div>
       )}
