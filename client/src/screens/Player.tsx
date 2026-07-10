@@ -352,7 +352,7 @@ export default function Player() {
   function activatePower() {
     if (pwSeq !== 'idle' || charges < 1 || !powerElig.ok) return;
     setPwSeq('charge'); sfx('scratch');
-    setTimeout(() => { setPwFlash(true); usePower(); setTimeout(() => setPwFlash(false), 480); }, 620); // usePower() bascule prepDone → carte de confirmation
+    setTimeout(() => { setPwFlash(true); usePower(); setTimeout(() => setPwFlash(false), 480); }, 200); // délai raccourci (620→200 ms) : activation quasi instantanée, plus de latence ressentie / enchaînable ; usePower() bascule prepDone → carte de confirmation
   }
   function passPower() { socket.emit('player:ready', {}); setPrepDone(true); }
   function sendReaction(id: number, end = false) { socket.emit('player:reaction', { id, end }); } // taunt affiché sur l'écran hôte (anti-spam serveur). end = jeu de réactions de fin de partie.
@@ -376,6 +376,9 @@ export default function Player() {
   const myPts = myResult?.points || 0; // peut être NÉGATIF (pari perdu : SCH/Kaaris/Freeze…)
   const av = avatarById(avatarId);
   const takenIds = new Set(players.filter((p) => p.connected && p.id !== meId.current).map((p) => p.avatar)); // persos déjà pris
+
+  // décompte sonore pendant que le buzzeur tape sa réponse (même tic 'countdown' que l'accueil / la TV, plus aigu sur les 3 dernières s)
+  useEffect(() => { if (round.mode === 'buzzer' && buzz === 'mine' && buzzLeft > 0) sfx('countdown', buzzLeft <= 3 ? { rate: 1.7 } : undefined); }, [buzzLeft, buzz]);
 
   /* ---- 1) formulaire : code + pseudo ---- */
   if (!joined && step === 'form') {
@@ -714,7 +717,7 @@ export default function Player() {
 
       {phase === 'prep' && (
         <div className={`center pw-prep${pwSeq === 'charge' ? ' shake' : ''}`} style={{ gap: 14, ...(av ? { ['--cc' as any]: CATEGORY_COLORS[av.cat] } : {}) }}>
-          <span className="eyebrow">Manche {round.index + 1} / {round.total} · {round.difficulty}</span>
+          <span className="eyebrow">Manche {round.index + 1} / {round.total}</span>
           <h2 className="title-xl">Pouvoirs</h2>
           <span className="url">à activer avant la musique</span>
           <div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.max(0, Math.ceil((prepEndsAt - now) / 1000))}</div>
@@ -804,7 +807,7 @@ export default function Player() {
               </>)
               : buzz === 'locked' ? (<><svg width="46" height="46" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--muted)' }}><rect x="5" y="10.5" width="14" height="9.5" rx="2" stroke="currentColor" strokeWidth="1.7" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.7" /></svg><p className="muted">{buzzMsg}</p></>)
                 : jamMs > 0 ? (<><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti — tu pourras buzzer dans un instant.</p></>)
-                : (<><h2 className="title-xl" style={{ marginBottom: 4 }}>Reconnais le son</h2><button className="buzzer" onClick={doBuzz} style={{ marginTop: 'clamp(40px, 20vh, 190px)' }}>BUZZ</button><p className="muted" style={{ marginTop: 8 }}>Le plus rapide prend le mic</p></>)
+                : (<><h2 className="title-xl" style={{ marginBottom: 4 }}>Reconnais le son</h2><p className="muted" style={{ marginTop: 0, marginBottom: 0 }}>Le plus rapide prend le mic</p><button className="buzzer" onClick={doBuzz} style={{ marginTop: 'clamp(40px, 20vh, 190px)' }}>BUZZ</button></>)
           ) : jamMs > 0 ? (
             <><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti — tu peux répondre dans un instant.</p></>
           ) : submitted ? (
@@ -1058,9 +1061,9 @@ export default function Player() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginTop: 8, width: '100%', maxWidth: 380 }}>
             <span className="eyebrow" style={{ color: 'var(--fluo)' }}>On rejoue ?</span>
             {replayVote === null ? (
-              <div className="row" style={{ gap: 10 }}>
-                <button className="btn warm big" onClick={() => castReplayVote(true)}>Rejouer →</button>
-                <button className="btn" onClick={() => castReplayVote(false)}>Pas cette fois</button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', alignItems: 'center' }}>
+                <button className="btn warm big" style={{ whiteSpace: 'nowrap' }} onClick={() => castReplayVote(true)}>Rejouer →</button>
+                <button className="btn" style={{ whiteSpace: 'nowrap' }} onClick={() => castReplayVote(false)}>Pas cette fois</button>
               </div>
             ) : (
               <p className="feedback good" style={{ margin: 0 }}>{replayVote ? 'Tu veux rejouer' : 'Tu passes'} · <button className="exit-link" style={{ display: 'inline' }} onClick={() => castReplayVote(!replayVote)}>changer d'avis</button></p>

@@ -137,6 +137,7 @@ export default function Host() {
   const [prepReady, setPrepReady] = useState<{ count: number; total: number }>({ count: 0, total: 0 });
   const previewRef = useRef<any>({ url: '', clipMs: 30000, startAt: 0 });
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const preloadRef = useRef<HTMLAudioElement | null>(null); // extrait PRÉCHARGÉ (élément audio détaché) pendant le décompte → lecture sans latence au 'playing'
   const clipTimer = useRef<any>(null);
   const audioRetryRef = useRef<any>(null);   // relances programmées quand le son échoue (auto-réparation)
   const wantAudioRef = useRef(false);         // true = un extrait DOIT être en train de jouer (manche en cours)
@@ -267,7 +268,12 @@ export default function Host() {
     socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); setWaiting(d.waiting || 0); if (typeof d.poolSize === 'number') setPoolSize(d.poolSize); if (d.phase === 'lobby') { setPhase('lobby'); sfxLoopStop(); } });
     socket.on('round:prep', (d: any) => { stopAllMusicExcept('lobby'); if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
-    socket.on('round:countdown', (d: any) => { sfxStop('scratch'); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
+    socket.on('round:countdown', (d: any) => { sfxStop('scratch'); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown');
+      // PRÉCHARGE l'extrait pendant le décompte via un élément audio DÉTACHÉ (jamais joué, muet) : le navigateur met
+      // le mp3 en cache (/api/preview renvoie Cache-Control public) → au 'playing', le vrai lecteur démarre sans latence.
+      // N'interfère avec aucune source en cours (Deezer/Spotify) puisqu'on ne touche pas à audioRef.
+      if (d.preload) { try { const pre = preloadRef.current || (preloadRef.current = new Audio()); pre.muted = true; pre.preload = 'auto'; if (pre.getAttribute('src') !== d.preload) { pre.src = d.preload; pre.load(); } } catch {} }
+    });
     socket.on('round:host', (d: any) => { sfxStop('scratch'); if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setReveal(null); setAnswered([]); setBuzzWinner(null); buzzActiveRef.current = false; setRound(d); setPhase('playing');
       if (d.mode === 'quiz') { previewRef.current = { url: '', clipMs: 30000, startAt: 0 }; stopAllMusicExcept('lobby'); } // QUIZ = pas d'extrait ; on garde l'instru lobby (Alpha Wann) en fond, on coupe menu/Deezer/Spotify de façon fiable
       else playRound(d); });
@@ -329,7 +335,7 @@ export default function Host() {
     if (phase !== 'reveal' || revealStep < 1 || !reveal || reveal.hideBoard) { setRankAnim(false); return; }
     setRankAnim(false);
     const big = (reveal.scores || []).some((p: any) => !p.isMJ && Math.abs(p.rankDelta || 0) >= 3);
-    const t = setTimeout(() => { setRankAnim(true); if (big) sfx('horn'); }, 700);
+    const t = setTimeout(() => { setRankAnim(true); if (big) sfx('horn'); }, 950);
     return () => clearTimeout(t);
   }, [phase, revealStep, reveal]);
   // AUTO-RÉPARATION DU SON (priorité : la musique doit marcher à chaque fois). Pendant qu'un extrait
@@ -550,6 +556,7 @@ export default function Host() {
   const buzzRemain = buzzWinner?.endsAt ? Math.max(0, buzzWinner.endsAt - now) : 0;
   const buzzSec = Math.ceil(buzzRemain / 1000);
   const buzzFrac = buzzWinner?.answerMs ? Math.max(0, Math.min(1, buzzRemain / buzzWinner.answerMs)) : 0;
+  const buzzColor = `hsl(${Math.round(130 * buzzFrac)} 88% 52%)`; // anneau de decompte : vert (temps plein, frac~1) -> rouge (fin, frac~0), progressif
   // BUZZ — tick de decompte a chaque seconde ; les 3 dernieres s : tick plus AIGU (rate>1) = urgence audible sans regarder l'ecran
   useEffect(() => { if (round.mode === 'buzzer' && buzzWinner && buzzSec > 0) sfx('countdown', buzzSec <= 3 ? { rate: 1.7 } : undefined); }, [buzzSec, buzzWinner]);
   const rushFrac = round.rushMax ? Math.max(0, Math.min(1, remaining / round.rushMax)) : 0; // jauge de temps Survivor
@@ -638,6 +645,7 @@ export default function Host() {
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
       <div className={`topbar${['prep', 'countdown', 'playing', 'reveal', 'final'].includes(phase) ? ' gamebar' : ''}`}>
         <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">R</span></h1>
+        {phase === 'final' && finalStep === 'podium' && <span className="hdr-gameover">{series && series.gamesPlayed >= 2 ? `Partie ${series.gamesPlayed} terminée` : 'Partie terminée'}</span>}
         <span className="row" style={{ gap: 14, alignItems: 'center' }}>
           {phase === 'lobby' && <><span className="gpill">Salon {code}</span><span className="gpill"><span className="dot" />{players.length} joueur{players.length !== 1 ? 's' : ''}</span></>}
           {['prep', 'countdown', 'playing', 'reveal'].includes(phase) && (<>
@@ -797,19 +805,18 @@ export default function Host() {
                 <div className={`ring big buzzring${buzzSec <= 3 ? ' hot' : ''}`}>
                   <svg viewBox="0 0 120 120">
                     <circle cx="60" cy="60" r="54" stroke="rgba(255,255,255,.10)" strokeWidth="9" fill="none" />
-                    <circle cx="60" cy="60" r="54" stroke={buzzSec <= 3 ? '#ff5a4d' : '#ffb02e'} strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - buzzFrac)} style={{ transition: 'stroke-dashoffset .18s linear' }} />
+                    <circle cx="60" cy="60" r="54" stroke={buzzColor} strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - buzzFrac)} style={{ transition: 'stroke-dashoffset .18s linear, stroke .18s linear' }} />
                   </svg>
                   <div className="buzzav"><Med avatarId={buzzWinner.avatar || undefined} size={128} /></div>
                 </div>
                 <h2 className="title-xl" style={{ margin: 0 }}>À <span style={{ color: 'var(--ember)' }}>{buzzWinner.name}</span> !</h2>
-                <p className="buzzmeta" style={{ color: buzzSec <= 3 ? '#ff5a4d' : 'var(--muted)' }}>tape sa réponse · <b style={{ color: buzzSec <= 3 ? '#ff5a4d' : 'var(--fluo)' }}>{buzzSec}s</b></p>
+                <p className="buzzmeta" style={{ color: buzzSec <= 3 ? '#ff5a4d' : 'var(--muted)' }}>tape sa réponse · <b style={{ color: buzzColor }}>{buzzSec}s</b></p>
               </div>
             ) : (
               /* BUZZER OUVERT — invitation géante */
               <div className="buzzstage">
                 <div className="buzzdisc"><span>BUZZ</span></div>
                 <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
-                <span className="playmeta">Mode buzzer · {round.difficulty}</span>
                 <p className="lead">Le premier qui reconnaît le son prend la main.</p>
               </div>
             )
@@ -863,23 +870,8 @@ export default function Host() {
               </div>
             </div>
           )}
-          {/* COUPS DE POUVOIR — mis en avant : explique pourquoi un score bouge sans (bonne) réponse (effet de fin de manche) */}
-          {revealStep < 1 && reveal.results && reveal.results.some((r: any) => r.power) && (
-            <div className="powerplays">
-              <div className="pp-head"><span className="pp-bolt">⚡</span> Coups de pouvoir</div>
-              <div className="pp-list">
-                {reveal.results.filter((r: any) => r.power).map((r: any) => (
-                  <div className="pp-row" key={r.id} style={{ ['--pc' as any]: catColor(r.avatar) }}>
-                    <Med avatarId={r.avatar} size={54} />
-                    <div className="pp-txt">
-                      <div className="pp-who"><b>{r.name}</b> déclenche <span className="pp-name">{r.power.name}</span></div>
-                      <div className="pp-note">{r.power.note}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* COUPS DE POUVOIR — encart en tête RETIRÉ : il poussait les réponses hors écran quand il y en avait trop.
+              Le pouvoir reste rappelé sous chaque réponse (.v-pow, non-poussant) puis en PASTILLE .powpill sur la ligne du joueur au classement. */}
           {/* ÉTAPE 1 — QUI A RÉPONDU QUOI (+ points gagnés). Disparaît quand le classement arrive (revealStep>=1). */}
           {revealStep < 1 && !round.mj && reveal.results && reveal.results.filter((r: any) => !r.isMJ && (round.mode !== 'buzzer' || r.tried)).length > 0 && (
             <div className="verdicts">
@@ -922,8 +914,8 @@ export default function Host() {
               const r = reveal.results.find((x: any) => x.id === p.id);
               const d = p.rankDelta || 0;
               return (
-                <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}${rankAnim ? (d > 0 ? ' climb' : d < 0 ? ' drop' : '') : ''}`} key={p.id} style={{ ['--d' as any]: Math.min(Math.abs(d) || 1, 4), animationDelay: `${i * 0.05}s` }}>
-                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={46} />{p.name}</span>
+                <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}${rankAnim ? (d > 0 ? ' climb' : d < 0 ? ' drop' : '') : ''}`} key={p.id} style={{ ['--d' as any]: Math.min(Math.abs(d) || 1, 4), animationDelay: `${i * 0.09}s` }}>
+                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={46} />{p.name}{r && r.power && <span className="powpill" style={{ ['--pc' as any]: catColor(p.avatar) }} title={r.power.note}>⚡ {r.power.name}</span>}</span>
                   <span className="row" style={{ gap: 12 }}>
                     {d !== 0 && (
                       <span style={{ color: d > 0 ? 'var(--green)' : 'var(--bad)', display: 'inline-flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 12 }}>
@@ -1119,7 +1111,7 @@ export default function Host() {
         return (
         <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(14px,3vh,44px)', paddingBottom: 'clamp(96px,17vh,150px)', gap: 20 }}>
           {finalStep === 'podium' ? (<>
-          <span className="eyebrow">{multi ? `Partie ${series.gamesPlayed} — terminée` : 'Podium'}</span>
+
           {/* PODIUM top 3 (2 · 1 · 3) — un seul disque de certif fusionné, prénom adaptatif, aud./manche */}
           <div className="podium">
             {([[board[1], 2], [board[0], 1], [board[2], 3]] as [any, number][]).map(([p, pos]) => {
@@ -1178,7 +1170,10 @@ export default function Host() {
                 <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={p.id}>
                   <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={26} />{p.name}
                     {p.gameWins > 0 && <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>{p.gameWins} gagnée{p.gameWins > 1 ? 's' : ''}</span>}</span>
-                  <span className="pts">{fmtAud(p.total)}</span>
+                  <span className="prow-right">
+                    <span className={`pcert tier-${CERTIF_TIER[certif(p.total, p.totalRounds).short] ?? 0}`}>{certif(p.total, p.totalRounds).short}</span>
+                    <span className="pts">{fmtAud(p.total)}</span>
+                  </span>
                 </div>
               ))}
             </div>

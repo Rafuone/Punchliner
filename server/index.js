@@ -564,7 +564,9 @@ function beginRound(room) {
         io.to(pl.socketId).emit('power:eligible', { eligible: ok, reason: ok ? '' : powerIneligibleReason(pw) });
       }
     }
-    room.cdTimer = setTimeout(() => startRound(room), seconds * 1000);
+    // fin de la fenêtre pouvoirs → DÉCOMPTE ~3 s avant la musique : l'hôte PRÉCHARGE l'extrait et le scratch
+    // du dernier pouvoir a le temps de finir (plus de débordement sur le début de la manche ni de son en retard)
+    room.cdTimer = setTimeout(() => startCountdown(room), seconds * 1000);
   } else {
     // quiz / Maître du jeu : pas de pouvoirs → décompte direct
     room.phase = 'countdown';
@@ -578,6 +580,20 @@ function beginRound(room) {
 // La fenêtre pouvoirs va TOUJOURS jusqu'au bout de ses 10 s, même si tout le monde est prêt : on a le
 // temps de LIRE qui a lancé quel pouvoir (et son effet) sur la TV. (Avant : elle se fermait d'un coup.)
 function checkPrepDone(_room) { /* no-op volontaire — le décompte complet est conservé */ }
+
+// DÉCOMPTE ~3 s AVANT la musique (Blind Test multi, APRÈS la fenêtre pouvoirs). Deux buts : (1) laisser l'hôte
+// PRÉCHARGER l'extrait (URL envoyée dans 'preload' → mis en cache navigateur avant lecture, plus de son qui met
+// ~5 s à démarrer) ; (2) donner au scratch du dernier pouvoir le temps de finir avant que la musique parte
+// (plus de scratch qui déborde sur le début de la manche). Buzzer/Quiz/MJ gardent leur décompte direct via beginRound.
+function startCountdown(room) {
+  if (room.phase !== 'prep' && room.phase !== 'countdown') return; // annulé (salon fermé / restart pendant la fenêtre)
+  room.phase = 'countdown';
+  clearTimeout(room.cdTimer);
+  const seconds = FAST ? 1 : 3;
+  io.to(room.hostId).emit('round:countdown', { seconds, index: room.roundIndex, total: room.totalRounds, preload: room.current?.preview || '' });
+  io.to(room.code).emit('round:countdown', { seconds });
+  room.cdTimer = setTimeout(() => startRound(room), seconds * 1000);
+}
 
 function startRound(room) {
   if (room.phase !== 'countdown' && room.phase !== 'prep') return; // annulé pendant décompte / fenêtre pouvoirs

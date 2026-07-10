@@ -197,6 +197,13 @@ button, input { font-family: inherit; }
 .prow.p3 { border-color: #c67f38; background: rgba(198, 127, 56, .08); }
 .prow.p3 .rk { background: #cd7f32; color: var(--ink); }
 .prow.p3 .pts { color: #e0975a; }
+/* tv-podium : certif PAR JOUEUR dans le classement général de série (prorata cumulé) */
+.prow-right { display: flex; align-items: center; gap: 12px; }
+.pcert { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 13px; line-height: 1; padding: 4px 9px; border-radius: 4px; border: 1px solid transparent; white-space: nowrap; }
+.pcert.tier-0 { color: #c9b98f; border-color: rgba(201,185,143,.45); }
+.pcert.tier-1 { color: #ffd76b; border-color: rgba(255,215,107,.6); background: rgba(255,215,107,.08); }
+.pcert.tier-2, .pcert.tier-3, .pcert.tier-4 { color: #eaf0f8; border-color: rgba(220,230,245,.55); background: rgba(220,230,245,.06); }
+.pcert.tier-5 { border: 0; background-image: var(--irid-grad); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; animation: irid 7s linear infinite; }
 .gain { color: var(--green); font-weight: 800; }
 .gain.zero { color: var(--muted2); }
 .gain.loss { color: var(--bad); font-weight: 800; }
@@ -266,11 +273,16 @@ button, input { font-family: inherit; }
 .board.tvbig .rk { width: clamp(30px, 3vw, 36px); height: clamp(30px, 3vw, 36px); font-size: 16px; border-radius: 5px; }
 .board.tvbig .pts { font-size: clamp(20px, 2.3vw, 30px); }
 .board.tvbig .gain { font-size: clamp(15px, 1.8vw, 21px); }
+/* pastille POUVOIR sur la ligne du joueur au classement (non-poussante : reste dans la ligne existante) */
+.board.tvbig .powpill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 11px; border-radius: 999px;
+  font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .02em; font-size: clamp(12px, 1.2vw, 16px);
+  color: var(--pc, var(--fluo)); background: color-mix(in srgb, var(--pc, var(--fluo)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pc, var(--fluo)) 55%, transparent); white-space: nowrap; }
 /* remontée / dégringolade au reveal : FLIP-lite piloté par le delta de rang (--d) — slide + flash couleur */
-.board.tvbig .prow.climb { animation: climbin .52s cubic-bezier(.2,.8,.3,1.2) both; }
-.board.tvbig .prow.drop { animation: dropin .52s cubic-bezier(.2,.8,.3,1.2) both; }
-@keyframes climbin { 0% { opacity: 0; transform: translateY(calc(20px * var(--d, 1))); } 55% { opacity: 1; box-shadow: inset 0 0 0 2px var(--green); } 100% { opacity: 1; transform: none; } }
-@keyframes dropin { 0% { opacity: 0; transform: translateY(calc(-20px * var(--d, 1))); } 55% { opacity: 1; box-shadow: inset 0 0 0 2px var(--bad); } 100% { opacity: 1; transform: none; } }
+.board.tvbig .prow.climb { animation: climbin 1.15s cubic-bezier(.2,.8,.3,1.2) both; }
+.board.tvbig .prow.drop { animation: dropin 1.15s cubic-bezier(.2,.8,.3,1.2) both; }
+@keyframes climbin { 0% { opacity: 0; transform: translateY(calc(42px * var(--d, 1))); } 15% { opacity: 1; } 70% { box-shadow: inset 0 0 0 2px var(--green); } 100% { opacity: 1; transform: none; } }
+@keyframes dropin { 0% { opacity: 0; transform: translateY(calc(-42px * var(--d, 1))); } 15% { opacity: 1; } 70% { box-shadow: inset 0 0 0 2px var(--bad); } 100% { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .board.tvbig .prow, .board.tvbig .prow.climb, .board.tvbig .prow.drop { animation: none; } }
 /* Reveal — bandeau "gros mouvement" (quelqu'un venu de loin), en bas ; apparaît AVEC l'anim retardée (.on) */
 .bigmove { margin-top: 6px; font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .12em;
@@ -616,26 +628,33 @@ button, input { font-family: inherit; }
 .buzzer { position: relative; width: clamp(200px, 64vw, 268px); height: clamp(200px, 64vw, 268px); border-radius: 50%; cursor: pointer; border: none;
   font-family: var(--disp); font-weight: 700; font-size: clamp(42px, 14vw, 68px); letter-spacing: .04em; text-transform: uppercase; color: var(--ink);
   background: var(--fluo);
-  box-shadow: 0 15px 0 #6a7700, 0 18px 16px -14px rgba(0,0,0,.32), inset 0 8px 16px rgba(255,255,255,.6), inset 0 -16px 26px rgba(0,0,0,.24);
-  transition: transform .09s ease, box-shadow .09s ease; animation: buzzpulse 1.2s ease-in-out infinite; -webkit-tap-highlight-color: transparent; }
-.buzzer::after { content: ''; position: absolute; inset: 16px; border-radius: 50%; border: 2px dashed rgba(10,11,12,.26); pointer-events: none; }
+  box-shadow: 0 0 46px rgba(166,255,0,.4), inset 0 8px 16px rgba(255,255,255,.6), inset 0 -14px 24px rgba(166,255,0,.16);
+  transition: transform .09s ease, box-shadow .09s ease; animation: buzzsonar 1.6s ease-out infinite; -webkit-tap-highlight-color: transparent; }
+.buzzer::after { content: ''; position: absolute; inset: 16px; border-radius: 50%; border: none; pointer-events: none; }
 /* on appuie : le bouton descend sur sa base (15px), la base disparaît presque */
-.buzzer:active { transform: translateY(15px) scale(.985); animation: none;
-  box-shadow: 0 2px 0 #6a7700, 0 5px 10px rgba(0,0,0,.5), inset 0 6px 14px rgba(255,255,255,.42), inset 0 -10px 20px rgba(0,0,0,.3); }
+.buzzer:active { transform: scale(.955); animation: none;
+  box-shadow: 0 0 30px rgba(166,255,0,.35), inset 0 6px 14px rgba(255,255,255,.42), inset 0 -10px 18px rgba(166,255,0,.2); }
 @keyframes buzzpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 @media (prefers-reduced-motion: reduce) { .buzzer { animation: none; } }
+/* onde sonar fluo — PARTAGÉE par le buzzer (tel) ET le disque BUZZ (TV) : anneau qui irradie + glow constant, AUCUNE ombre sombre. box-shadow (non clippé par overflow:hidden du disque). */
+@keyframes buzzsonar {
+  0%   { box-shadow: 0 0 46px rgba(166,255,0,.4), 0 0 0 0 rgba(166,255,0,.55), inset 0 8px 16px rgba(255,255,255,.6), inset 0 -14px 24px rgba(166,255,0,.16); }
+  70%  { box-shadow: 0 0 46px rgba(166,255,0,.4), 0 0 0 26px rgba(166,255,0,0), inset 0 8px 16px rgba(255,255,255,.6), inset 0 -14px 24px rgba(166,255,0,.16); }
+  100% { box-shadow: 0 0 46px rgba(166,255,0,.4), 0 0 0 26px rgba(166,255,0,0), inset 0 8px 16px rgba(255,255,255,.6), inset 0 -14px 24px rgba(166,255,0,.16); }
+}
 
 /* buzzer — scène TV (host) */
 .buzzstage { display: flex; flex-direction: column; align-items: center; gap: clamp(14px, 3vh, 30px); }
-.buzzring { filter: drop-shadow(0 0 26px rgba(255,176,46,.4)); }
-.buzzring.hot { filter: drop-shadow(0 0 30px rgba(255,90,77,.55)); animation: buzzshake .5s ease-in-out infinite; }
+.ring.big.buzzring { filter: none; } /* plus de lueur (verte, héritée de .ring.big) autour de l'avatar du buzzeur */
+.ring.big.buzzring.hot { filter: none; }
+.buzzring.hot { animation: buzzshake .5s ease-in-out infinite; }
 .buzzring .buzzav { position: absolute; inset: 0; display: grid; place-items: center; }
 .buzzring .buzzav .med { border: 3px solid rgba(255,255,255,.14); }
 .buzzmeta { font-family: var(--disp); font-weight: 700; font-size: clamp(20px, 3.2vw, 34px); letter-spacing: .02em; margin: 0; text-align: center; }
-.buzzdisc { width: clamp(200px, 34vw, 420px); height: clamp(200px, 34vw, 420px); border-radius: 50%; display: grid; place-items: center; box-sizing: border-box; overflow: hidden;
-  background: var(--fluo); color: var(--ink); border: 3px solid var(--ink);
+.buzzdisc { width: clamp(200px, 34vw, 420px); height: clamp(200px, 34vw, 420px); border-radius: 50%; display: grid; place-items: center; box-sizing: border-box; overflow: hidden; border: none;
+  background: var(--fluo); color: var(--ink);
   font-family: var(--disp); font-weight: 700; font-size: clamp(40px, 7vw, 110px); letter-spacing: .04em; line-height: 1; white-space: nowrap; padding: 0 .18em;
-  box-shadow: 6px 6px 0 rgba(0,0,0,.5), 0 0 54px rgba(166,255,0,.4); animation: buzzpulse 1.15s ease-in-out infinite; }
+  box-shadow: 0 0 46px rgba(166,255,0,.4), inset 0 8px 16px rgba(255,255,255,.6), inset 0 -14px 24px rgba(166,255,0,.16); animation: buzzsonar 1.6s ease-out infinite; }
 .buzzdisc span { padding-left: .04em; } /* recentre le mot : la letter-spacing ajoute un vide à droite du dernier glyphe */
 @keyframes buzzpulse {
   0%, 100% { transform: scale(1); box-shadow: 6px 6px 0 rgba(0,0,0,.5), 0 0 44px rgba(166,255,0,.34); }
@@ -1263,20 +1282,23 @@ button, input { font-family: inherit; }
 .pw-emblem { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 16px 18px; border-radius: 16px;
   background: radial-gradient(120% 120% at 50% 0%, color-mix(in srgb, var(--cc) 16%, transparent), rgba(10,11,14,.7)); border: 1px solid color-mix(in srgb, var(--cc) 55%, transparent);
   box-shadow: inset 0 0 40px -18px var(--cc), 0 0 30px -16px var(--cc); }
-.pw-emblem-name { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; font-size: clamp(24px, 8vw, 34px); line-height: .98; color: var(--cc); text-shadow: 0 2px 18px color-mix(in srgb, var(--cc) 45%, transparent); }
-.pw-emblem-fx { font-size: 14px; color: var(--muted); line-height: 1.42; }
+.pw-emblem-name { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; font-size: clamp(19px, 6vw, 26px); line-height: 1.02; color: var(--cc); text-shadow: 0 2px 14px color-mix(in srgb, var(--cc) 40%, transparent); }
+.pw-emblem-fx { font-size: 15.5px; color: color-mix(in srgb, var(--txt) 80%, transparent); line-height: 1.5; }
 .pw-emblem-fx b { color: var(--txt); font-weight: 800; }
 .pw-slam { position: relative; overflow: hidden; width: 100%; height: 74px; border-radius: 14px; cursor: pointer; border: 2px solid var(--cc);
   font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: clamp(22px, 6.4vw, 30px); color: var(--ink);
-  background: var(--cc); box-shadow: 0 10px 0 color-mix(in srgb, var(--cc) 45%, #000), 0 16px 26px -8px color-mix(in srgb, var(--cc) 55%, transparent), inset 0 6px 14px rgba(255,255,255,.35);
+  background: var(--cc); box-shadow: 0 10px 0 color-mix(in srgb, var(--cc) 45%, #000), 0 12px 18px -12px color-mix(in srgb, var(--cc) 40%, transparent), inset 0 6px 14px rgba(255,255,255,.35);
   transition: transform .09s ease, box-shadow .09s ease; -webkit-tap-highlight-color: transparent; }
 .pw-slam:disabled { filter: grayscale(.5) brightness(.7); cursor: default; box-shadow: none; }
 .pw-slam:not(:disabled):active { transform: translateY(10px); box-shadow: 0 0 0 color-mix(in srgb, var(--cc) 45%, #000); }
+/* pendant la charge le bouton passe disabled : on FIGE l'état "enfoncé" (translateY + ombre plate) pour éviter le saut de hauteur
+   visuel au clic — sinon il perd :active + l'ombre 3D (box-shadow:none) et "remonte" de 10px. Spécificité (0,2,1) > :disabled (0,1,1). */
+.pw-prep.shake .pw-slam { transform: translateY(10px); box-shadow: 0 0 0 color-mix(in srgb, var(--cc) 45%, #000); filter: none; }
 .pw-slam-lbl { position: relative; z-index: 1; }
 .pw-slam-charge { position: absolute; inset: 0; z-index: 0; background: rgba(255,255,255,.9); transform: scaleX(0); transform-origin: left; }
 .pw-slam:disabled .pw-slam-charge { display: none; }
-.pw-prep.shake .pw-slam-charge { animation: pw-charge .62s linear both; }
-.pw-skip { background: none; border: none; color: var(--muted); font-family: var(--ui); font-size: 14px; text-decoration: underline; cursor: pointer; padding: 4px; }
+.pw-prep.shake .pw-slam-charge { animation: pw-charge .2s linear both; }
+.pw-skip { background: rgba(255,255,255,.05); border: 1px solid color-mix(in srgb, var(--txt) 24%, transparent); border-radius: 10px; color: var(--txt); font-family: var(--ui); font-weight: 700; font-size: 15px; cursor: pointer; padding: 11px 18px; }
 .pw-skip:disabled { opacity: .4; cursor: default; }
 .pw-flash { position: fixed; inset: 0; z-index: 500; pointer-events: none; background: radial-gradient(circle at 50% 45%, var(--cc, var(--fluo)), transparent 70%); mix-blend-mode: screen; animation: pw-flashfx .48s ease-out both; }
 .pw-confirm { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 22px 20px; border-radius: 16px;
@@ -1394,7 +1416,9 @@ button, input { font-family: inherit; }
 .pod .p-aud small { font-family: var(--ui); font-weight: 700; font-size: .42em; color: var(--muted2); }
 .pod .p-permanche { font-family: var(--ui); font-weight: 700; font-size: 12px; color: var(--muted2); font-variant-numeric: tabular-nums; line-height: 1; margin-top: 1px; }
 .pod.p1 .p-permanche { font-size: 13px; color: var(--muted); }
-.pod .ped { width: 100%; min-width: 96px; border-radius: 6px 6px 0 0; background: linear-gradient(180deg,var(--surf2),var(--surf)); border: 1px solid var(--line2); border-bottom: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; color: var(--muted2); }
+.pod .ped { width: 100%; min-width: 96px; border-radius: 6px 6px 0 0; background: linear-gradient(180deg,var(--surf2),var(--surf)); border: 1px solid var(--line2); border-bottom: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; color: var(--muted2);
+  /* tv-podium : adoucir la coupure BASSE des marches (avant : bord net) → fondu vers transparent */
+  -webkit-mask-image: linear-gradient(180deg, #000 68%, rgba(0,0,0,.35) 88%, transparent); mask-image: linear-gradient(180deg, #000 68%, rgba(0,0,0,.35) 88%, transparent); }
 .pod.p1 .ped { height: 132px; border-color: var(--fluo); background: linear-gradient(180deg,rgba(228,255,26,.14),rgba(228,255,26,.03)); color: var(--fluo); font-size: 52px; }
 /* 2e = ARGENT BLEUTÉ · 3e = BRONZE (le 1er est vert plus haut) */
 .pod.p2 .ped { height: 96px; font-size: 40px; border-color: #8ea3c4; background: linear-gradient(180deg,rgba(142,163,196,.16),rgba(142,163,196,.03)); color: #b6c7e4; }
@@ -1538,6 +1562,8 @@ button, input { font-family: inherit; }
 /* header EN JEU — mêmes hauteurs pour équilibrer (retour showroom tv-playing) : manche / salon / bouton alignés */
 .topbar.gamebar .gmeta, .topbar.gamebar .salontag, .topbar.gamebar .btn { min-height: 52px; }
 .topbar.gamebar .salontag, .topbar.gamebar .btn { display: inline-flex; align-items: center; }
+/* tv-podium : titre de fin de partie CENTRÉ dans le header (déplacé de l'eyebrow au-dessus du podium) */
+.hdr-gameover { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; font-size: clamp(20px,2.8vw,34px); color: var(--fluo); white-space: nowrap; pointer-events: none; }
 
 /* ── SHOWROOM : itérations du BUZZ (bzv-1..5) — toutes SANS ombre portée sombre (idée de la v4 = onde sonar) ── */
 .bzv-1 .buzzer,.bzv-2 .buzzer,.bzv-3 .buzzer,.bzv-4 .buzzer,.bzv-5 .buzzer{ animation:none;
