@@ -419,7 +419,9 @@ export default function Host() {
   function startMenu() {
     if (startedRef.current || !musicOnRef.current) return;
     startedRef.current = true;
-    playMenuTrack(0); // au démarrage : toujours le son de Bishok (MENU_TRACKS[0]) ; puis lecture séquentielle (plus d'aléatoire)
+    // 1re musique AU HASARD (jamais Bishok=0 imposé d'office), puis lecture SÉQUENTIELLE dans la playlist.
+    const first = MENU_TRACKS.length > 1 ? 1 + Math.floor(Math.random() * (MENU_TRACKS.length - 1)) : 0;
+    playMenuTrack(first);
   }
   function toggleMusic() {
     const on = !musicOn; setMusicOn(on); musicOnRef.current = on;
@@ -430,11 +432,11 @@ export default function Host() {
   // LOBBY (écran du code) = instru d'Alpha Wann (pas la playlist → pas de spoil du son de Bishok, qui
   // n'ouvre la playlist qu'au ConfigWizard). On tente l'autoplay ; à défaut, le 1er geste la lance.
   useEffect(() => {
-    const h = () => { if (!configuringRef.current) playLobby(); };
+    const h = () => { if (!configuringRef.current && phase === 'lobby') playLobby(); }; // instru lobby SEULEMENT sur l'écran du code (sinon un clic la relançait sur n'importe quel écran)
     window.addEventListener('pointerdown', h);
     window.addEventListener('keydown', h);
     return () => { window.removeEventListener('pointerdown', h); window.removeEventListener('keydown', h); };
-  }, []);
+  }, [phase]);
   // bascule CROSSFADE lobby(Alpha Wann) ↔ playlist(Bishok). Le clic "Configurer" sert de geste utilisateur.
   useEffect(() => {
     configuringRef.current = configuring;
