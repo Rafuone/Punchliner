@@ -848,6 +848,7 @@ function endBattle(room, winnerId) {
 function finishGame(room) {
   room.phase = 'final';
   clearTimeout(room.timer); clearTimeout(room.buzzTimer); clearTimeout(room.cdTimer);
+  room.replayVotes = new Map(); // vote de rejeu (fin de partie) : ardoise vierge à chaque fin
   const active = [...room.players.values()].filter((p) => !p.isMJ && !p.waiting);
   // cumul dans la série
   active.forEach((p) => { p.total = (p.total || 0) + p.score; p.totalRounds = (p.totalRounds || 0) + room.totalRounds; });
@@ -1095,9 +1096,15 @@ io.on('connection', (socket) => {
     cb?.({ ok: true, players: publicPlayers(room) });
   });
 
-  socket.on('host:start', ({ rounds, difficulty, mode, mj, mjId, rebalance, era, theme, themes, rushStartSec, rushPace, quizNoVf, rushPlayerId } = {}, cb) => {
+  socket.on('host:start', (args = {}, cb) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
+    startGame(room, args, cb);
+  });
+  // Démarre/relance une partie. Utilisé par host:start ET par le vote de rejeu unanime (player:replayVote).
+  // Les réglages sont mémorisés dans room.lastStartArgs → une relance rejoue exactement la même config.
+  function startGame(room, { rounds, difficulty, mode, mj, mjId, rebalance, era, theme, themes, rushStartSec, rushPace, quizNoVf, rushPlayerId } = {}, cb) {
+    room.lastStartArgs = { rounds, difficulty, mode, mj, mjId, rebalance, era, theme, themes, rushStartSec, rushPace, quizNoVf, rushPlayerId };
     const wantMode = MODES.includes(mode) ? mode : 'multi';
     const isQuiz = wantMode === 'quiz';
     // MJ = uniquement le Blind Test (multi). Quiz/Survivor = objectifs ; Buzzer = 100% auto (buzz puis saisie notée seule).
@@ -1141,7 +1148,7 @@ io.on('connection', (socket) => {
     room.battle = null; room.battlesThisGame = 0; room.lastBattleRound = -99; // clash : reset par partie
     cb?.({ ok: true });
     beginRound(room);
-  });
+  }
 
   // Réactions/taunts : le joueur balance une réaction préréglée → relayée à l'écran hôte (façon Meet).
   // `end` = jeu de réactions de fin de partie (podium) ; l'hôte mappe le texte sur le bon set.
@@ -1576,6 +1583,27 @@ io.on('connection', (socket) => {
     for (const p of room.players.values()) { p.total = 0; p.gameWins = 0; p.totalRounds = 0; }
     cb?.({ ok: true });
     emitLobby(room);
+  });
+
+  // Vote de fin de partie : chaque joueur (actif, connecté) dit s'il veut rejouer. Unanimité de OUI →
+  // le serveur relance DIRECTEMENT avec les mêmes réglages (room.lastStartArgs), sans action de l'hôte.
+  socket.on('player:replayVote', ({ replay } = {}, cb) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || room.phase !== 'final') return cb?.({ error: 'Pas en fin de partie.' });
+    const p = room.players.get(socket.data.playerId);
+    if (!p || p.isMJ || p.waiting) return cb?.({ error: 'Vote indisponible.' });
+    if (!room.replayVotes) room.replayVotes = new Map();
+    room.replayVotes.set(p.id, replay !== false);
+    const voters = [...room.players.values()].filter((x) => x.connected && !x.isMJ && !x.waiting);
+    const yes = voters.filter((x) => room.replayVotes.get(x.id) === true).length;
+    const voted = voters.filter((x) => room.replayVotes.has(x.id)).length;
+    cb?.({ ok: true, vote: replay !== false });
+    io.to(room.code).emit('replay:tally', { yes, voted, total: voters.length });
+    // tous les joueurs actifs ont voté OUI → relance immédiate, mêmes réglages
+    if (voters.length >= 1 && voters.every((x) => room.replayVotes.get(x.id) === true)) {
+      room.replayVotes = new Map();
+      startGame(room, room.lastStartArgs || {});
+    }
   });
 
   socket.on('disconnect', () => {

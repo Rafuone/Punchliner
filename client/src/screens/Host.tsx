@@ -113,7 +113,7 @@ export default function Host() {
   const [rankAnim, setRankAnim] = useState(false); // reveal : anim climb/drop RETARDÉE (visible) — off au montage, puis on après un court délai
   const [finalScores, setFinalScores] = useState<any[]>([]);
   const [awards, setAwards] = useState<any[]>([]);       // trophées de la partie qui vient de finir
-  const [finalStep, setFinalStep] = useState<'podium' | 'trophies'>('podium'); // fin de partie : podium → showcase trophées
+  const [finalStep, setFinalStep] = useState<'podium' | 'trophies' | 'series'>('podium'); // fin de partie : podium → trophées → série (page à PART, ≥2 parties)
   const [troIdx, setTroIdx] = useState(-1);              // index du trophée AFFICHÉ (-1 = aucun encore)
   const [troBusy, setTroBusy] = useState(false);         // pendant l'animation slot
   const [troSlot, setTroSlot] = useState<any>(null);     // item qui défile pendant le slot
@@ -1136,33 +1136,38 @@ export default function Host() {
             })}
           </div>
           )}
-          {multi && (
-            <div className="series-wrap">
-              <div className="series-head">
-                <span className="eyebrow">Classement général · {series.gamesPlayed} parties</span>
-                {seriesLeader && <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)' }}>{seriesLeader.name} mène la série · {certif(seriesLeader.total, seriesLeader.totalRounds).short}</div>}
-              </div>
-              <div className="board" style={{ maxWidth: 560 }}>
-                {standings.map((p: any, i: number) => (
-                  <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={p.id}>
-                    <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={26} />{p.name}
-                      {p.gameWins > 0 && <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>{p.gameWins} gagnée{p.gameWins > 1 ? 's' : ''}</span>}</span>
-                    <span className="pts">{fmtAud(p.total)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Classement général de série → SORTI du podium : désormais sur la page 'series' (finalStep). Voir [tv-podium]. */}
           <div className="floatbar">
             {awards.length > 0
               ? <button className="btn warm" onClick={() => { setFinalStep('trophies'); troRunSlot(0); }}>Voir les trophées →</button>
-              : (<>
-                  <button className="btn warm" onClick={() => relance(true)}>Relancer une partie →</button>
-                  <button className="btn" onClick={() => relance(false)}>Retour au salon</button>
-                </>)}
-            {multi && <button className="btn ghost" onClick={resetSeries}>Nouvelle série</button>}
+              : multi
+                ? <button className="btn warm" onClick={() => setFinalStep('series')}>Classement général →</button>
+                : (<>
+                    <button className="btn warm" onClick={() => relance(true)}>Relancer une partie →</button>
+                    <button className="btn" onClick={() => relance(false)}>Retour au salon</button>
+                  </>)}
           </div>
-          </>) : (
+          </>) : finalStep === 'series' ? (
+          /* ÉTAPE SÉRIE — classement général de la série, page à PART (≥2 parties) ; le relance vit ICI */
+          <>
+            <span className="eyebrow">Classement général · {series.gamesPlayed} parties</span>
+            {seriesLeader && <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)' }}>{seriesLeader.name} mène la série · {certif(seriesLeader.total, seriesLeader.totalRounds).short}</div>}
+            <div className="board" style={{ maxWidth: 560, width: '100%' }}>
+              {standings.map((p: any, i: number) => (
+                <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={p.id}>
+                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={26} />{p.name}
+                    {p.gameWins > 0 && <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>{p.gameWins} gagnée{p.gameWins > 1 ? 's' : ''}</span>}</span>
+                  <span className="pts">{fmtAud(p.total)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="floatbar">
+              <button className="btn warm" onClick={() => relance(true)}>Relancer une partie →</button>
+              <button className="btn" onClick={() => relance(false)}>Retour au salon</button>
+              <button className="btn ghost" onClick={resetSeries}>Nouvelle série</button>
+            </div>
+          </>
+          ) : (
           /* ÉTAPE TROPHÉES — showcase (un à la fois, slot, décompte auto + skip) */
           <div className="tro-stage">
             <div className="tro-card">
@@ -1190,11 +1195,12 @@ export default function Host() {
             ) : (!troBusy && (
               pendingUnlock ? (
                 <button className="btn warm" style={{ maxWidth: 460, background: 'linear-gradient(90deg,#c0182b,#ff5a1f)', color: '#fff', boxShadow: '0 0 26px -6px #ff5a1f' }} onClick={() => setShowReveal(true)}>🔓 Un nouveau challenger débloqué — Découvrir →</button>
+              ) : multi ? (
+                <button className="btn warm" style={{ maxWidth: 320 }} onClick={() => setFinalStep('series')}>Classement général →</button>
               ) : (
                 <div className="row" style={{ gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
                   <button className="btn warm" onClick={() => relance(true)}>Relancer une partie →</button>
                   <button className="btn" onClick={() => relance(false)}>Retour au salon</button>
-                  {multi && <button className="btn ghost" onClick={resetSeries}>Nouvelle série</button>}
                 </div>
               )
             ))}

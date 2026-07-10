@@ -118,6 +118,8 @@ export default function Player() {
   const [awards, setAwards] = useState<any[]>([]);   // trophées de fin de partie
   const [series, setSeries] = useState<any>(null);   // cumul de la série (multi-parties)
   const [finalRounds, setFinalRounds] = useState(0);
+  const [replayVote, setReplayVote] = useState<null | boolean>(null); // vote de rejeu (fin de partie) : true = rejouer
+  const [replayTally, setReplayTally] = useState<{ yes: number; voted: number; total: number }>({ yes: 0, voted: 0, total: 0 });
   const meId = useRef<string>('');
   const stageRef = useRef<HTMLDivElement>(null);
 
@@ -194,7 +196,7 @@ export default function Player() {
     socket.on('mj:track', (d: any) => setMjTrack(d));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // son de reveal retiré (jugé désagréable) — à recâbler plus tard
     socket.on('game:final', (d: any) => {
-      setPlayers(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPhase('final');
+      setPlayers(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setReplayVote(null); setReplayTally({ yes: 0, voted: 0, total: 0 }); setPhase('final');
       const mineAw = (d.awards || []).filter((a: any) => a.playerId === meId.current).map((a: any) => a.id);
       if (mineAw.length) setUnlockedTrophies((prev) => { const s = Array.from(new Set([...prev, ...mineAw])); try { localStorage.setItem('pl_trophies', JSON.stringify(s)); } catch {} return s; });
       // Déblocage des CHALLENGERS désactivé pour l'instant (Alexandre : conditions à refondre + affichage à repenser).
@@ -208,7 +210,8 @@ export default function Player() {
     socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) { setBuzz('mine'); setBuzzEndsAt(d.endsAt || 0); setNow(Date.now()); } else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
     socket.on('buzz:open', (d: any) => { setBuzzEndsAt(0); if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — au tour des autres'); } else setBuzz('idle'); });
     socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); setJoined(false); localStorage.removeItem(SKEY); });
-    return () => ['connect', 'lobby', 'round:prep', 'power:eligible', 'power:hit', 'round:countdown', 'round:go', 'rush:state', 'rush:end', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed', 'battle:intro', 'battle:bets', 'battle:go', 'battle:reveal'].forEach((e) => socket.off(e as any));
+    socket.on('replay:tally', (d: any) => setReplayTally({ yes: d.yes || 0, voted: d.voted || 0, total: d.total || 0 })); // vote de rejeu : compteur live
+    return () => ['connect', 'lobby', 'round:prep', 'power:eligible', 'power:hit', 'round:countdown', 'round:go', 'rush:state', 'rush:end', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed', 'replay:tally', 'battle:intro', 'battle:bets', 'battle:go', 'battle:reveal'].forEach((e) => socket.off(e as any));
   }, []);
 
   useEffect(() => { if (phase !== 'playing' && phase !== 'prep' && phase !== 'battle-bet' && phase !== 'battle-play') return; const id = setInterval(() => setNow(Date.now() + clockOffset.current), 100); return () => clearInterval(id); }, [phase]);
@@ -353,6 +356,11 @@ export default function Player() {
   }
   function passPower() { socket.emit('player:ready', {}); setPrepDone(true); }
   function sendReaction(id: number, end = false) { socket.emit('player:reaction', { id, end }); } // taunt affiché sur l'écran hôte (anti-spam serveur). end = jeu de réactions de fin de partie.
+  // Vote de fin de partie : je dis si je veux rejouer. Si tout le monde vote OUI, le serveur relance direct.
+  function castReplayVote(v: boolean) {
+    setReplayVote(v);
+    socket.emit('player:replayVote', { replay: v }, (res: any) => { if (res?.error) setReplayVote(null); });
+  }
 
   function mjAward(pid: string, points = 10000) { socket.emit('mj:award', { playerId: pid, points }); }
   function mjReveal() { socket.emit('mj:reveal'); }
@@ -1046,7 +1054,19 @@ export default function Player() {
               <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)' }}>{certif(mine.total, mine.totalRounds).short}{mine.gameWins > 0 ? ` · ${mine.gameWins} gagnée${mine.gameWins > 1 ? 's' : ''}` : ''}</div>
             </div>
           )}
-          <p className="muted" style={{ fontSize: 12 }}>L'hôte peut relancer une partie — reste connecté.</p>
+          {/* VOTE DE FIN — chacun dit s'il veut rejouer ; unanimité de OUI → le serveur relance direct (après les trophées côté TV) */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginTop: 8, width: '100%', maxWidth: 380 }}>
+            <span className="eyebrow" style={{ color: 'var(--fluo)' }}>On rejoue ?</span>
+            {replayVote === null ? (
+              <div className="row" style={{ gap: 10 }}>
+                <button className="btn warm big" onClick={() => castReplayVote(true)}>Rejouer →</button>
+                <button className="btn" onClick={() => castReplayVote(false)}>Pas cette fois</button>
+              </div>
+            ) : (
+              <p className="feedback good" style={{ margin: 0 }}>{replayVote ? 'Tu veux rejouer' : 'Tu passes'} · <button className="exit-link" style={{ display: 'inline' }} onClick={() => castReplayVote(!replayVote)}>changer d'avis</button></p>
+            )}
+            {replayTally.total > 0 && <p className="muted" style={{ fontSize: 13, margin: 0 }}><b style={{ color: 'var(--fluo)' }}>{replayTally.yes}</b>/{replayTally.total} pour rejouer{replayTally.yes === replayTally.total ? ' — ça relance !' : ''}</p>}
+          </div>
         </div>
         );
       })()}
