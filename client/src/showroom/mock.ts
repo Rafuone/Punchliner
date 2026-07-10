@@ -39,11 +39,17 @@ export function installMock() {
   s.connect = () => s;
   s.disconnect = () => s;
   try { (window as any).__srDeliver = deliver; } catch {} // review : déclencher un event serveur→client (ex. __srDeliver('power:used', {...}))
+  // VUE CROISÉE : le parent (showroom) relaie une action d'un appareil vers l'autre iframe → deliver ici.
+  try { window.addEventListener('message', (e: any) => { const d = e && e.data; if (d && d.__sr === 'deliver' && d.event) deliver(d.event, d.payload); }); } catch {}
 }
 
 function handleEmit(ev: string, args: any[], ack: ((r?: any) => void) | null) {
   const st = curScene() || {};
   const CODE = st.code || 'PUNCH';
+  // VUE CROISÉE : relaie l'action du joueur au parent → l'autre iframe (ex. réaction → apparaît sur la TV).
+  if (ev === 'player:reaction' || ev === 'player:buzz' || ev === 'player:power') {
+    try { if (window.parent && window.parent !== window) window.parent.postMessage({ __sr: 'relay', event: ev, payload: args[0] || {} }, '*'); } catch {}
+  }
   switch (ev) {
     case 'host:create': ack && ack({ ok: true, code: CODE, hostToken: 'showroom', poolSize: st.poolSize || 264 }); return;
     case 'host:reclaim': ack && ack({ ok: true, code: CODE, poolSize: st.poolSize || 264, state: st }); return;
