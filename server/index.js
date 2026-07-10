@@ -549,7 +549,7 @@ function beginRound(room) {
   // Fenêtre d'activation des pouvoirs AVANT la musique (sinon on active en connaissant déjà la réponse).
   // PAS à la manche 1 : sans classement établi, les pouvoirs anti-leader n'ont aucune cible → on n'ouvre
   // la fenêtre qu'à partir de la manche 2 (après au moins une question jouée).
-  const powerPhase = (room.settings.mode === 'multi' || room.settings.mode === 'buzzer') && !room.settings.mj && room.roundIndex >= 1;
+  const powerPhase = room.settings.mode === 'multi' && !room.settings.mj && room.roundIndex >= 1; // pouvoirs UNIQUEMENT en Blind Test auto (jamais Buzzer/Quiz/MJ/Survivor/Clash)
   if (powerPhase) {
     room.phase = 'prep';
     const seconds = FAST ? 2 : 10;
@@ -629,6 +629,7 @@ function startRound(room) {
 
 // Remplit la jauge de pouvoir de chaque joueur en fin de manche selon la règle choisie
 function fillCharges(room) {
+  if (room.settings.mode !== 'multi' || room.settings.mj) return; // jauge de charges seulement en Blind Test auto (pas Buzzer/Quiz/MJ)
   const rule = room.settings.rebalance || 'comeback';
   const sorted = [...room.players.values()].filter((p) => !p.isMJ && !p.waiting).sort((a, b) => b.score - a.score);
   const N = sorted.length;
@@ -1312,6 +1313,7 @@ io.on('connection', (socket) => {
     if (p.waiting) return cb?.({ error: 'Tu rejoins une partie en cours : tu joueras au prochain salon.' });
     if (room.settings.mj) return cb?.({ error: 'Pas de pouvoirs en mode Maître du jeu.' });
     if (room.settings.mode === 'quiz') return cb?.({ error: 'Pas de pouvoirs en mode Quiz.' });
+    if (room.settings.mode !== 'multi') return cb?.({ error: 'Pas de pouvoirs dans ce mode.' }); // défense : Blind Test auto uniquement (ni Buzzer/Survivor/Clash)
     // On active les pouvoirs AVANT la manche (fenêtre "prep"), pas en écoutant le son.
     if (room.phase !== 'prep') return cb?.({ error: 'On active les pouvoirs entre les manches.' });
     // UN SEUL pouvoir (ou passe) par fenêtre : bloque le double-clic / la ré-activation après reconnexion.

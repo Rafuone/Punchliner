@@ -14,6 +14,11 @@ const URLS: Record<string, string> = {
   airhorn: 'https://cdn.freesound.org/previews/414/414208_6938106-lq.mp3',  // "Airhorn" (sélection d'Alexandre) — cheat code
 };
 const VOL: Record<string, number> = { hover: 0.34, click: 0.5, confirm: 0.6, error: 0.58, scratch: 0.62, horn: 0.6, countdown: 0.5, launch: 0.62, recap: 0.4, airhorn: 0.65 };
+// Durée MAX de lecture (ms) par son : au-delà on COUPE net. La preview Freesound du "scratch" est une
+// longue rafale (~25 scratches) → on n'en garde qu'UN coup court, sinon ça déborde sur la musique de manche.
+// Absent = le son joue en entier.
+const MAXMS: Record<string, number> = { scratch: 260 };
+const stopTimers: Record<string, ReturnType<typeof setTimeout> | undefined> = {};
 const cache: Record<string, HTMLAudioElement> = {};
 const off = () => { try { return localStorage.getItem('pl_sfx_off') === '1'; } catch { return false; } };
 
@@ -25,6 +30,9 @@ export function sfx(key: keyof typeof URLS) {
     if (!a) { a = new Audio(url); a.preload = 'auto'; cache[key] = a; }
     a.currentTime = 0; a.volume = VOL[key] ?? 0.5;
     a.play().catch(() => {}); // autoplay bloqué tant que pas d'interaction : ignoré
+    if (stopTimers[key]) { clearTimeout(stopTimers[key]); stopTimers[key] = undefined; }
+    const cap = MAXMS[key];
+    if (cap) stopTimers[key] = setTimeout(() => { try { a.pause(); a.currentTime = 0; } catch {} stopTimers[key] = undefined; }, cap);
   } catch { /* no-op */ }
 }
 
@@ -60,6 +68,19 @@ export function sfxLoop(key: keyof typeof URLS) {
 export function sfxLoopStop() {
   try { if (loopEl) { loopEl.pause(); loopEl.currentTime = 0; } } catch {}
   loopEl = null; loopKey = '';
+}
+
+// Coupe NET un son ponctuel (et son timer de garde). sfxStopAll() = tout couper — appelé aux transitions
+// de phase pour que le SFX de la fenêtre pouvoirs ne déborde JAMAIS sur le début de la musique de manche.
+export function sfxStop(key: keyof typeof URLS) {
+  try {
+    if (stopTimers[key]) { clearTimeout(stopTimers[key]); stopTimers[key] = undefined; }
+    const a = cache[key]; if (a) { a.pause(); a.currentTime = 0; }
+  } catch {}
+}
+export function sfxStopAll() {
+  try { Object.keys(cache).forEach((k) => sfxStop(k as keyof typeof URLS)); } catch {}
+  sfxLoopStop();
 }
 
 // NAPPAGE GLOBAL : un son au survol (hover) et au clic de tout élément interactif, partout dans l'app,

@@ -602,7 +602,7 @@ export default function Player() {
   }
 
   /* ---- en jeu ---- */
-  const powerMode = round.mode !== 'quiz' && round.mode !== 'rush' && !round.mj; // charges visibles seulement quand les pouvoirs sont actifs
+  const powerMode = round.mode === 'multi' && !round.mj; // charges visibles seulement en Blind Test auto (pas Buzzer/Quiz/Survivor/MJ)
   return (
     <><GrungeBg />
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>

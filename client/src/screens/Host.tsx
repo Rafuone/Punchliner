@@ -6,7 +6,7 @@ import ConfigWizard from './ConfigWizard';
 import HubBrowse from './HubBrowse';
 import ChallengerReveal from './ChallengerReveal';
 import GrungeBg from '../GrungeBg';
-import { sfx, sfxLoopStop, playAirhorns } from '../sfx';
+import { sfx, sfxLoopStop, sfxStop, playAirhorns } from '../sfx';
 import { handleSpotifyRedirect, hasSpotifySession, initSpotifyPlayer, resetSpotifyPlayer, spotifyPlay, spotifyPause, spotifyTogglePlay, spotifyLogin, spotifyLogout, listenSpotifyAuth } from '../spotify';
 
 // Démo (?revealdemo) : sélectionner n'importe quel challenger déblocable et rejouer son arrivée épique (vérif visuelle).
@@ -161,7 +161,7 @@ export default function Host() {
       usingSpotifyRef.current = true;
       wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} // on laisse la main à Spotify
       // introuvable sur Spotify → on retombe TOUJOURS sur Deezer (au moins une source doit sonner, même si Deezer est « éteint » côté préférence : mieux vaut du son que le silence)
-      spotifyPlay(d.sp.title, d.sp.artist, (d.startAt || 0) > 0).then((ok) => { if (!ok) { usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); } });
+      spotifyPlay(d.sp.title, d.sp.artist, (d.startAt || 0) > 0).then((ok) => { if (buzzActiveRef.current) { try { spotifyPause(); } catch {} return; } if (!ok) { usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); } }); // un buzz arrivé PENDANT le play() Spotify en vol (recherche réseau) serait avalé → on recoupe à la résolution (buzzActiveRef seul : wantAudioRef reste volontairement false en lecture Spotify)
     } else { usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); }
   }
   // Bascule d'une source (au moins UNE reste toujours active → jamais de silence).
@@ -243,8 +243,8 @@ export default function Host() {
     socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); setWaiting(d.waiting || 0); if (typeof d.poolSize === 'number') setPoolSize(d.poolSize); if (d.phase === 'lobby') { setPhase('lobby'); sfxLoopStop(); } });
     socket.on('round:prep', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
-    socket.on('round:countdown', (d: any) => { setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
-    socket.on('round:host', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setReveal(null); setAnswered([]); setBuzzWinner(null); buzzActiveRef.current = false; setRound(d); setPhase('playing');
+    socket.on('round:countdown', (d: any) => { sfxStop('scratch'); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown'); });
+    socket.on('round:host', (d: any) => { sfxStop('scratch'); if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setReveal(null); setAnswered([]); setBuzzWinner(null); buzzActiveRef.current = false; setRound(d); setPhase('playing');
       if (d.mode === 'quiz') { wantAudioRef.current = false; clearTimeout(audioRetryRef.current); previewRef.current = { url: '', clipMs: 30000, startAt: 0 }; try { audioRef.current?.pause(); } catch {} spotifyPause(); } // QUIZ = pas d'extrait de jeu ; on garde l'instru de menu (Alpha Wann) en fond
       else playRound(d); });
     // Mode Survivor (contre-la-montre) : le son s'enchaîne automatiquement à chaque nouveau morceau
@@ -256,12 +256,12 @@ export default function Host() {
     socket.on('buzz:winner', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); buzzActiveRef.current = true; wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 8000 }); setNow(Date.now()); }); // buzzActiveRef : verrou anti-relance du son PENDANT que le buzzeur répond (course avec playRound)
     // le buzzeur a raté → le buzzer rouvre et le son REPREND pour les autres (SEULEMENT la source active de la manche,
     // sinon on relancerait une piste Spotify périmée EN PLUS de Deezer = double son)
-    socket.on('buzz:open', () => { buzzActiveRef.current = false; wantAudioRef.current = true; if (usingSpotifyRef.current) spotifyTogglePlay(); else try { audioRef.current?.play().catch(() => {}); } catch {} setBuzzWinner(null); }); // le buzzeur a raté → le buzzer rouvre, on relève le verrou et on reprend le son
+    socket.on('buzz:open', () => { buzzActiveRef.current = false; wantAudioRef.current = true; if (usingSpotifyRef.current) spotifyTogglePlay(); else if (previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); setBuzzWinner(null); }); // le buzzeur a raté → le buzzer rouvre ; reprise Deezer via playPreview (gardé buzzActiveRef + re-check dans le .then) pour éviter le softlock si un 2e buzz arrive pendant le play() de reprise
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); buzzActiveRef.current = false;
       // BUZZER : le son avait été coupé au buzz → on le REMET pour la révélation (titre + artiste). En Blind Test wantAudioRef reste true → no-op.
       if (!wantAudioRef.current && previewRef.current.url) { wantAudioRef.current = true; if (usingSpotifyRef.current) { try { spotifyTogglePlay(); } catch {} } else playPreview(previewRef.current.url, previewRef.current.startAt, 0); }
     });
-    socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); const u = computeUnlock(d, unlockedRef.current); if (u) { unlockedRef.current.add(u); try { localStorage.setItem('pl_unlocked', JSON.stringify([...unlockedRef.current])); } catch {} } setPendingUnlock(u); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées ; un challenger déjà débloqué ne réapparaît plus
+    socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(null); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées ; un challenger déjà débloqué ne réapparaît plus
     socket.on('power:used', (d: any) => { setPowerFeed((f) => [...f.slice(-4), { ...d, key: powerKeyRef.current++ }]); sfx('scratch'); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('reaction', (d: any) => {
@@ -453,7 +453,7 @@ export default function Host() {
     a.volume = 1;
     const p = a.play();
     if (p && p.then) {
-      p.then(() => { audioReadyRef.current = true; setAudioLocked(false); try { if (startAt && seekedUrlRef.current !== url) { if (Math.abs(a.currentTime - startAt / 1000) > 1) a.currentTime = startAt / 1000; seekedUrlRef.current = url; } } catch {} }) // le son PART → autoplay ok, on retire l'invite ; seek 1x par extrait
+      p.then(() => { if (buzzActiveRef.current || !wantAudioRef.current) { try { a.pause(); } catch {} return; } audioReadyRef.current = true; setAudioLocked(false); try { if (startAt && seekedUrlRef.current !== url) { if (Math.abs(a.currentTime - startAt / 1000) > 1) a.currentTime = startAt / 1000; seekedUrlRef.current = url; } } catch {} }) // le pause() du buzz peut être AVALÉ si play() était encore en vol → on re-vérifie à la résolution et on recoupe ; sinon le son PART (autoplay ok) ; seek 1x par extrait
        .catch(() => { if (!audioReadyRef.current) setAudioLocked(true); if (wantAudioRef.current && attempt < 6) audioRetryRef.current = setTimeout(() => playPreview(url, startAt, attempt + 1), 300); }); // bloqué SANS geste (reload à froid) → invite ; sinon retry (watchdog)
     }
   }
