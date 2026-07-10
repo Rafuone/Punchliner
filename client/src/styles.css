@@ -97,6 +97,18 @@ button, input { font-family: inherit; }
 .btn.send { text-transform: uppercase; letter-spacing: .05em; font-size: 18px; height: 58px; position: relative; overflow: hidden; }
 .btn.send::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .35) 50%, transparent 70%); transform: translateX(-120%); animation: sendshine 2.6s ease-in-out infinite; }
 @keyframes sendshine { 0%, 100% { transform: translateX(-120%); } 55% { transform: translateX(120%); } }
+
+/* ===== BARRE D'ACTION FLOTTANTE — boutons ancrés en bas sur un dégradé sombre (repérables de loin sur la
+   TV, pratiques au pouce sur le pupitre MJ). Le dégradé laisse passer les clics ; seuls les boutons captent. */
+.floatbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px;
+  padding: clamp(30px, 7vh, 70px) 16px calc(clamp(14px, 3vh, 30px) + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, transparent, rgba(6, 7, 10, .72) 46%, rgba(6, 7, 10, .95));
+  pointer-events: none; animation: floatbarin .3s ease both; }
+.floatbar > * { pointer-events: auto; }
+.floatbar .btn { font-size: clamp(16px, 1.6vw, 23px); padding: clamp(13px, 1.5vh, 19px) clamp(24px, 2.2vw, 40px); }
+@keyframes floatbarin { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .floatbar { animation: none; } }
 @media (prefers-reduced-motion: reduce) { .btn.send::after { animation: none; opacity: 0; } }
 
 .field {
@@ -245,12 +257,19 @@ button, input { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) { .vinyl .grooves.spin, .eq7 i { animation: none; } }
 
 /* reveal board AGRANDI pour la TV (lisible de loin) */
-.board.tvbig { gap: 8px; }
-.board.tvbig .prow { padding: 15px 22px; border-radius: 5px; }
-.board.tvbig .who { gap: 16px; font-size: clamp(20px, 2.4vw, 30px); }
-.board.tvbig .rk { width: 40px; height: 40px; font-size: 19px; border-radius: 5px; }
-.board.tvbig .pts { font-size: clamp(26px, 3vw, 38px); }
-.board.tvbig .gain { font-size: clamp(16px, 2vw, 22px); }
+.board.tvbig { gap: clamp(5px, .8vh, 8px); }
+.board.tvbig .prow { padding: clamp(8px, 1.3vh, 13px) 22px; border-radius: 5px; animation: rowin .32s ease both; }
+.board.tvbig .who { gap: 14px; font-size: clamp(17px, 1.9vw, 25px); }
+.board.tvbig .who .med { width: clamp(30px, 3vw, 40px) !important; height: clamp(30px, 3vw, 40px) !important; }
+.board.tvbig .rk { width: clamp(30px, 3vw, 36px); height: clamp(30px, 3vw, 36px); font-size: 16px; border-radius: 5px; }
+.board.tvbig .pts { font-size: clamp(20px, 2.3vw, 30px); }
+.board.tvbig .gain { font-size: clamp(15px, 1.8vw, 21px); }
+/* remontée / dégringolade au reveal : FLIP-lite piloté par le delta de rang (--d) — slide + flash couleur */
+.board.tvbig .prow.climb { animation: climbin .52s cubic-bezier(.2,.8,.3,1.2) both; }
+.board.tvbig .prow.drop { animation: dropin .52s cubic-bezier(.2,.8,.3,1.2) both; }
+@keyframes climbin { 0% { opacity: 0; transform: translateY(calc(20px * var(--d, 1))); } 55% { opacity: 1; box-shadow: inset 0 0 0 2px var(--green); } 100% { opacity: 1; transform: none; } }
+@keyframes dropin { 0% { opacity: 0; transform: translateY(calc(-20px * var(--d, 1))); } 55% { opacity: 1; box-shadow: inset 0 0 0 2px var(--bad); } 100% { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .board.tvbig .prow, .board.tvbig .prow.climb, .board.tvbig .prow.drop { animation: none; } }
 
 /* ===== réactions / taunts ===== */
 /* boutons de réaction : PLEINE LARGEUR, grille qui s'adapte (2 colonnes sur téléphone) → gros, faciles à taper */
@@ -270,14 +289,15 @@ button, input { font-family: inherit; }
 .reactfloat { position: fixed; inset: 0; z-index: 60; pointer-events: none; overflow: hidden; }
 /* bulles ancrées dans le COULOIR latéral (bord gauche/droit), largeur bornée + wrap → jamais devant le
    contenu centré. Montée courte (reste dans le bas de l'écran), disparition douce. */
-.reactbubble { position: absolute; bottom: 6%; display: inline-flex; align-items: center; gap: 10px; padding: 11px 16px; border-radius: 4px;
-  max-width: clamp(150px, 19vw, 250px); background: rgba(18,18,24,.82); border: 1px solid var(--line2);
-  box-shadow: 0 14px 40px -12px rgba(0,0,0,.85), 0 0 30px -14px rgba(166,255,0,.4);
-  white-space: normal; animation: reactup 4.8s cubic-bezier(.22,.6,.3,1) forwards; will-change: transform, opacity; }
-.reactbubble .rb-e { font-size: clamp(24px, 2.6vw, 34px); line-height: 1; flex: 0 0 auto; }
-.reactbubble .rb-t { font-size: clamp(14px, 1.5vw, 19px); color: var(--txt); line-height: 1.15; }
+.reactbubble { position: absolute; bottom: 8%; display: inline-flex; align-items: center; gap: 12px; padding: 14px 20px; border-radius: 5px;
+  max-width: clamp(210px, 24vw, 340px); background: rgba(18,18,24,.86); border: 1px solid var(--line2);
+  box-shadow: 0 16px 44px -14px rgba(0,0,0,.85);
+  white-space: normal; animation: reactup 4.8s cubic-bezier(.22,.7,.25,1) forwards;
+  will-change: transform, opacity; transform: translateZ(0); backface-visibility: hidden; contain: paint; }
+.reactbubble .rb-e { font-size: clamp(34px, 3.6vw, 52px); line-height: 1; flex: 0 0 auto; }
+.reactbubble .rb-t { font-size: clamp(20px, 2vw, 30px); color: var(--txt); line-height: 1.15; }
 .reactbubble .rb-t b { color: var(--fluo); }
-@keyframes reactup { 0% { opacity: 0; transform: translateY(30px) scale(.7); } 9% { opacity: 1; transform: translateY(0) scale(1); } 74% { opacity: 1; transform: translateY(-13vh) scale(1.02); } 100% { opacity: 0; transform: translateY(-18vh) scale(1.03); } }
+@keyframes reactup { 0% { opacity: 0; transform: translate3d(0, 40px, 0) scale(.7); } 8% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } 72% { opacity: 1; transform: translate3d(0, -34vh, 0) scale(1.04); } 100% { opacity: 0; transform: translate3d(0, -50vh, 0) scale(1.06); } }
 
 /* ===== topbar EN JEU : infos + code salon lisibles de loin (hors du petit pill) ===== */
 .hostmeta { font-family: var(--disp); font-weight: 700; font-size: clamp(14px, 1.5vw, 20px); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
@@ -1321,7 +1341,7 @@ button, input { font-family: inherit; }
 .uk .stage-uk { position: relative; z-index: 2; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: clamp(8px,1.6vh,18px); padding: clamp(8px,2vh,22px) 0 clamp(54px,10vh,110px); opacity: 0; } /* + de padding bas = le bloc REMONTE (le Retour reste en bas, absolu) */
 .uk .stage-uk::before { content: ''; position: absolute; inset: 0; z-index: -2; background: radial-gradient(120% 100% at 50% 0%,#171019,#0a0b0e 60%,#060608); }
 .uk[data-phase="reveal"] .stage-uk { animation: revin .55s cubic-bezier(.15,.85,.3,1.2) forwards; }
-@keyframes revin { 0% { opacity: 0; transform: scale(1.45); } 62% { opacity: 1; transform: scale(.97); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes revin { 0% { opacity: 0; transform: scale(1.24); } 62% { opacity: 1; transform: scale(.98); } 100% { opacity: 1; transform: scale(1); } }
 .uk .rays { position: absolute; width: 1100px; height: 1100px; left: 50%; top: 46%; transform: translate(-50%,-50%); z-index: -1; background: conic-gradient(from 0deg,transparent 0 7deg,color-mix(in srgb,var(--cc) 16%,transparent) 8deg 10deg,transparent 11deg 20deg); animation: ukspin 16s linear infinite; }
 @keyframes ukspin { to { transform: translate(-50%,-50%) rotate(360deg); } }
 .uk .grain { position: absolute; inset: 0; pointer-events: none; opacity: .15; mix-blend-mode: overlay; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='ukng'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23ukng)'/%3E%3C/svg%3E"); background-size: 160px; }
@@ -1334,7 +1354,7 @@ button, input { font-family: inherit; }
 .uk[data-phase="reveal"] .chall-why { animation: ukup .5s ease .18s both; }
 @keyframes ukup { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 .uk .stage-uk .tvros-hero { max-width: 1180px; width: 100%; margin: 0 auto; justify-content: center; align-items: center; gap: clamp(24px,3vw,58px); }
-.uk .stage-uk .tvros-fig { max-height: min(78vh,760px); transform: translateY(-3%); }
+.uk .stage-uk .tvros-fig { max-height: min(64vh,600px); transform: translateY(-3%); }
 .uk .stage-uk .tvros-side { flex: 0 1 600px; max-width: 600px; } /* + large : les tags tiennent sur une ligne (plus de ligne perdue) */
 .uk .stage-uk .tvros-name { font-size: clamp(36px, 3.9vw, 60px); white-space: nowrap; } /* nom sur UNE ligne (jamais « Freeze / Corleone ») + ~12% plus petit ; il peut déborder un peu à droite — la zone stats/tags garde SA largeur (600px) */
 .uk .stage-uk .tvros-tags { flex-wrap: nowrap; } /* la ligne de tags prend toute la largeur au lieu de wrapper */

@@ -798,7 +798,7 @@ export default function Host() {
       )}
 
       {phase === 'reveal' && reveal && (
-        <div className="center" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(16px,4vh,52px)', gap: 22 }}>
+        <div className="center" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(16px,4vh,52px)', paddingBottom: 'clamp(96px,17vh,150px)', gap: 22 }}>
           <span className="eyebrow">{reveal.quiz ? 'La réponse' : "C'était…"}</span>
           {reveal.quiz ? (
             <>
@@ -858,7 +858,7 @@ export default function Host() {
               const r = reveal.results.find((x: any) => x.id === p.id);
               const d = p.rankDelta || 0;
               return (
-                <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={p.id} style={{ animation: `rowin .32s ease ${i * 0.05}s both` }}>
+                <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}${d > 0 ? ' climb' : d < 0 ? ' drop' : ''}`} key={p.id} style={{ ['--d' as any]: Math.min(Math.abs(d) || 1, 4), animationDelay: `${i * 0.05}s` }}>
                   <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={46} />{p.name}</span>
                   <span className="row" style={{ gap: 12 }}>
                     {d !== 0 && (
@@ -877,9 +877,9 @@ export default function Host() {
             })}
           </div>
           ))}
-          {revealStep < 1
+          <div className="floatbar">{revealStep < 1
             ? <button className="btn warm" onClick={() => setRevealStep(1)}>Voir les scores →</button>
-            : <button className="btn warm" onClick={() => socket.emit('host:next')}>{round.index + 1 >= round.total ? 'Voir le podium' : 'Manche suivante'}</button>}
+            : <button className="btn warm" onClick={() => socket.emit('host:next')}>{round.index + 1 >= round.total ? 'Voir le podium' : 'Manche suivante'}</button>}</div>
         </div>
       )}
 
@@ -1047,7 +1047,7 @@ export default function Host() {
         const seriesLeader = standings[0];
         const gameRounds = finalRounds || round.total || 1;
         return (
-        <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(14px,3vh,44px)', gap: 20 }}>
+        <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(14px,3vh,44px)', paddingBottom: 'clamp(96px,17vh,150px)', gap: 20 }}>
           {finalStep === 'podium' ? (<>
           <span className="eyebrow">{multi ? `Partie ${series.gamesPlayed} — terminée` : 'Podium'}</span>
           {/* PODIUM top 3 (2 · 1 · 3) — un seul disque de certif fusionné, prénom adaptatif, aud./manche */}
@@ -1104,7 +1104,7 @@ export default function Host() {
               </div>
             </div>
           )}
-          <div className="row" style={{ gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
+          <div className="floatbar">
             {awards.length > 0
               ? <button className="btn warm" onClick={() => { setFinalStep('trophies'); troRunSlot(0); }}>Voir les trophées →</button>
               : (<>

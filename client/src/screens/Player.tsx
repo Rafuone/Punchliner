@@ -562,7 +562,7 @@ export default function Player() {
         )}
 
         {(phase === 'playing' || phase === 'reveal') && (
-          <div className="center" style={{ gap: 16, justifyContent: 'flex-start', paddingTop: 8 }}>
+          <div className="center" style={{ gap: 16, justifyContent: 'flex-start', paddingTop: 8, paddingBottom: 'clamp(96px,16vh,150px)' }}>
             {/* la réponse — visible uniquement par le MJ */}
             <div className="glass pad" style={{ width: '100%', maxWidth: 460, textAlign: 'left' }}>
               <div className="eyebrow" style={{ color: 'var(--green)' }}>{phase === 'playing' ? 'La réponse · toi seul la vois' : "C'était"}</div>
@@ -589,9 +589,9 @@ export default function Player() {
               </div>
             </div>
 
-            {phase === 'playing'
+            <div className="floatbar">{phase === 'playing'
               ? <button className="btn warm big" style={{ maxWidth: 360 }} onClick={mjReveal}>Couper le son &amp; révéler →</button>
-              : <button className="btn warm big" style={{ maxWidth: 360 }} onClick={mjNext}>{round.index + 1 >= round.total ? 'Terminer' : 'Manche suivante →'}</button>}
+              : <button className="btn warm big" style={{ maxWidth: 360 }} onClick={mjNext}>{round.index + 1 >= round.total ? 'Terminer' : 'Manche suivante →'}</button>}</div>
           </div>
         )}
         {phase === 'final' && (
