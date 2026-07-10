@@ -122,3 +122,19 @@ J'ai pensé a un probleme qu'on a eu dans le jeu. Lactivation des pouvoir pouvai
 ### Révélation + scores  `[tv-reveal]` — 2026-07-10 15:06
 Si on affche le spouvori au dessus des réponses ca fonctionenra pas bien quand y'en aura trop, ca va tout pousser vers le bas. Faut que tu test une autre approche.
 Quand j'active les pouvoir y'a trop de latence, j'aimerais pouvoir spammer et que ca ralentisse pas. D'ailleurs y'a un bug d'affichage quand j'appuie le bouton change de hauteur.
+
+### Fenêtre POUVOIRS (prep)  `[tv-prep]` — 2026-07-10 16:28
+Et si plusieurs personne font leurs pouvoir, comment ca s'affiche, ty a pensé ? Je ne peux pas le simulé, il faudrait. Jusqu'a 8 joueurs possiblement.
+Lorsque le sort apparait, je n'aime pas la bordure a gauche de l'élément.
+
+### Survivor (contre-la-montre)  `[tv-survivor]` — 2026-07-10 16:28
+JE t'ai demandé de fix la hautezur des badges dans le header afin qu'ils fassent tous la meme hauteur. Tu ne l'as pas fix. "Survivor 4morceau" c'est pas top. Ca manque de gap entre la fleche et "salon".
+
+### Lobby (code + QR)  `[tv-lobby]` — 2026-07-10 16:28
+📍 Zone : « Scanne le QR avec ton telou tape » (div)
+📍 Zone : « PUNCH » (div.code)
+📍 Zone : « PUNCH » (div.code)
+
+### Révélation (joueur)  `[ph-reveal]` — 2026-07-10 16:28
+Le sous menu est une bonne idée mais il faut que le boutopn soit plus  grand pour etre plus facilement accessible. Plus il est bas plus c'est facile d'accès à une main. Ca peut dérouler vers le haut peut etre non ?
+Ca manque d'une animation quand tout ca arrive. Tu peux reprendre l'animation de l'expand du lecteur audio present dans la page radio. L'ombre autour de la cover est pas très sexy.

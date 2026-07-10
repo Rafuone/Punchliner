@@ -216,7 +216,10 @@ function Chrome() {
         {tvScenes.map(navItem)}
         <div className="sr-grp"><span>📱</span> Téléphone</div>
         {phScenes.map(navItem)}
-        <div className="sr-foot">Vraies pages, hors-ligne. Audio & enregistrement des retours : serveur lancé (<code>npm run dev</code>).</div>
+        <div className="sr-foot">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 9 }}><span className="sr-dot" style={{ display: 'inline-block' }} /> retour écrit, pas encore envoyé</div>
+          Vraies pages, hors-ligne. Audio & enregistrement des retours : serveur lancé (<code>npm run dev</code>).
+        </div>
       </aside>
 
       <main className="sr-stage">
