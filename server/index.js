@@ -586,6 +586,7 @@ function startRound(room) {
   room.current = room.playlist[room.roundIndex];
   room.answers = new Map();
   room.buzz = { winnerId: null, winnerName: null, open: true, lockedOut: new Set(), endsAt: 0 };
+  room.roundRemainingMs = null; room.hardRemainingMs = null; // invariant : pas de temps restant/plafond périmé au démarrage d'une manche (buzzer)
   clearTimeout(room.buzzTimer);
   room.mjDouble = false; room.mjPlus = false;
   room.mjRoundPoints = new Map(); // points donnés par le MJ sur cette manche (pour l'affichage à la révélation)
@@ -886,8 +887,16 @@ function rushPickTrack(room, n) { // un morceau de la tranche de difficulté du 
   const ranked = room.rushRanked, M = ranked.length; if (!M) return { track: null, p: 0 };
   const p = rushDifficulty(n);
   const center = Math.round(p * (M - 1));
-  const half = Math.max(4, Math.floor(M * 0.08)); // fenêtre ±8 % du pool autour de la cible
-  const lo = Math.max(0, center - half), hi = Math.min(M, center + half + 1);
+  // Fenêtre qui S'ÉLARGIT avec la difficulté : minuscule au démarrage (collée au sommet du bac trié),
+  // large seulement quand p monte → un son dur ne peut PAS tomber dans les toutes premières manches.
+  const half = Math.max(3, Math.round(M * (0.015 + 0.09 * p)));
+  let lo = Math.max(0, center - half), hi = Math.min(M, center + half + 1);
+  // GARANTIE grand public : les ~5 premiers morceaux restent dans la bande 'top', les 6-8 en 'top'+'high'
+  // (bornes pré-calculées dans startRush), quel que soit le hasard. Rampe douce reprise ensuite.
+  const cap = n <= 5 ? Math.max(8, room.rushTopEnd || 0)
+            : n <= 8 ? Math.max(room.rushTopEnd || 0, room.rushHighEnd || 0)
+            : M;
+  if (cap && hi > cap) { hi = Math.min(hi, cap); lo = Math.min(lo, Math.max(0, hi - 1)); }
   const fresh = []; for (let i = lo; i < hi; i++) if (!room.rushUsed.has(ranked[i].id)) fresh.push(ranked[i]);
   const cand = fresh.length ? fresh : ranked.slice(lo, hi); // fenêtre épuisée (run très long) → on ré-autorise
   const track = cand[Math.floor(Math.random() * cand.length)] || ranked[center];
@@ -925,6 +934,10 @@ function startRush(room) {
   const startMs = FAST ? RUSH_START_MS : (room.settings.rushStartSec || 60) * 1000; // chrono de départ choisi
   room.rushMaxMs = FAST ? RUSH_MAX_MS : Math.max(RUSH_MAX_MS, startMs + 30000);
   room.rushRanked = rushRankedPool(room); room.rushUsed = new Set(); room.rushTrackNo = 0; // difficulté PROGRESSIVE
+  { const { band } = computeBands(); const R = room.rushRanked; // bornes de bandes → garantie grand public au démarrage
+    let te = 0; while (te < R.length && band.get(R[te]) === 'top') te++;
+    let he = te; while (he < R.length && band.get(R[he]) === 'high') he++;
+    room.rushTopEnd = te; room.rushHighEnd = he; }
   room.rushEndsAt = Date.now() + startMs;
   room.rushResolving = false;
   for (const p of room.players.values()) { p.rushScore = 0; p.rushTracks = 0; }
@@ -1118,7 +1131,7 @@ io.on('connection', (socket) => {
       room.playlist = pickQuiz(rounds || 8, room.settings.difficulty, room.usedQuiz, { noVf: room.settings.quizNoVf }); // filtre difficulté + anti-répétition salon (+ option sans Vrai/Faux)
     } else {
       const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
-      room.playlist = pickPlaylist(rounds || 8, diff.tier, room.settings.era, room.settings.theme);
+      room.playlist = pickPlaylist(rounds || 8, diff.tier, room.settings.era, room.settings.themes);
       cacheTracks(room.playlist); // rapatrie les extraits de la partie en fond (le décompte couvre la manche 1)
     }
     room.totalRounds = room.playlist.length;
