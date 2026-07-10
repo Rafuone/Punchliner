@@ -1665,6 +1665,22 @@ app.get('/api/dev/answer', (req, res) => {
   res.json({ title: room.current.title, artist: room.current.artist, quizAnswer: room.quiz ? room.quiz.answer : null });
 });
 
+// Showroom (/showroom) : reçoit les retours de design PAR PAGE → append dans RETOURS-SHOWROOM.md (racine).
+// Ensuite « corrige les retours du showroom » et je pioche dedans (comme CORRECTIFS.md).
+app.post('/api/feedback', express.json({ limit: '256kb' }), (req, res) => {
+  try {
+    const page = String(req.body?.page || 'inconnu').slice(0, 60);
+    const label = String(req.body?.label || page).slice(0, 120);
+    const text = String(req.body?.text || '').trim().slice(0, 8000);
+    if (!text) return res.status(400).json({ ok: false, error: 'vide' });
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const file = path.join(__dirname, '..', 'RETOURS-SHOWROOM.md');
+    if (!fs.existsSync(file)) fs.writeFileSync(file, '# Retours showroom (par page)\n\n> Déposés depuis /showroom. Dis « corrige les retours du showroom » pour que je les applique.\n');
+    fs.appendFileSync(file, `\n### ${label}  \`[${page}]\` — ${stamp}\n${text}\n`);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false }); }
+});
+
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
 if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));

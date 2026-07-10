@@ -1,0 +1,56 @@
+// MOCK-SOCKET du showroom : remplace les méthodes du singleton `socket` pour piloter les VRAIS
+// composants Host/Player HORS-LIGNE. Principe : les composants bootent en émettant host:reclaim /
+// player:join ; on répond avec un objet `state` conforme à snapshot() du serveur → applyState() rend
+// l'écran EXACT (même chemin que la reconnexion réelle). Changer de scène = remonter le composant
+// (key) après avoir pointé setScene() sur le nouvel état.
+import { socket } from '../socket';
+
+type Handler = (...a: any[]) => void;
+const handlers: Record<string, Handler[]> = {};
+let curScene: () => any = () => ({});
+let installed = false;
+
+export function setScene(fn: () => any) { curScene = fn; }
+
+// Pousse un évènement serveur→client vers les handlers enregistrés (pour scènes interactives éventuelles).
+export function deliver(ev: string, payload?: any) {
+  (handlers[ev] || []).forEach((h) => { try { h(payload); } catch (e) { /* no-op */ } });
+}
+
+export function installMock() {
+  if (installed) return;
+  installed = true;
+  const s = socket as any;
+  s.connected = true;
+  s.io = s.io || { engine: {}, opts: {} };
+  s.on = (ev: string, cb: Handler) => { (handlers[ev] || (handlers[ev] = [])).push(cb); return s; };
+  s.once = s.on;
+  s.off = (ev: string, cb?: Handler) => {
+    if (!ev) { for (const k in handlers) delete handlers[k]; }
+    else if (!cb) delete handlers[ev];
+    else if (handlers[ev]) handlers[ev] = handlers[ev].filter((h) => h !== cb);
+    return s;
+  };
+  s.emit = (ev: string, ...args: any[]) => {
+    const ack = typeof args[args.length - 1] === 'function' ? args[args.length - 1] : null;
+    try { handleEmit(ev, args, ack); } catch (e) { ack && ack({ ok: true }); }
+    return s;
+  };
+  s.connect = () => s;
+  s.disconnect = () => s;
+}
+
+function handleEmit(ev: string, args: any[], ack: ((r?: any) => void) | null) {
+  const st = curScene() || {};
+  const CODE = st.code || 'PUNCH';
+  switch (ev) {
+    case 'host:create': ack && ack({ ok: true, code: CODE, hostToken: 'showroom', poolSize: st.poolSize || 264 }); return;
+    case 'host:reclaim': ack && ack({ ok: true, code: CODE, poolSize: st.poolSize || 264, state: st }); return;
+    case 'player:join': ack && ack({ ok: true, playerId: 'me', waiting: !!st.__waiting, state: st }); return;
+    case 'player:watch': ack && ack({ players: st.players || [] }); return;
+    case 'player:buzz': ack && ack({ ok: true, winner: true, endsAt: Date.now() + 15000, answerMs: 15000 }); return;
+    case 'player:answer': ack && ack({ ok: true }); return;
+    case 'player:power': ack && ack({ ok: true }); return;
+    default: ack && ack({ ok: true }); return;
+  }
+}

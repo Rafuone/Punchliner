@@ -14,6 +14,13 @@
       "runtimeArgs": ["-m", "http.server", "4599"],
       "port": 4599,
       "autoPort": true
+    },
+    {
+      "name": "showroom",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["-w", "client", "run", "dev"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

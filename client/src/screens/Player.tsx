@@ -94,7 +94,7 @@ export default function Player() {
       setRushEnd(state.rushEnd); setPhase('rushend');
     } else if (state.phase === 'prep' && state.round) {
       setRound(state.round); setPrepEndsAt(state.round.endsAt || 0); setPrepDone(false); setNow(Date.now()); setPhase('prep');
-    } else if (state.phase === 'reveal' && state.reveal) { setReveal(state.reveal); setPlayers(state.reveal.scores); setPhase('reveal'); }
+    } else if (state.phase === 'reveal' && state.reveal) { setReveal(state.reveal); setPlayers(state.reveal.scores); if (state.round) setRound((r: any) => ({ ...r, ...state.round })); setPhase('reveal'); }
     else if (state.phase === 'final' && state.final) { setPlayers(state.final.scores); setAwards(state.final.awards || []); setSeries(state.final.series || null); setFinalRounds(state.final.rounds || 0); setPhase('final'); }
     // reconnexion en pleine manche CLASH : a/b ne viennent que d'ici (battle:bets/go ne portent que les IDs) → sans ça, crash au rendu
     else if (typeof state.phase === 'string' && state.phase.startsWith('battle') && state.battle) { setBattle(state.battle); setNow(Date.now()); setPhase(state.phase); }

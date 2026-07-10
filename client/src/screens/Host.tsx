@@ -214,7 +214,7 @@ export default function Host() {
     } else if (state.phase === 'prep' && state.round) {
       setRound(state.round); setPrepEndsAt(state.round.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep');
     } else if (state.phase === 'reveal' && state.reveal) {
-      setReveal(state.reveal); setPlayers(state.reveal.scores); setPhase('reveal');
+      setReveal(state.reveal); setPlayers(state.reveal.scores); if (state.round) setRound((r: any) => ({ ...r, ...state.round })); setPhase('reveal');
     } else if (state.phase === 'final' && state.final) {
       setFinalScores(state.final.scores); setAwards(state.final.awards || []); setSeries(state.final.series || null); setFinalRounds(state.final.rounds || round.total || 0); setPhase('final');
     } else if (typeof state.phase === 'string' && state.phase.startsWith('battle') && state.battle) {
