@@ -18,6 +18,8 @@ const LOBBY_TRACK = '/music/alphawann-philly-flingo.mp3';
 const C = 2 * Math.PI * 54;
 const HKEY = 'pl_host';
 const SILENT = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAACAgICAgICAgICAgICAgIA=';
+// Petites punchlines qui tournent sous le vinyle (TV, vues de loin) : COURTES = lues en un clin d'oeil.
+const PLAY_QUIPS = ['Balance le son', 'Ça sent le classique', "Tends bien l'oreille", 'Prod de malade', 'Devine avant le drop', 'Chuuut... ça arrive', 'Le beat parle pour lui', 'Qui reconnait ?'];
 
 // prénom du podium à taille ADAPTATIVE (façon maillot de basket) : grand si court, réduit s'il déborde
 function fitName(el: HTMLDivElement | null, maxW: number, base: number, min: number) {
@@ -106,6 +108,7 @@ export default function Host() {
   const [reveal, setReveal] = useState<any>(null);
   const [battle, setBattle] = useState<any>(null); // manche CLASH (1v1 + paris) : {a,b,flavor,tallyA,tallyB,endsAt,betMs,durationMs,reveal}
   const [revealStep, setRevealStep] = useState(0); // 0 = réponses seules · 1 = + classement (on affiche l'un PUIS l'autre)
+  const [rankAnim, setRankAnim] = useState(false); // reveal : anim climb/drop RETARDÉE (visible) — off au montage, puis on après un court délai
   const [finalScores, setFinalScores] = useState<any[]>([]);
   const [awards, setAwards] = useState<any[]>([]);       // trophées de la partie qui vient de finir
   const [finalStep, setFinalStep] = useState<'podium' | 'trophies'>('podium'); // fin de partie : podium → showcase trophées
@@ -301,6 +304,15 @@ export default function Host() {
     const t = setTimeout(() => setRevealStep(1), 30000);
     return () => clearTimeout(t);
   }, [phase, reveal]);
+  // Reveal — on RETARDE l'anim de classement (climb/drop) pour qu'elle soit VISIBLE : le board arrive figé,
+  // puis les lignes montent/descendent ~0,7 s après. Un son marque un GROS mouvement (quelqu'un venu de loin).
+  useEffect(() => {
+    if (phase !== 'reveal' || revealStep < 1 || !reveal || reveal.hideBoard) { setRankAnim(false); return; }
+    setRankAnim(false);
+    const big = (reveal.scores || []).some((p: any) => !p.isMJ && Math.abs(p.rankDelta || 0) >= 3);
+    const t = setTimeout(() => { setRankAnim(true); if (big) sfx('horn'); }, 700);
+    return () => clearTimeout(t);
+  }, [phase, revealStep, reveal]);
   // AUTO-RÉPARATION DU SON (priorité : la musique doit marcher à chaque fois). Pendant qu'un extrait
   // doit jouer, si le navigateur le coupe (suspension autoplay, onglet en veille, hoquet réseau), on le
   // relance : au moindre geste, au retour de l'onglet, et via une horloge de garde toutes les 2,5 s.
@@ -706,14 +718,14 @@ export default function Host() {
               <span className="playmeta">Morceau {round.trackNo}{round.event?.reason === 'hit' && round.event?.name ? ` · ${round.event.name} +${Math.round((round.event.addedMs || 0) / 1000)} s` : round.event?.reason === 'pass' ? ` · passé −${Math.round((round.event.removedMs || 0) / 1000)} s` : ''}</span>
               <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
               {Array.isArray(round.scores) && round.scores.length > 0 && (
-                <div style={{ width: '100%', maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                <div className="board" style={{ width: '100%', maxWidth: 560, marginTop: 4 }}>
                   {round.scores.map((p: any, i: number) => (
-                    <div key={p.id} className="row" style={{ gap: 12, alignItems: 'center', background: 'rgba(8,9,12,.5)', border: '1px solid var(--line2)', borderRadius: 10, padding: '8px 14px' }}>
-                      <b style={{ fontFamily: 'var(--disp)', color: 'var(--muted2)', width: 22 }}>{i + 1}</b>
-                      <Med avatarId={p.avatar} size={30} />
-                      <span style={{ fontFamily: 'var(--disp)', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
-                      <span style={{ color: 'var(--muted)', fontSize: 13 }}>{p.tracks} ✓</span>
-                      <b style={{ fontFamily: 'var(--disp)', color: 'var(--fluo)' }}>{fmtAud(p.score)}</b>
+                    <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={p.id}>
+                      <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={30} />{p.name}</span>
+                      <span className="row" style={{ gap: 12, alignItems: 'baseline' }}>
+                        <span className="gain zero">{p.tracks} ✓</span>
+                        <span className="pts">{fmtAud(p.score)}</span>
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -723,8 +735,8 @@ export default function Host() {
             const vf = (round.quiz?.choices?.length || 0) === 2;
             return (
             <>
-              <div className="row" style={{ gap: 18, alignItems: 'center', justifyContent: 'center' }}>
-                <span className="gpill" style={{ color: 'var(--fluo)' }}>{round.quiz?.cat}</span>
+              <div className="row" style={{ gap: 18, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                <span className="gpill" style={{ color: 'var(--fluo)', position: 'absolute', left: '50%', top: -14, transform: 'translate(-50%,-100%)', whiteSpace: 'nowrap' }}>{round.quiz?.cat}</span>
                 <div className="ring" style={{ width: 92, height: 92 }}>
                   <svg viewBox="0 0 120 120">
                     <defs><linearGradient id="tgq" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a6ff00" /><stop offset="1" stopColor="#e4ff1a" /></linearGradient></defs>
@@ -785,7 +797,7 @@ export default function Host() {
                 </div>
               </div>
               <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
-              <span className="playmeta">Extrait en cours · {round.difficulty}</span>
+              <span className="playmeta playquip">{PLAY_QUIPS[(round.index || 0) % PLAY_QUIPS.length]}</span>
               {answered.length > 0 && <div className="answered">{answered.map((n) => <span className="abadge" key={n}>{n}</span>)}</div>}
             </>
           )}
@@ -800,7 +812,7 @@ export default function Host() {
       )}
 
       {phase === 'reveal' && reveal && (
-        <div className="center" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(16px,4vh,52px)', paddingBottom: 'clamp(96px,17vh,150px)', gap: 22 }}>
+        <div className="center" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(12px,2.5vh,32px)', paddingBottom: 'clamp(88px,14vh,132px)', gap: 'clamp(12px,2.2vh,20px)' }}>
           <span className="eyebrow">{reveal.quiz ? 'La réponse' : "C'était…"}</span>
           {reveal.quiz ? (
             <>
@@ -809,7 +821,7 @@ export default function Host() {
             </>
           ) : (
             <div className="row" style={{ gap: 26, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {reveal.track.cover && <img className="cover" src={reveal.track.cover} alt="" style={{ width: 'clamp(160px,26vw,240px)', height: 'clamp(160px,26vw,240px)' }} />}
+              {reveal.track.cover && <img className="cover" src={reveal.track.cover} alt="" style={{ width: 'clamp(140px,20vw,200px)', height: 'clamp(140px,20vw,200px)' }} />}
               <div style={{ textAlign: 'left', maxWidth: 460 }}>
                 <div className="eyebrow" style={{ color: 'var(--muted2)', marginBottom: 2 }}>Titre</div>
                 <h2 className="title-xl" style={{ marginBottom: 12 }}>{reveal.track.title}</h2>
@@ -860,7 +872,7 @@ export default function Host() {
               const r = reveal.results.find((x: any) => x.id === p.id);
               const d = p.rankDelta || 0;
               return (
-                <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}${d > 0 ? ' climb' : d < 0 ? ' drop' : ''}`} key={p.id} style={{ ['--d' as any]: Math.min(Math.abs(d) || 1, 4), animationDelay: `${i * 0.05}s` }}>
+                <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}${rankAnim ? (d > 0 ? ' climb' : d < 0 ? ' drop' : '') : ''}`} key={p.id} style={{ ['--d' as any]: Math.min(Math.abs(d) || 1, 4), animationDelay: `${i * 0.05}s` }}>
                   <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={46} />{p.name}</span>
                   <span className="row" style={{ gap: 12 }}>
                     {d !== 0 && (
@@ -879,6 +891,12 @@ export default function Host() {
             })}
           </div>
           ))}
+          {revealStep >= 1 && !reveal.hideBoard && (() => {
+            const mover = (reveal.scores || []).filter((p: any) => !p.isMJ).reduce((a: any, b: any) => (Math.abs(b.rankDelta || 0) > Math.abs(a?.rankDelta || 0) ? b : a), null);
+            const dd = mover?.rankDelta || 0;
+            if (Math.abs(dd) < 3) return null;
+            return <div className={`bigmove ${dd < 0 ? 'down' : 'up'}${rankAnim ? ' on' : ''}`}>{dd < 0 ? 'Gros glow down' : 'Grosse remontée'} · <b>{mover.name}</b> {dd > 0 ? `▲ +${dd}` : `▼ ${dd}`}</div>;
+          })()}
           <div className="floatbar">{revealStep < 1
             ? <button className="btn warm" onClick={() => setRevealStep(1)}>Voir les scores →</button>
             : <button className="btn warm" onClick={() => socket.emit('host:next')}>{round.index + 1 >= round.total ? 'Voir le podium' : 'Manche suivante'}</button>}</div>
