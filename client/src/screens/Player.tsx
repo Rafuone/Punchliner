@@ -37,6 +37,41 @@ const boldFx = (text: string) => text.split(FX_FIG).map((seg, i) => (i % 2 === 1
 // Quiz Vrai/Faux : classe couleur (vert = Vrai, rouge = Faux) — même convention que le showroom.
 const vfClass = (c: string) => (c === 'Vrai' ? ' vrai' : c === 'Faux' ? ' faux' : '');
 
+// Dock de réactions (téléphone) : un bouton « Réagir » ouvre un panneau catégorisé d'emojis (façon roue de
+// réactions des jeux en ligne) → plus de variété que 8 boutons fixes, sans encombrer l'écran en permanence.
+// On envoie l'INDEX GLOBAL dans le set (l'hôte mappe id→emoji via data.ts) : contrat serveur inchangé.
+function ReactionDock({ set, onSend }: { set: { e: string; t: string; cat: string }[]; onSend: (i: number) => void }) {
+  const [open, setOpen] = useState(false);
+  const cats = set.reduce<string[]>((acc, r) => (acc.includes(r.cat) ? acc : [...acc, r.cat]), []);
+  const [cat, setCat] = useState(cats[0] || '');
+  const [sent, setSent] = useState<number | null>(null);
+  function fire(i: number) {
+    onSend(i); sfx('scratch'); setSent(i);
+    window.setTimeout(() => setSent((s) => (s === i ? null : s)), 600);
+  }
+  return (
+    <div className="reactdock">
+      <button type="button" className={`react-fab ${open ? 'on' : ''}`} onClick={() => setOpen((o) => !o)}>
+        <span className="rf-e">{open ? '✕' : '💬'}</span>{open ? 'Fermer' : 'Réagir'}
+      </button>
+      {open && (
+        <div className="react-sheet">
+          <div className="react-tabs">
+            {cats.map((c) => <button key={c} type="button" className={`react-tab ${c === cat ? 'on' : ''}`} onClick={() => setCat(c)}>{c}</button>)}
+          </div>
+          <div className="react-grid">
+            {set.map((r, i) => r.cat === cat ? (
+              <button key={i} type="button" className={`react-emoji ${sent === i ? 'sent' : ''}`} onClick={() => fire(i)}>
+                <span className="re">{r.e}</span><span className="rl">{r.t}</span>
+              </button>
+            ) : null)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Player() {
   const [step, setStep] = useState<'form' | 'char' | 'roster' | 'trophies'>('form'); // avant d'avoir rejoint (+ pages hub : roster / palmarès)
   const [unlockedTrophies, setUnlockedTrophies] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('pl_trophies') || '[]'); } catch { return []; } });
@@ -527,11 +562,24 @@ export default function Player() {
           <span className="gpill" style={{ color: 'var(--muted)' }}>En attente</span>
         </div>
         {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
-        <div className="center" style={{ gap: 16 }}>
+        <div className="center" style={{ gap: 18, justifyContent: 'flex-start', paddingTop: 'clamp(18px,7vh,64px)' }}>
           <span className="sonar"><span className="dot" style={{ width: 12, height: 12 }} /></span>
-          <h2 className="title-xl">Partie en cours</h2>
-          <p className="muted" style={{ maxWidth: 380 }}>Tu es dans le cercle, {name}. Une partie tourne déjà — tu entres <b style={{ color: 'var(--txt)' }}>dès la prochaine</b>. Reste chaud.</p>
-          {av && <p className="muted">Ton perso : <b style={{ color: 'var(--txt)' }}>{av.name}</b> · pouvoir <b style={{ color: 'var(--ember)' }}>{av.power.name}</b></p>}
+          <h2 className="title-xl" style={{ margin: 0 }}>Partie en cours</h2>
+          <div className="muted" style={{ maxWidth: 320, lineHeight: 1.55 }}>
+            <p style={{ margin: 0 }}>Tu es dans le cercle, <b style={{ color: 'var(--txt)' }}>{name}</b>.</p>
+            <p style={{ margin: '5px 0 0' }}>Tu entres <b style={{ color: 'var(--txt)' }}>dès la prochaine manche</b>.</p>
+            <p style={{ margin: '5px 0 0' }}>Reste chaud.</p>
+          </div>
+          {av && (
+            <div className="glass pad" style={{ display: 'flex', alignItems: 'center', gap: 12, maxWidth: 320, width: '100%' }}>
+              <RMed id={av.id} size={46} />
+              <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
+                <div className="eyebrow" style={{ fontSize: 11 }}>Ton rappeur</div>
+                <div style={{ fontFamily: 'var(--disp)', fontSize: 19, fontWeight: 700, textTransform: 'uppercase', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{av.name}</div>
+                <div style={{ fontSize: 13, color: 'var(--ember)', marginTop: 3 }}>{av.power.name}</div>
+              </div>
+            </div>
+          )}
           <span className="waitdots" aria-hidden="true"><i /><i /><i /></span>
         </div>
       </div></>
@@ -606,6 +654,9 @@ export default function Player() {
   return (
     <><GrungeBg />
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
+      {round.mode === 'buzzer' && buzz === 'mine' && buzzEndsAt > 0 && (
+        <div className={`buzzglow${buzzLeft <= 3 ? ' hot' : ''}`} aria-hidden="true" style={{ ['--urg' as any]: Math.max(0, Math.min(1, (10 - buzzLeft) / 10)) }} />
+      )}
       <div className="topbar">
         <span className="row" style={{ gap: 9, minWidth: 0, flex: 1 }}>{av && <RMed id={av.id} size={34} />}<span className="pname" style={{ fontFamily: 'var(--disp)', fontSize: 17, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{name}</span></span>
         {/* auditeurs retirés du bandeau (blazes longs → ça débordait) ; les charges suffisent ici */}
@@ -733,7 +784,7 @@ export default function Player() {
               </>)
               : buzz === 'locked' ? (<><svg width="46" height="46" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--muted)' }}><rect x="5" y="10.5" width="14" height="9.5" rx="2" stroke="currentColor" strokeWidth="1.7" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.7" /></svg><p className="muted">{buzzMsg}</p></>)
                 : jamMs > 0 ? (<><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti — tu pourras buzzer dans un instant.</p></>)
-                : (<><h2 className="title-xl" style={{ marginBottom: 4 }}>Reconnais le son</h2><button className="buzzer" onClick={doBuzz} style={{ marginTop: 'clamp(40px, 20vh, 190px)' }}>BUZZ</button><p className="muted" style={{ marginTop: 8 }}>Le 1ᵉʳ qui buzze prend la main</p></>)
+                : (<><h2 className="title-xl" style={{ marginBottom: 4 }}>Reconnais le son</h2><button className="buzzer" onClick={doBuzz} style={{ marginTop: 'clamp(40px, 20vh, 190px)' }}>BUZZ</button><p className="muted" style={{ marginTop: 8 }}>Le plus rapide prend le mic</p></>)
           ) : jamMs > 0 ? (
             <><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti — tu peux répondre dans un instant.</p></>
           ) : submitted ? (
@@ -778,7 +829,7 @@ export default function Player() {
             <p className="feedback bad" style={{ margin: '2px 0 0' }}>{myResult.hitBy.map((h: any) => `−${fmtAud(h.amount)} ${h.type === 'sabotage' ? 'raflés' : h.type === 'tax' ? 'taxés' : 'volés'} par ${h.by}`).join(' · ')}</p>
           )}
           {/* réactions/taunts — s'affichent sur l'écran hôte ; le joueur reste actif entre les manches */}
-          <div className="reactbar">{REACTIONS.map((r, i) => <button key={i} type="button" className="reactbtn" onClick={() => sendReaction(i)}><span className="re">{r.e}</span>{r.t}</button>)}</div>
+          <ReactionDock set={REACTIONS} onSend={(i) => sendReaction(i)} />
           </div>
       )}
 
@@ -950,7 +1001,7 @@ export default function Player() {
           <div className="gpill" style={{ marginTop: 6, color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 14, padding: '10px 16px' }}>{certif(me?.score ?? 0, finalRounds || round.total).label}</div>
 
           {/* réagir sur la TV au moment du podium/trophées (jeu de réactions de fin, différent des taunts de manche) */}
-          <div className="reactbar">{END_REACTIONS.map((r, i) => <button key={i} type="button" className="reactbtn" onClick={() => sendReaction(i, true)}><span className="re">{r.e}</span>{r.t}</button>)}</div>
+          <ReactionDock set={END_REACTIONS} onSend={(i) => sendReaction(i, true)} />
 
           {myAwards.length > 0 && (
             <div className="awards" style={{ marginTop: 4 }}>

@@ -511,6 +511,8 @@ export default function Host() {
   const buzzRemain = buzzWinner?.endsAt ? Math.max(0, buzzWinner.endsAt - now) : 0;
   const buzzSec = Math.ceil(buzzRemain / 1000);
   const buzzFrac = buzzWinner?.answerMs ? Math.max(0, Math.min(1, buzzRemain / buzzWinner.answerMs)) : 0;
+  // BUZZ — tick de decompte a chaque seconde ; les 3 dernieres s : tick plus AIGU (rate>1) = urgence audible sans regarder l'ecran
+  useEffect(() => { if (round.mode === 'buzzer' && buzzWinner && buzzSec > 0) sfx('countdown', buzzSec <= 3 ? { rate: 1.7 } : undefined); }, [buzzSec, buzzWinner]);
   const rushFrac = round.rushMax ? Math.max(0, Math.min(1, remaining / round.rushMax)) : 0; // jauge de temps Survivor
   // décomptes CLASH (paris puis duel) — mêmes formules que la manche standard
   const btRemain = battle?.endsAt ? Math.max(0, battle.endsAt - now) : 0;

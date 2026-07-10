@@ -234,28 +234,55 @@ export const REBALANCE = [
 
 // Réactions/taunts : boutons (pas de texte libre) que le joueur balance pendant le reveal → remontent
 // sur l'écran hôte façon réactions Meet. Phrasé « street » du projet. Index = id envoyé au serveur.
-export const REACTIONS = [
-  { e: '🔥', t: 'Chaud' },
-  { e: '😮‍💨', t: 'Trop facile' },
-  { e: '🥊', t: 'Grosse frappe' },
-  { e: '😤', t: 'Dans ta face' },
-  { e: '👑', t: 'On est là' },
-  { e: '💀', t: 'La honte' },
-  { e: '🤡', t: 'Petit joueur' },
-  { e: '🐐', t: 'GOAT' },
+// Réactions rangées en CATÉGORIES (façon roue d'emojis des jeux en ligne). Le champ `cat` sert au panneau
+// téléphone (onglets) ; l'hôte l'IGNORE (il ne lit que .e/.t via l'index → data.ts et Host.tsx lisent la
+// MÊME liste, donc l'id reste cohérent). Pour ajouter une réaction : l'AJOUTER ici suffit, les 2 côtés suivent.
+export type Reaction = { e: string; t: string; cat: string };
+export const REACTIONS: Reaction[] = [
+  // — Hype —
+  { e: '🔥', t: 'Chaud', cat: 'Hype' },
+  { e: '🐐', t: 'GOAT', cat: 'Hype' },
+  { e: '👑', t: 'On est là', cat: 'Hype' },
+  { e: '🥊', t: 'Grosse frappe', cat: 'Hype' },
+  { e: '⚡', t: 'Trop rapide', cat: 'Hype' },
+  { e: '🎯', t: 'Dans le mille', cat: 'Hype' },
+  // — Chambre —
+  { e: '🤡', t: 'Petit joueur', cat: 'Chambre' },
+  { e: '💀', t: 'La honte', cat: 'Chambre' },
+  { e: '😮‍💨', t: 'Trop facile', cat: 'Chambre' },
+  { e: '🍼', t: 'Le bébé', cat: 'Chambre' },
+  { e: '📉', t: 'Ça chute', cat: 'Chambre' },
+  { e: '🐢', t: 'À la traîne', cat: 'Chambre' },
+  // — Rage —
+  { e: '😤', t: 'Dans ta face', cat: 'Rage' },
+  { e: '🤬', t: 'Ça rage', cat: 'Rage' },
+  { e: '😭', t: 'Rageant', cat: 'Rage' },
+  { e: '🧢', t: 'Menteur', cat: 'Rage' },
+  { e: '🙄', t: 'Sérieux ?', cat: 'Rage' },
+  // — Respect —
+  { e: '🤝', t: 'GG', cat: 'Respect' },
+  { e: '🫡', t: 'Respect', cat: 'Respect' },
+  { e: '🎤', t: 'Trop fort', cat: 'Respect' },
+  { e: '🙌', t: 'Chapeau', cat: 'Respect' },
+  { e: '💯', t: 'Validé', cat: 'Respect' },
 ];
 
 // Réactions de FIN DE PARTIE (podium/trophées) — un ton différent des taunts de manche : on félicite,
 // on rage, on relance. Envoyées avec le flag `end` → l'hôte les mappe sur ce set (pas REACTIONS).
-export const END_REACTIONS = [
-  { e: '🏆', t: 'La ceinture' },
-  { e: '🤝', t: 'GG' },
-  { e: '🐐', t: 'GOAT' },
-  { e: '😭', t: 'Rageant' },
-  { e: '🔁', t: 'On remet ça' },
-  { e: '🫡', t: 'Respect' },
-  { e: '😮‍💨', t: 'Dégoûté' },
-  { e: '🎤', t: 'Trop fort' },
+export const END_REACTIONS: Reaction[] = [
+  // — Big up —
+  { e: '🏆', t: 'La ceinture', cat: 'Big up' },
+  { e: '🤝', t: 'GG', cat: 'Big up' },
+  { e: '🐐', t: 'GOAT', cat: 'Big up' },
+  { e: '🫡', t: 'Respect', cat: 'Big up' },
+  { e: '🎤', t: 'Trop fort', cat: 'Big up' },
+  { e: '🔁', t: 'On remet ça', cat: 'Big up' },
+  // — Salé —
+  { e: '😭', t: 'Rageant', cat: 'Salé' },
+  { e: '😮‍💨', t: 'Dégoûté', cat: 'Salé' },
+  { e: '🧂', t: 'Trop salé', cat: 'Salé' },
+  { e: '🤡', t: 'Bien joué…', cat: 'Salé' },
+  { e: '💀', t: 'Achevé', cat: 'Salé' },
 ];
 
 // Punchlines de chambrage affichées quand le joueur n'a AUCUNE charge de pouvoir (jauge à sec).

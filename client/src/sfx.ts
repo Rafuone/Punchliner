@@ -119,7 +119,7 @@ export function playScratch() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function sfx(key: keyof typeof URLS) {
+export function sfx(key: keyof typeof URLS, opts?: { rate?: number }) {
   try {
     if (typeof window === 'undefined' || off()) return;
     if (key === 'scratch') { playScratch(); return; } // route spéciale → scratch synthétisé (pas de preview)
@@ -127,6 +127,7 @@ export function sfx(key: keyof typeof URLS) {
     let a = cache[key];
     if (!a) { a = new Audio(url); a.preload = 'auto'; cache[key] = a; }
     a.currentTime = 0; a.volume = VOL[key] ?? 0.5;
+    const rate = opts?.rate ?? 1; a.playbackRate = rate; (a as any).preservesPitch = rate === 1; // rate>1 + preservesPitch off = tick plus AIGU (urgence : 3 dernieres s du buzz)
     a.play().catch(() => {}); // autoplay bloqué tant que pas d'interaction : ignoré
     if (stopTimers[key]) { clearTimeout(stopTimers[key]); stopTimers[key] = undefined; }
     const cap = MAXMS[key];

@@ -286,6 +286,30 @@ button, input { font-family: inherit; }
 .reactbtn:hover { border-color: var(--fluo); transform: translateY(-1px); }
 .reactbtn:active { transform: scale(.94); }
 .reactbtn .re { font-size: 18px; line-height: 1; }
+
+/* ===== réactions v2 : bouton « Réagir » + panneau catégorisé d'emojis (façon jeux en ligne) ===== */
+.reactdock { width: 100%; max-width: 480px; display: flex; flex-direction: column; align-items: center; margin-top: 6px; }
+.react-fab { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 4px;
+  background: var(--surf); border: 1px solid var(--line2); color: var(--txt); font-weight: 800; font-size: 14px;
+  cursor: pointer; transition: .14s; box-shadow: var(--etch); }
+.react-fab:active { transform: scale(.94); }
+.react-fab.on { border-color: var(--fluo); color: var(--fluo); }
+.react-fab .rf-e { font-size: 18px; line-height: 1; }
+.react-sheet { width: 100%; margin-top: 10px; background: rgba(18,18,24,.72); border: 1px solid var(--line2);
+  border-radius: 6px; padding: 10px; box-shadow: var(--etch); animation: reactpop .16s ease-out; }
+@keyframes reactpop { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+.react-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.react-tab { flex: 1; padding: 8px 6px; border-radius: 3px; background: transparent; border: 1px solid var(--line2);
+  color: var(--muted); font-weight: 700; font-size: 12.5px; letter-spacing: .02em; cursor: pointer; transition: .12s; }
+.react-tab.on { color: var(--ink); background: var(--fluo); border-color: var(--fluo); }
+.react-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.react-emoji { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px;
+  border-radius: 4px; background: var(--surf); border: 1px solid var(--line2); color: var(--txt);
+  font-weight: 700; font-size: 11px; cursor: pointer; transition: .1s; }
+.react-emoji .re { font-size: 26px; line-height: 1; }
+.react-emoji .rl { color: var(--muted); }
+.react-emoji:active { transform: scale(.9); }
+.react-emoji.sent { border-color: var(--fluo); background: rgba(228,255,26,.12); transform: scale(1.05); }
 .reactfloat { position: fixed; inset: 0; z-index: 60; pointer-events: none; overflow: hidden; }
 /* bulles ancrées dans le COULOIR latéral (bord gauche/droit), largeur bornée + wrap → jamais devant le
    contenu centré. Montée courte (reste dans le bas de l'écran), disparition douce. */
@@ -583,7 +607,7 @@ button, input { font-family: inherit; }
 .buzzer { position: relative; width: clamp(200px, 64vw, 268px); height: clamp(200px, 64vw, 268px); border-radius: 50%; cursor: pointer; border: none;
   font-family: var(--disp); font-weight: 700; font-size: clamp(42px, 14vw, 68px); letter-spacing: .04em; text-transform: uppercase; color: var(--ink);
   background: var(--fluo);
-  box-shadow: 0 15px 0 #6a7700, 0 19px 22px rgba(0,0,0,.5), inset 0 8px 16px rgba(255,255,255,.6), inset 0 -16px 26px rgba(0,0,0,.24);
+  box-shadow: 0 15px 0 #6a7700, 0 18px 16px -14px rgba(0,0,0,.32), inset 0 8px 16px rgba(255,255,255,.6), inset 0 -16px 26px rgba(0,0,0,.24);
   transition: transform .09s ease, box-shadow .09s ease; animation: buzzpulse 1.2s ease-in-out infinite; -webkit-tap-highlight-color: transparent; }
 .buzzer::after { content: ''; position: absolute; inset: 16px; border-radius: 50%; border: 2px dashed rgba(10,11,12,.26); pointer-events: none; }
 /* on appuie : le bouton descend sur sa base (15px), la base disparaît presque */
@@ -610,6 +634,19 @@ button, input { font-family: inherit; }
 }
 @keyframes buzzshake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 @media (prefers-reduced-motion: reduce) { .buzzdisc, .buzzring.hot { animation: none; } }
+
+/* buzzer — GLOW d'urgence autour de l'ecran TELEPHONE pendant qu'on tape sa reponse (--urg : 0 vert -> 1 rouge, pilote par le temps restant) */
+.buzzglow { position: fixed; inset: 0; z-index: 40; pointer-events: none;
+  --gc: color-mix(in hsl, #2fe08f, #ff2e2e calc(var(--urg, 0) * 100%));
+  box-shadow: inset 0 0 0 4px var(--gc), inset 0 0 40px 6px color-mix(in srgb, var(--gc) 60%, transparent);
+  transition: box-shadow .5s linear;
+  animation: buzzglow-pulse 1s ease-in-out infinite; }
+@keyframes buzzglow-pulse {
+  0%, 100% { opacity: calc(.25 + var(--urg, 0) * .45); }
+  50%      { opacity: calc(.6 + var(--urg, 0) * .4); }
+}
+.buzzglow.hot { animation-duration: .5s; box-shadow: inset 0 0 0 6px var(--gc), inset 0 0 56px 12px color-mix(in srgb, var(--gc) 78%, transparent); }
+@media (prefers-reduced-motion: reduce) { .buzzglow { animation: none; opacity: calc(.4 + var(--urg, 0) * .5); } }
 
 /* réglages (segments) — tuiles mates, sélection fluo */
 .seg { display: flex; flex-wrap: wrap; gap: 8px; }
