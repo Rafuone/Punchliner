@@ -1425,3 +1425,29 @@ button, input { font-family: inherit; }
 .gmeta-round b i { font-style: normal; color: var(--muted); font-size: .62em; }
 .gmeta-chip { font-family: var(--disp); font-weight: 700; font-size: clamp(12px, 1.3vw, 16px); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
   background: rgba(255,255,255,.05); border: 1px solid var(--line2); border-radius: 3px; padding: 5px 11px; }
+
+/* ── SHOWROOM : itérations visuelles du bouton BUZZ (bzv-1..5), inertes hors /showroom ── */
+.bzv-1 .buzzer { box-shadow: 0 8px 22px rgba(0,0,0,.4); }
+.bzv-1 .buzzer::after { border-color: rgba(10,11,12,.18); }
+.bzv-1 .buzzer:active { transform: scale(.96); box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+
+.bzv-2 .buzzer { background: rgba(166,255,0,.05); color: var(--fluo); border: 4px solid var(--fluo);
+  box-shadow: 0 0 0 2px rgba(166,255,0,.15), 0 0 40px rgba(166,255,0,.35), inset 0 0 30px rgba(166,255,0,.14); animation: bzv2glow 1.4s ease-in-out infinite; }
+.bzv-2 .buzzer::after { border: none; }
+.bzv-2 .buzzer:active { transform: scale(.96); }
+@keyframes bzv2glow { 0%,100% { box-shadow: 0 0 0 2px rgba(166,255,0,.15), 0 0 32px rgba(166,255,0,.3), inset 0 0 26px rgba(166,255,0,.12); } 50% { box-shadow: 0 0 0 3px rgba(166,255,0,.3), 0 0 62px rgba(166,255,0,.55), inset 0 0 34px rgba(166,255,0,.22); } }
+
+.bzv-3 .buzzer { background: radial-gradient(circle at 50% 32%, #ff8a3d, #ff4d2e 70%); color: #1a0a04;
+  box-shadow: 0 12px 0 #9c2a12, 0 16px 26px rgba(0,0,0,.5), inset 0 8px 16px rgba(255,255,255,.4); animation: buzzpulse 1s ease-in-out infinite; }
+.bzv-3 .buzzer::after { border-color: rgba(26,10,4,.3); }
+.bzv-3 .buzzer:active { transform: translateY(12px) scale(.985); box-shadow: 0 2px 0 #9c2a12, 0 5px 10px rgba(0,0,0,.5); }
+
+.bzv-4 .buzzer { background: var(--fluo); box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+.bzv-4 .buzzer::after { border: none; }
+.bzv-4 .buzzer::before { content:''; position:absolute; inset:-6px; border-radius:50%; border:2px solid rgba(166,255,0,.6); animation: bzv4sonar 1.6s ease-out infinite; pointer-events:none; }
+@keyframes bzv4sonar { 0% { transform: scale(1); opacity:.7; } 100% { transform: scale(1.5); opacity:0; } }
+
+.bzv-5 .buzzer { background: linear-gradient(160deg, #1b1e22, #0e0f11); color: var(--fluo); border: 1px solid rgba(166,255,0,.4);
+  box-shadow: 0 14px 40px rgba(0,0,0,.6), inset 0 1px 0 rgba(166,255,0,.5), inset 0 0 40px rgba(166,255,0,.08); text-shadow: 0 0 18px rgba(166,255,0,.6); }
+.bzv-5 .buzzer::after { border-color: rgba(166,255,0,.18); }
+.bzv-5 .buzzer:active { transform: scale(.97); }

@@ -37,7 +37,8 @@ const PAIR: Record<string, string> = {
 export default function Showroom() {
   if (EMBED) {
     const scene = SCENES.find((s) => s.id === EMBED) || SCENES[0];
-    return <div className="app">{scene.comp === 'host' ? <Host /> : <Player />}</div>;
+    const bv = params.get('buzzvar'); // showroom : variante visuelle du buzz (bzv-1..5) pour itérer
+    return <div className={'app' + (bv ? ' bzv-' + bv : '')}>{scene.comp === 'host' ? <Host /> : <Player />}</div>;
   }
   return <Chrome />;
 }
@@ -48,6 +49,7 @@ function Chrome() {
   const [activeId, setActiveId] = useState(SCENES[0].id);
   const [nonce, setNonce] = useState(0);
   const [combo, setCombo] = useState(false);
+  const [buzzVar, setBuzzVar] = useState(1);
   const [toast, setToast] = useState('');
   const [box, setBox] = useState({ w: 900, h: 600 });
   const [fbMap, setFbMap] = useState<Record<string, string>>(() => {
@@ -62,8 +64,9 @@ function Chrome() {
   const isPhone = scene.group === 'phone';
   const tvId = isPhone ? PAIR[activeId] : activeId;
   const phId = isPhone ? activeId : PAIR[activeId];
-  const src = (id: string) => `${location.pathname}?embed=${id}&n=${nonce}`;
+  const src = (id: string) => `${location.pathname}?embed=${id}&n=${nonce}${id === 'ph-buzz' && buzzVar ? '&buzzvar=' + buzzVar : ''}`;
   const fb = fbMap[activeId] || '';
+  const showBuzzIter = (isPhone ? activeId : (combo ? phId : '')) === 'ph-buzz'; // le buzz téléphone est affiché → picker d'itérations
 
   const tvScenes = SCENES.filter((s) => s.group === 'tv');
   const phScenes = SCENES.filter((s) => s.group === 'phone');
@@ -172,6 +175,12 @@ function Chrome() {
       </main>
 
       <aside className="sr-fb">
+        {showBuzzIter && (
+          <div className="sr-iter">
+            <div className="sr-iterlabel">Itérations du buzz (choisis)</div>
+            <div className="sr-iterbtns">{[1, 2, 3, 4, 5].map((v) => <button key={v} className={'sr-iterbtn' + (buzzVar === v ? ' on' : '')} onClick={() => { setBuzzVar(v); setNonce((n) => n + 1); }}>{v}</button>)}</div>
+          </div>
+        )}
         <div className="sr-fbhead">Retour sur <b>{scene.label}</b></div>
         <textarea value={fb} onChange={(e) => setFb(e.target.value)} placeholder={`Mise en page, tailles, lisibilité, animations… Chaque page a son propre bloc, gardé même si tu changes d'écran. → RETOURS-SHOWROOM.md`} />
         <div className="sr-fbrow">
@@ -223,4 +232,10 @@ const CSS = `
 .sr-dl{background:#1a1c21;border:1px solid #2c3038;color:#d6d9d4;border-radius:8px;padding:10px 12px;font-size:12.5px;cursor:pointer}
 .sr-toast{color:#a6ff00;font-size:12.5px}
 .sr-fbhint{margin-top:auto;font-size:11px;color:#7d838c;border-top:1px solid #23262c;padding-top:9px}
+.sr-iter{background:#0e0f11;border:1px solid #2c3038;border-radius:9px;padding:9px 10px}
+.sr-iterlabel{font-size:10.5px;color:#9aa0a6;margin-bottom:7px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.sr-iterbtns{display:flex;gap:6px}
+.sr-iterbtn{flex:1;background:#1a1c21;border:1px solid #2c3038;color:#d6d9d4;border-radius:7px;padding:9px 0;font-size:14px;font-weight:800;cursor:pointer}
+.sr-iterbtn:hover{border-color:#a6ff00}
+.sr-iterbtn.on{background:#a6ff00;color:#0b0c0e;border-color:#a6ff00}
 `;
