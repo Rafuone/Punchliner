@@ -4,9 +4,9 @@ import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegen
 import GrungeBg from '../GrungeBg';
 import { sfx } from '../sfx';
 
-// Jauge de pouvoir LISIBLE : pastilles pleines/vides (charges dispo /5) + fine barre de progression
-// vers la charge suivante. Une charge = un pouvoir.
-function Charges({ n, max = 5, charge }: { n: number; max?: number; charge?: number }) {
+// Jauge de pouvoir LISIBLE : pastilles pleines/vides (charges dispo /3) + fine barre de progression
+// vers la charge suivante. Une charge = un pouvoir. Cap à 3 : au-delà ça ne charge plus → force à jouer.
+function Charges({ n, max = 3, charge }: { n: number; max?: number; charge?: number }) {
   return (
     <span className="charges" role="img" aria-label={`${n} charge${n > 1 ? 's' : ''} de pouvoir sur ${max}`}>
       <svg className="charges-ic" width="12" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2L4 14h6l-1 8 9-12h-6z" /></svg>

@@ -80,7 +80,8 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
   total/rang + score de la barre en `??? aud.`). Si le leader est intouchable, on l'affiche (le plus fort
   doit gagner — pas de frustration Mario Kart). Flag `suspense` (round) / `hideBoard` (reveal).
 - **Jauge de pouvoir** (`fillCharges`) : se remplit en fin de manche selon `rebalance`
-  (comeback = les derniers rechargent + vite · snowball · off). 1 charge = 1 pouvoir. Cap 5.
+  (comeback = les derniers rechargent + vite · snowball · off). 1 charge = 1 pouvoir. **Cap 3** (2026-07-10 :
+  au-delà la jauge reste à 100 % sans créer de charge → force à jouer ses pouvoirs plutôt que thésauriser).
   - **Griser** (2026-07-09) : un pouvoir sans cible (vol sans meneur, sabotage sans cible, comeback si pas à la
     traîne…) est **grisé** côté joueur. Serveur `canPowerAct(room,p,pw)` → event `power:eligible` par socket au `prep`.
   - **Anim vol/dîme** : la VICTIME reçoit `power:hit` (temps réel « −X volés par Y ») + `room.powerHits` → badge

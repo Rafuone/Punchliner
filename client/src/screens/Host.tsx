@@ -206,7 +206,7 @@ export default function Host() {
     setPlayers(state.players || []);
     setSettings((s) => ({ ...s, difficulty: state.settings?.difficulty || s.difficulty, mode: state.settings?.mode || s.mode }));
     if (state.phase === 'playing' && state.round) {
-      setRound(state.round); setBuzzWinner(state.buzz?.winnerName ? { name: state.buzz.winnerName, avatar: state.buzz.winnerAvatar, endsAt: state.buzz.endsAt || 0, answerMs: state.buzz.answerMs || 8000 } : null); setNow(Date.now()); setPhase('playing');
+      setRound(state.round); setBuzzWinner(state.buzz?.winnerName ? { name: state.buzz.winnerName, avatar: state.buzz.winnerAvatar, endsAt: state.buzz.endsAt || 0, answerMs: state.buzz.answerMs || 15000 } : null); setNow(Date.now()); setPhase('playing');
       if (state.round.mode === 'rush' && state.round.scores) setPlayers(state.round.scores);
       playRound(state.round);
     } else if (state.phase === 'rushend') {
@@ -253,7 +253,7 @@ export default function Host() {
     socket.on('rush:end', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); clearTimeout(audioRetryRef.current); setRushEnd(d); setPhase('rushend'); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
     // buzz : le son SE COUPE (sinon on buzze, on écoute tranquille, puis on répond = trop facile)
-    socket.on('buzz:winner', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); buzzActiveRef.current = true; wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 8000 }); setNow(Date.now()); }); // buzzActiveRef : verrou anti-relance du son PENDANT que le buzzeur répond (course avec playRound)
+    socket.on('buzz:winner', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); buzzActiveRef.current = true; wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 15000 }); setNow(Date.now()); }); // buzzActiveRef : verrou anti-relance du son PENDANT que le buzzeur répond (course avec playRound)
     // le buzzeur a raté → le buzzer rouvre et le son REPREND pour les autres (SEULEMENT la source active de la manche,
     // sinon on relancerait une piste Spotify périmée EN PLUS de Deezer = double son)
     socket.on('buzz:open', () => { buzzActiveRef.current = false; wantAudioRef.current = true; if (usingSpotifyRef.current) spotifyTogglePlay(); else if (previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); setBuzzWinner(null); }); // le buzzeur a raté → le buzzer rouvre ; reprise Deezer via playPreview (gardé buzzActiveRef + re-check dans le .then) pour éviter le softlock si un 2e buzz arrive pendant le play() de reprise
@@ -381,12 +381,12 @@ export default function Host() {
     }, dt);
   }
   // lance / réanime l'instru du lobby en fondu
-  function playLobby() {
+  function playLobby(vol = 0.32) {
     const a = lobbyAudioRef.current; if (!a || !musicOnRef.current) return;
     if (!a.src || a.src.indexOf(LOBBY_TRACK) < 0) a.src = LOBBY_TRACK;
     a.loop = true;
-    if (a.paused) { a.volume = 0; a.play().then(() => fadeTo(a, 0.32, 1100)).catch(() => {}); }
-    else fadeTo(a, 0.32, 700);
+    if (a.paused) { a.volume = 0; a.play().then(() => fadeTo(a, vol, 1100)).catch(() => {}); }
+    else fadeTo(a, vol, 700);
   }
   function playMenuTrack(i: number, pushHist = true) {
     const a = menuAudioRef.current; if (!a) return;
@@ -433,11 +433,11 @@ export default function Host() {
   }, [configuring]);
   // hors lobby (en jeu) : on coupe tout le menu ; sur le lobby (hors config) : on (ré)essaie l'instru
   useEffect(() => {
-    const quiz = round.mode === 'quiz';
-    if (phase !== 'lobby' && !quiz) { menuAudioRef.current?.pause(); const la = lobbyAudioRef.current; if (la && !la.paused) fadeTo(la, 0, 500, true); }
-    else if (phase === 'lobby' && !configuring && musicOnRef.current) playLobby();
-    else if (quiz && musicOnRef.current) { playLobby(); const la = lobbyAudioRef.current; if (la) la.volume = 0.22; } // QUIZ : instru Alpha Wann en fond DOUX (pas de distraction)
-  }, [phase]);
+    const quizGame = round.mode === 'quiz';
+    if (phase === 'lobby') { if (!configuring && musicOnRef.current) playLobby(); }                 // lobby (hors config) : instru normale (0.32)
+    else if (quizGame && musicOnRef.current) playLobby(0.2);                                          // QUIZ en jeu : Alpha Wann en fond DOUX, JAMAIS coupée entre les questions (dépend de round.mode → démarre dès la 1re manche quiz, plus de course de fade)
+    else { menuAudioRef.current?.pause(); const la = lobbyAudioRef.current; if (la && !la.paused) fadeTo(la, 0, 500, true); } // autres modes en jeu : on coupe menu/lobby (le son de manche prend le relais)
+  }, [phase, round.mode]);
 
   // Lecture de l'extrait — AUTO-RÉPARANTE, sans aucun bouton ni geste. La page est déjà "déverrouillée"
   // depuis le clic "Lancer", donc play() marche en programmatique : si le navigateur coupe le son, on le

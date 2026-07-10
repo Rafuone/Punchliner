@@ -38,7 +38,7 @@ export function certif(score: number, rounds: number) {
   const per = (score || 0) / Math.max(1, rounds || 1); // auditeurs / manche → indépendant de la longueur de partie
   // Paliers DURCIS (2e passe) : gagner une partie ne doit PAS donner du 3× Platine par défaut. Diamant =
   // quasi sans-faute en difficulté élevée. Le Platine reste atteignable sur une belle partie.
-  if (per >= 50000) return { label: 'Disque de Diamant', short: 'Diamant' };
+  if (per >= 46000) return { label: 'Disque de Diamant', short: 'Diamant' };
   if (per >= 35000) return { label: 'Triple Platine', short: '3× Platine' };
   if (per >= 25000) return { label: 'Double Platine', short: '2× Platine' };
   if (per >= 16000) return { label: 'Disque de Platine', short: 'Platine' };

@@ -67,6 +67,24 @@ export function extractFeats(track) {
   return feats;
 }
 
+// Alias d'artistes : sigles/diminutifs courants ≠ graphie officielle Deezer (ex. tout le monde dit
+// « NTM » pour « Suprême NTM »). Au sein d'un groupe, toutes les formes sont équivalentes (bidirectionnel).
+// N'ajouter QUE les écarts sigle≠officiel : IAM / PNL / 113 sont DÉJÀ la graphie Deezer → inutile.
+const ALIAS_GROUPS = [
+  ['supreme ntm', 'ntm'],
+  ['maitre gims', 'gims'],
+  ["sexion d assaut", 'sexion'],
+  ['psy 4 de la rime', 'psy 4'],
+];
+const ALIAS_INDEX = new Map();
+for (const g of ALIAS_GROUPS) { const set = g.map(normalize); for (const k of set) ALIAS_INDEX.set(k, set); }
+// Formes alternatives acceptées pour un artiste/feat donné (vide si aucun alias connu).
+export function aliasForms(target) {
+  const t = normalize(target);
+  const set = ALIAS_INDEX.get(t);
+  return set ? set.filter((x) => x !== t) : [];
+}
+
 // Note brute d'une réponse : 100 pts titre + 100 pts artiste. Le feat compte comme artiste.
 export function gradeAnswer(answer, track, lenient = false) {
   const titleQ = matchQuality(answer, track.title, lenient);
@@ -75,12 +93,14 @@ export function gradeAnswer(answer, track, lenient = false) {
     // feats du titre/artiste + liste pré-calculée (track.feats = feats du titre COMPLET Deezer)
     const feats = [...extractFeats(track), ...(track.feats || [])];
     for (const f of feats) { const q = matchQuality(answer, f, lenient); if (q > artistQ) artistQ = q; }
+    // alias de sigle (NTM ↔ Suprême NTM, Gims ↔ Maître Gims…) sur l'artiste ET les feats
+    for (const c of [track.artist, ...feats]) for (const alt of aliasForms(c)) { const q = matchQuality(answer, alt, lenient); if (q > artistQ) artistQ = q; }
   }
   const titleHit = titleQ > 0;
   const artistHit = artistQ > 0;
   // Auditeurs : 10 000 par volet (titre / artiste). Moins de fautes (qualité 1 vs 0,8) = plus d'auditeurs.
   let base = Math.round(titleQ * 10000 + artistQ * 10000);
-  if (titleHit && artistHit) base += 5000; // prime de précision : titre ET artiste
+  if (titleHit && artistHit) base += 10000; // prime de précision : titre ET artiste (vaut un 3e volet)
   return { titleHit, artistHit, base };
 }
 

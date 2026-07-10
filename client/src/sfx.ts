@@ -14,17 +14,115 @@ const URLS: Record<string, string> = {
   airhorn: 'https://cdn.freesound.org/previews/414/414208_6938106-lq.mp3',  // "Airhorn" (sélection d'Alexandre) — cheat code
 };
 const VOL: Record<string, number> = { hover: 0.34, click: 0.5, confirm: 0.6, error: 0.58, scratch: 0.62, horn: 0.6, countdown: 0.5, launch: 0.62, recap: 0.4, airhorn: 0.65 };
-// Durée MAX de lecture (ms) par son : au-delà on COUPE net. La preview Freesound du "scratch" est une
-// longue rafale (~25 scratches) → on n'en garde qu'UN coup court, sinon ça déborde sur la musique de manche.
-// Absent = le son joue en entier.
-const MAXMS: Record<string, number> = { scratch: 260 };
+// Durée MAX de lecture (ms) par son : au-delà on COUPE net. Absent = le son joue en entier.
+// NB : 'scratch' est désormais SYNTHÉTISÉ (playScratch, WebAudio) → il ne passe plus par ce cap.
+const MAXMS: Record<string, number> = {};
 const stopTimers: Record<string, ReturnType<typeof setTimeout> | undefined> = {};
 const cache: Record<string, HTMLAudioElement> = {};
 const off = () => { try { return localStorage.getItem('pl_sfx_off') === '1'; } catch { return false; } };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SCRATCH SYNTHÉTISÉ (WebAudio) — remplace la preview Freesound (trop longue/"grande").
+// Un "zig" de DJ COURT (~130 ms) : bruit blanc filtré par un BANDPASS résonant (Q élevé →
+// le bruit devient "pitché" comme un vinyle scrubé) + double coup rapide "wi-chi" (2 strokes),
+// avec sweep de fréquence du filtre ET de playbackRate (aller-retour de la main sur la platine).
+// Déterministe, offline, coupable net (sfxStop('scratch') / sfxStopAll).
+// TUNING : voir les const S1/GAP/S2 (durées) et les valeurs de sweep du bandpass/playbackRate ci-dessous.
+let actx: AudioContext | null = null;
+let noiseBuf: AudioBuffer | null = null;
+const scratchSources = new Set<AudioBufferSourceNode>();
+const scratchMasters = new Set<GainNode>();
+
+function scratchCtx(): AudioContext | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    if (!actx) {
+      const AC = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AC) return null;
+      actx = new AC();
+    }
+    if (actx.state === 'suspended') actx.resume().catch(() => {});
+    return actx;
+  } catch { return null; }
+}
+function scratchNoise(ctx: AudioContext): AudioBuffer {
+  if (noiseBuf && noiseBuf.sampleRate === ctx.sampleRate) return noiseBuf;
+  const len = Math.floor(ctx.sampleRate * 0.4);            // 0,4 s de bruit blanc, bouclé pendant le scrub
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+  noiseBuf = buf;
+  return buf;
+}
+// Coupe TOUS les scratches synth en cours (net). Appelé par sfxStop('scratch') / sfxStopAll().
+function stopScratch() {
+  try {
+    scratchSources.forEach((s) => { try { s.stop(); } catch {} try { s.disconnect(); } catch {} });
+    scratchSources.clear();
+    scratchMasters.forEach((m) => { try { m.gain.cancelScheduledValues(0); m.gain.setValueAtTime(0, m.context.currentTime); m.disconnect(); } catch {} });
+    scratchMasters.clear();
+  } catch {}
+}
+export function playScratch() {
+  try {
+    if (typeof window === 'undefined' || off()) return;
+    const ctx = scratchCtx(); if (!ctx) return;
+    const vol = VOL.scratch ?? 0.6;
+    const t0 = ctx.currentTime + 0.001;
+    // Durées des deux coups (s) — total ≈ 0,12 s + petite queue ≈ 140 ms. Baisse S1/S2 pour + vif.
+    const S1 = 0.055, GAP = 0.010, S2 = 0.055;
+    const end = t0 + S1 + GAP + S2;
+
+    const master = ctx.createGain();
+    master.gain.value = 0.0001;
+    master.connect(ctx.destination);
+
+    const src = ctx.createBufferSource();
+    src.buffer = scratchNoise(ctx);
+    src.loop = true;
+
+    const bp = ctx.createBiquadFilter();  // résonance = pitch du scrub
+    bp.type = 'bandpass'; bp.Q.value = 9;
+    const hp = ctx.createBiquadFilter();  // vire le grave/rumble
+    hp.type = 'highpass'; hp.frequency.value = 350;
+    src.connect(bp); bp.connect(hp); hp.connect(master);
+
+    // Enveloppe de gain : coup 1 (attaque vive → chute) puis coup 2 (re-attaque → extinction).
+    const g = master.gain;
+    g.setValueAtTime(0.0001, t0);
+    g.exponentialRampToValueAtTime(vol, t0 + 0.006);
+    g.exponentialRampToValueAtTime(0.05, t0 + S1);
+    g.exponentialRampToValueAtTime(vol, t0 + S1 + GAP + 0.006);
+    g.exponentialRampToValueAtTime(0.0001, end);
+
+    // Sweep de fréquence du bandpass = le mouvement "wi" (montée) puis "chi" (descente).
+    const f = bp.frequency;
+    f.setValueAtTime(500, t0);
+    f.exponentialRampToValueAtTime(2600, t0 + S1);
+    f.setValueAtTime(2600, t0 + S1 + GAP);
+    f.exponentialRampToValueAtTime(600, end);
+
+    // Sweep de playbackRate = la main qui pousse puis tire le vinyle (renforce le scrub).
+    const r = src.playbackRate;
+    r.setValueAtTime(1.2, t0);
+    r.linearRampToValueAtTime(2.2, t0 + S1);
+    r.linearRampToValueAtTime(0.75, end);
+
+    src.start(t0);
+    src.stop(end + 0.02);
+    scratchSources.add(src); scratchMasters.add(master);
+    src.onended = () => {
+      try { src.disconnect(); bp.disconnect(); hp.disconnect(); master.disconnect(); } catch {}
+      scratchSources.delete(src); scratchMasters.delete(master);
+    };
+  } catch { /* no-op */ }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function sfx(key: keyof typeof URLS) {
   try {
     if (typeof window === 'undefined' || off()) return;
+    if (key === 'scratch') { playScratch(); return; } // route spéciale → scratch synthétisé (pas de preview)
     const url = URLS[key]; if (!url) return;
     let a = cache[key];
     if (!a) { a = new Audio(url); a.preload = 'auto'; cache[key] = a; }
@@ -74,12 +172,14 @@ export function sfxLoopStop() {
 // de phase pour que le SFX de la fenêtre pouvoirs ne déborde JAMAIS sur le début de la musique de manche.
 export function sfxStop(key: keyof typeof URLS) {
   try {
+    if (key === 'scratch') stopScratch(); // scratch = synth WebAudio → coupe les noeuds, pas d'élément <audio>
     if (stopTimers[key]) { clearTimeout(stopTimers[key]); stopTimers[key] = undefined; }
     const a = cache[key]; if (a) { a.pause(); a.currentTime = 0; }
   } catch {}
 }
 export function sfxStopAll() {
   try { Object.keys(cache).forEach((k) => sfxStop(k as keyof typeof URLS)); } catch {}
+  try { stopScratch(); } catch {} // le scratch n'est jamais dans `cache` (synth) → coupe explicitement
   sfxLoopStop();
 }
 

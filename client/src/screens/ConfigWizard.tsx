@@ -37,7 +37,7 @@ const THEMES_MAIN = [
 const THEMES_EXTRA = [
   { id: 'paris', name: 'Paris', sub: 'Capitale' }, { id: 'club', name: 'Club', sub: 'Banger' },
   { id: 'egotrip', name: 'Egotrip', sub: 'Punchlines' }, { id: 'oldschool', name: 'Old school', sub: 'Les anciens' },
-  { id: 'feats', name: 'Gros feats', sub: 'Collabs' }, { id: 'love', name: 'Love / RnB', sub: 'Sentiments' },
+  { id: 'feats', name: 'Gros feats', sub: 'Collabs' },
   { id: 'legendes', name: 'Légendes', sub: 'Le panthéon' }, { id: 'trap', name: 'Trap FR', sub: 'Hi-hats' },
 ];
 const DIFFS = [
@@ -171,7 +171,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   const [game, setGame] = useState('blind');
   const [era, setEra] = useState('all');
   const [themes, setThemes] = useState<string[]>([]); // MULTI-thème : vide = tout le rap ; sinon UNION des styles cochés
-  const [diff, setDiff] = useState('normal');
+  const [diff, setDiff] = useState('facile');
   const [rounds, setRounds] = useState<number | 'inf'>(16);
   const [rebalance, setRebalance] = useState('comeback');
   const [orch, setOrch] = useState('auto');

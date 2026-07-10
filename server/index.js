@@ -54,7 +54,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.SERVER_PORT || 3001;
 const FAST = !!process.env.PL_FAST; // TEST uniquement (test-games.mjs) : manches ultra-courtes. JAMAIS en prod.
 const W = (ms) => (FAST ? 1500 : ms); // durée d'écoute par manche (raccourcie en mode test)
-const BUZZ_ANSWER_MS = FAST ? 2500 : 8000; // fenêtre pour répondre après avoir buzzé (sinon lockout + réouverture)
+const BUZZ_ANSWER_MS = FAST ? 2500 : 15000; // fenêtre pour répondre après avoir buzzé (sinon lockout + réouverture) — 15 s : taper un titre + artiste long sous stress prend du temps
 const BUZZ_ROUND_MAX_MS = FAST ? 4000 : 30000; // buzzer : PLAFOND ABSOLU par manche → révèle même si ça buzze/rate en boucle (plus de musique infinie)
 const MIN_BUZZ_MS = FAST ? 200 : 800; // buzzer : grâce en début de manche (le son doit avoir démarré côté TV avant qu'on puisse buzzer)
 // Manche BATTLE (clash 1v1 généré par le jeu, façon battle hip-hop) — événement BONUS, PAS un pouvoir.
@@ -624,7 +624,7 @@ function startRound(room) {
   if (room.mjId) { const a = room.players.get(room.mjId); if (a?.socketId) io.to(a.socketId).emit('mj:track', { title: room.current.title, artist: room.current.artist, cover: room.current.cover }); }
   clearTimeout(room.timer);
   room.timer = setTimeout(() => endRound(room), diff.windowMs);
-  if (room.settings.mode === 'buzzer') { clearTimeout(room.hardTimer); room.hardTimer = setTimeout(() => { if (room.phase === 'playing') endRound(room); }, BUZZ_ROUND_MAX_MS); } // plafond absolu (buzz/pause ne le repoussent pas)
+  if (room.settings.mode === 'buzzer') { clearTimeout(room.hardTimer); room.hardEndsAt = Date.now() + BUZZ_ROUND_MAX_MS; room.hardTimer = setTimeout(() => { if (room.phase === 'playing') endRound(room); }, BUZZ_ROUND_MAX_MS); } // plafond absolu du TEMPS D'ÉCOUTE (mis en pause pendant qu'un joueur répond, comme la musique) → borne les boucles buzz/rate sans tronquer la fenêtre de réponse
 }
 
 // Remplit la jauge de pouvoir de chaque joueur en fin de manche selon la règle choisie
@@ -645,7 +645,7 @@ function fillCharges(room) {
       add = 14 + t * 14;
     }
     p.charge = (p.charge || 0) + Math.round(add);
-    while (p.charge >= 100 && (p.charges || 0) < 5) { p.charges = (p.charges || 0) + 1; p.charge -= 100; }
+    while (p.charge >= 100 && (p.charges || 0) < 3) { p.charges = (p.charges || 0) + 1; p.charge -= 100; }
     if (p.charge > 100) p.charge = 100;
   });
 }
@@ -1163,7 +1163,7 @@ io.on('connection', (socket) => {
       if (p.armed.type === 'double' || p.armed.type === 'wager') points = Math.round(points * (p.armed.mult || 2));
       else if (p.armed.type === 'bonus') points += (p.armed.amount || 10000);
       else if (p.armed.type === 'firstblood') { points += (p.armed.base || 0); if (room.firstScorerId === p.id) points += (p.armed.first || 0); }
-      if (p.armed.refuel) p.charges = Math.min(5, (p.charges || 0) + 1); // surrégime : charge remboursée si tu marques
+      if (p.armed.refuel) p.charges = Math.min(3, (p.charges || 0) + 1); // surrégime : charge remboursée si tu marques
       p.armed = null;
     }
     if (room.muted.has(p.id)) { if (points > (room.mutedDenied.get(p.id) || 0)) room.mutedDenied.set(p.id, points); points = 0; } // muselé (sabotage) : on retient ce qui lui a été refusé
@@ -1245,7 +1245,10 @@ io.on('connection', (socket) => {
     // pourrait se terminer en plein milieu de sa réponse. On mémorise le temps restant.
     room.roundRemainingMs = Math.max(0, room.roundEndsAt - Date.now());
     clearTimeout(room.timer);
-    // le gagnant a 8 s pour répondre, sinon il est verrouillé et le buzzer rouvre
+    // on met AUSSI en pause le plafond d'écoute pendant qu'il répond → la fenêtre de réponse (15 s) n'est jamais tronquée par le cap
+    room.hardRemainingMs = Math.max(0, (room.hardEndsAt || Date.now()) - Date.now());
+    clearTimeout(room.hardTimer);
+    // le gagnant a BUZZ_ANSWER_MS (15 s) pour répondre, sinon il est verrouillé et le buzzer rouvre
     clearTimeout(room.buzzTimer);
     room.buzzTimer = setTimeout(() => buzzerFail(room, p.id), BUZZ_ANSWER_MS);
   });
@@ -1255,6 +1258,7 @@ io.on('connection', (socket) => {
     if (!room || room.phase !== 'playing' || room.settings.mode !== 'buzzer' || room.settings.mj) return;
     const p = room.players.get(socket.data.playerId);
     if (!p || room.buzz.winnerId !== p.id) return cb?.({ error: 'Ce n\'est pas ton tour.' });
+    if (!String(text || '').trim()) return cb?.({ error: 'Réponse vide.' }); // garde-fou serveur : une soumission vide ne consomme pas le tour (le téléphone bloque déjà, pas un client tiers)
     clearTimeout(room.buzzTimer);
     if (p.stat) p.stat.att++;
     const g = gradeAnswer(text, room.current, !!p.nofault);
@@ -1265,7 +1269,7 @@ io.on('connection', (socket) => {
         if (p.armed.type === 'double' || p.armed.type === 'wager') points = Math.round(points * (p.armed.mult || 2));
         else if (p.armed.type === 'bonus') points += (p.armed.amount || 10000);
         else if (p.armed.type === 'firstblood') { points += (p.armed.base || 0); if (room.firstScorerId === p.id) points += (p.armed.first || 0); }
-        if (p.armed.refuel) p.charges = Math.min(5, (p.charges || 0) + 1);
+        if (p.armed.refuel) p.charges = Math.min(3, (p.charges || 0) + 1);
         p.armed = null;
       }
       if (room.muted.has(p.id)) { if (points > (room.mutedDenied.get(p.id) || 0)) room.mutedDenied.set(p.id, points); points = 0; }
@@ -1302,6 +1306,8 @@ io.on('connection', (socket) => {
     room.roundEndsAt = Date.now() + remaining;
     clearTimeout(room.timer);
     room.timer = setTimeout(() => endRound(room), remaining);
+    // on relance aussi le plafond d'écoute là où il s'était arrêté au buzz (symétrique de la pause dans player:buzz)
+    if (room.hardRemainingMs != null) { const hr = room.hardRemainingMs; room.hardRemainingMs = null; room.hardEndsAt = Date.now() + hr; clearTimeout(room.hardTimer); room.hardTimer = setTimeout(() => { if (room.phase === 'playing') endRound(room); }, hr); }
   }
 
   // Activation d'un pouvoir de rappeur (1x/partie)
@@ -1574,7 +1580,12 @@ io.on('connection', (socket) => {
       return;
     }
     const p = room.players.get(socket.data.playerId);
-    if (p && p.socketId === socket.id) { p.connected = false; p.socketId = null; emitLobby(room); }
+    if (p && p.socketId === socket.id) {
+      p.connected = false; p.socketId = null;
+      // si le joueur qui TIENT le buzzer se déconnecte, on libère le buzzer tout de suite (sinon la manche gèle, son coupé côté TV, jusqu'à la fin du décompte de réponse)
+      if (room.phase === 'playing' && room.settings.mode === 'buzzer' && !room.settings.mj && room.buzz && room.buzz.winnerId === p.id) buzzerFail(room, p.id);
+      emitLobby(room);
+    }
   });
 });
 
