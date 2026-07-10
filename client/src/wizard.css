@@ -297,6 +297,9 @@
 .wz .pad .pl {min-width:0;}
 .wz .pad .pl b {display:block; font-family:var(--disp); font-weight:700; font-size:23px; line-height:1.05; text-transform:uppercase;}
 .wz .pad .pl small {font-size:17px; color:var(--muted);}
+.wz .pad .pl .pad-art {display:block; margin-top:5px; font-size:15px; font-weight:600; line-height:1.25;
+  color:rgba(255,255,255,.62); letter-spacing:.01em;}
+.wz .pad.sel .pl .pad-art {color:rgba(228,255,26,.78);}
 .wz .more-row {margin-top:14px;}
 .wz .linkbtn {background:none; border:0; cursor:pointer; font-weight:800; font-size:12px; color:var(--fluo); letter-spacing:.06em; padding:4px 2px;
   display:inline-flex; align-items:center; gap:7px; text-transform:uppercase;}

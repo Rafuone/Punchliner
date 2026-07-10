@@ -38,6 +38,7 @@ export function installMock() {
   };
   s.connect = () => s;
   s.disconnect = () => s;
+  try { (window as any).__srDeliver = deliver; } catch {} // review : déclencher un event serveur→client (ex. __srDeliver('power:used', {...}))
 }
 
 function handleEmit(ev: string, args: any[], ack: ((r?: any) => void) | null) {

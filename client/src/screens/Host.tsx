@@ -98,6 +98,8 @@ export default function Host() {
   }, []);
   const [powerFeed, setPowerFeed] = useState<any[]>([]); // pouvoirs activés (qui + quoi + effet) → mis en avant sur la TV
   const powerKeyRef = useRef(0);
+  const [powerBanner, setPowerBanner] = useState<any>(null); // bannière GÉANTE d'activation d'un pouvoir (TV, vue de loin) — auto-masquée
+  const powerBannerTimer = useRef<any>(null);
   const [round, setRound] = useState<any>({ index: 0, total: 0, endsAt: 0, durationMs: 25000, mode: 'multi', difficulty: '' });
   const [answered, setAnswered] = useState<string[]>([]);
   const [buzzWinner, setBuzzWinner] = useState<{ name: string; avatar?: string | null; endsAt?: number; answerMs?: number } | null>(null);
@@ -262,7 +264,7 @@ export default function Host() {
       if (!wantAudioRef.current && previewRef.current.url) { wantAudioRef.current = true; if (usingSpotifyRef.current) { try { spotifyTogglePlay(); } catch {} } else playPreview(previewRef.current.url, previewRef.current.startAt, 0); }
     });
     socket.on('game:final', (d: any) => { wantAudioRef.current = false; audioRef.current?.pause(); spotifyPause(); previewRef.current = { url: '', startAt: 0 }; clearTimeout(audioRetryRef.current); setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(null); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées ; un challenger déjà débloqué ne réapparaît plus
-    socket.on('power:used', (d: any) => { setPowerFeed((f) => [...f.slice(-4), { ...d, key: powerKeyRef.current++ }]); sfx('scratch'); });
+    socket.on('power:used', (d: any) => { const key = powerKeyRef.current++; setPowerFeed((f) => [...f.slice(-4), { ...d, key }]); sfx('scratch'); setPowerBanner({ ...d, key }); clearTimeout(powerBannerTimer.current); powerBannerTimer.current = setTimeout(() => setPowerBanner((b: any) => (b && b.key === key ? null : b)), 4600); }); // + bannière géante 4,6 s (déborde volontairement sur le décompte → entre dans la manche)
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('reaction', (d: any) => {
       const key = reactKeyRef.current++;
@@ -558,6 +560,19 @@ export default function Host() {
         })}
       </div>
     )}
+    {powerBanner && (
+      <div className="powerblast" key={powerBanner.key} style={{ ['--pc' as any]: catColor(powerBanner.avatar) }} aria-hidden="true">
+        <div className="pb-inner">
+          <span className="pb-shine" />
+          <div className="pb-av"><Med avatarId={powerBanner.avatar} size={124} /></div>
+          <div className="pb-txt">
+            <div className="pb-line"><b className="pb-who">{powerBanner.name}</b> ACTIVE</div>
+            <div className="pb-power">{powerBanner.power}</div>
+            {powerBanner.effect && <div className="pb-eff">{powerBanner.effect}</div>}
+          </div>
+        </div>
+      </div>
+    )}
     {audioLocked && (
       <button className="btn" onClick={() => { audioReadyRef.current = true; setAudioLocked(false); wantAudioRef.current = true; if (usingSpotifyRef.current) { try { spotifyTogglePlay(); } catch {} } else if (previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); }}
         style={{ position: 'fixed', zIndex: 400, left: '50%', bottom: 'clamp(24px,5vh,56px)', transform: 'translateX(-50%)', padding: '16px 34px', borderRadius: 999, border: '2px solid var(--fluo)', background: 'rgba(10,11,14,.94)', color: 'var(--fluo)', fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 'clamp(20px,2.4vw,30px)', letterSpacing: '.04em', cursor: 'pointer', boxShadow: '0 14px 48px rgba(0,0,0,.7)' }}>
@@ -646,6 +661,16 @@ export default function Host() {
           <h2 className="title-xl">Activation des pouvoirs</h2>
           <div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.max(0, Math.ceil((prepEndsAt - now) / 1000))}</div>
           <span className="url">{prepReady.count}/{prepReady.total} prêt{prepReady.total > 1 ? 's' : ''}</span>
+          {round.index <= 1 && powerFeed.length === 0 && (
+            <div className="pw-explain">
+              <div className="pwx-title">C'est quoi, un pouvoir&nbsp;?</div>
+              <div className="pwx-steps">
+                <div className="pwx-step"><span className="pwx-ic">🎤</span><span>Chaque rappeur a <b>son pouvoir</b>&nbsp;: voler des auditeurs, doubler son score, se protéger…</span></div>
+                <div className="pwx-step"><span className="pwx-ic">⚡</span><span>On l'active sur son <b>téléphone</b>, ici, entre les manches — tant qu'il reste une <b>charge</b>.</span></div>
+                <div className="pwx-step"><span className="pwx-ic">📺</span><span>Son effet s'affiche <b>en grand sur la TV</b>&nbsp;: tout le monde voit qui a frappé, et comment.</span></div>
+              </div>
+            </div>
+          )}
           {powerFeed.length > 0 ? (
             <div className="pwfeed">
               {powerFeed.map((p) => (

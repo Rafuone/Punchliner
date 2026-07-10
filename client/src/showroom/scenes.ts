@@ -67,7 +67,7 @@ const SESSION = { code: 'PUNCH', playerId: 'me', name: 'Rafuo', avatar: 'disiz' 
 export const SCENES: Scene[] = [
   // ─────────── TV (écran / hôte) ───────────
   { id: 'tv-lobby', label: 'Lobby (code + QR)', group: 'tv', comp: 'host', note: "Écran d'accueil : code du salon, QR, joueurs qui rejoignent.", make: () => base('multi', { phase: 'lobby' }) },
-  { id: 'tv-prep', label: 'Fenêtre POUVOIRS (prep)', group: 'tv', comp: 'host', make: () => base('multi', { phase: 'prep', round: { index: 5, roundIndex: 5, total: 16, endsAt: now() + 9000, mode: 'multi', difficulty: 'Grand public', prep: true } }) },
+  { id: 'tv-prep', label: 'Fenêtre POUVOIRS (prep)', group: 'tv', comp: 'host', make: () => base('multi', { phase: 'prep', round: { index: 1, roundIndex: 1, total: 16, endsAt: now() + 9000, mode: 'multi', difficulty: 'Grand public', prep: true } }) },
   { id: 'tv-playing', label: 'Manche — Blind Test', group: 'tv', comp: 'host', make: () => base('multi', { phase: 'playing', round: { index: 5, roundIndex: 5, total: 16, endsAt: now() + 22000, durationMs: 30000, mode: 'multi', difficulty: 'Grand public', mj: false, preview: '', startAt: 0 } }) },
   { id: 'tv-reveal', label: 'Révélation + scores', group: 'tv', comp: 'host', make: () => base('multi', { phase: 'reveal', round: { index: 5, roundIndex: 5, total: 16, mode: 'multi', difficulty: 'Grand public', mj: false }, reveal: REVEAL(false, false) }) },
   { id: 'tv-podium', label: 'Podium (fin de partie)', group: 'tv', comp: 'host', note: 'Récap de la partie + série (à séparer — Cycle 2).', make: () => base('multi', { phase: 'final', final: FINAL() }) },

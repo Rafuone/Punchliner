@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { avatarById, initials } from '../data';
+import { avatarById, initials, THEME_ARTISTS } from '../data';
 import '../wizard.css';
 
 /* ====== réglages envoyés au serveur (mappés depuis le wizard) ====== */
@@ -503,7 +503,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                   <div className="pads">{[...THEMES_MAIN, ...THEMES_EXTRA].map((t) => {
                     const on = t.id === 'all' ? themes.length === 0 : themes.includes(t.id); // « Tout » actif quand rien n'est coché
                     return (
-                    <button key={t.id} className={`pad ${(t as any).wide ? 'wide' : ''} ${on ? 'sel' : ''}`} onClick={() => setThemes((prev) => t.id === 'all' ? [] : prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev.filter((x) => x !== 'all'), t.id])}><span className="led" /><span className="pl"><b>{t.name}</b><small>{t.sub}</small></span></button>
+                    <button key={t.id} className={`pad ${(t as any).wide ? 'wide' : ''} ${on ? 'sel' : ''}`} onClick={() => setThemes((prev) => t.id === 'all' ? [] : prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev.filter((x) => x !== 'all'), t.id])}><span className="led" /><span className="pl"><b>{t.name}</b><small>{t.sub}</small>{THEME_ARTISTS[t.id] && <span className="pad-art">{THEME_ARTISTS[t.id].join(' · ')}</span>}</span></button>
                     );
                   })}</div>
                 </div>

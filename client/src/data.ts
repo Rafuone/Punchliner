@@ -192,6 +192,27 @@ export const bioOf = (id?: string): Bio | undefined => (id ? BIOS[id] : undefine
 // Surnoms affichés sous le nom dans le showcase (character select + roster du hub)
 export const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 76', kortex: 'Le Clasheur', bouss: 'La Voix', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème', freezecorleone: 'Le Complotiste', lino: 'La Lame', diams: 'La Demoiselle', disiz: 'La Peste', caballerojeanjass: 'Le Duo' };
 
+// Aperçu d'artistes par thème (étape « LA PLAYLIST » du ConfigWizard) : 3-4 têtes d'affiche GRAND PUBLIC
+// réellement taggées avec ce thème dans server/tracks.js (ARTIST_TAGS) — pour que l'hôte se projette.
+// NB : 'oldschool' (année ≤ 2005) et 'feats' (morceau avec featuring) sont des filtres MORCEAU côté serveur,
+// pas des tags d'artiste → leur liste est INDICATIVE (artistes emblématiques du filtre), pas dérivée d'un tag.
+// 'all' (Tout le rap FR) n'a volontairement aucun artiste : aucun filtre = aucun sous-ensemble représentatif.
+export const THEME_ARTISTS: Record<string, string[]> = {
+  boombap: ['NTM', 'IAM', 'Nekfeu', 'Orelsan'],
+  drill: ['Gazo', 'Freeze Corleone', 'Ziak', 'Zola'],
+  marseille: ['Jul', 'SCH', 'Alonzo', 'Soprano'],
+  conscient: ['Orelsan', 'Kery James', 'Youssoupha', 'MC Solaar'],
+  street: ['Booba', 'Ninho', 'SCH', 'Kaaris'],
+  nouvelle: ['PNL', 'Damso', 'Tiakola', 'Hamza'],
+  paris: ['Booba', 'PNL', 'Ninho', 'Gazo'],
+  club: ['Maître Gims', 'Niska', 'Jul', 'Soprano'],
+  egotrip: ['Booba', 'Damso', 'Vald', 'NTM'],
+  trap: ['Ninho', 'SCH', 'PNL', 'Kaaris'],
+  legendes: ['NTM', 'IAM', 'Booba', 'MC Solaar'],
+  oldschool: ['NTM', 'IAM', 'MC Solaar', '113'],
+  feats: ['Maître Gims', 'Niska', 'Ninho', 'Jul'],
+};
+
 export const DIFFICULTIES = [
   { key: 'facile', label: 'Grand public', desc: 'Les gros hits, tout le monde connaît' },
   { key: 'normal', label: 'Connaisseur', desc: 'Classiques + sons bien connus' },
