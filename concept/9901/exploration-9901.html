@@ -1,0 +1,302 @@
+<title>Exploration 9901</title>
+<style>
+  :root{
+    --void:#0a0b0e; --asphalt:#13151b; --asphalt2:#1b1e27; --edge:#2b2f3a;
+    --fluo:#b6ff2e; --fluo-dim:#7fb01f;
+    --blood:#ff2e57; --gold:#ffb545;
+    --haze:#8b90a2; --paper:#eef0f3;
+    --font-d:"Arial Black","Helvetica Neue",Impact,sans-serif;
+    --font-m:ui-monospace,"SF Mono",Menlo,Consolas,"Courier New",monospace;
+    --font-b:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;
+    --wrap:min(1080px,92vw);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    margin:0;background:var(--void);color:var(--paper);font-family:var(--font-b);
+    line-height:1.62;-webkit-font-smoothing:antialiased;overflow-x:hidden;
+    background-image:
+      radial-gradient(120% 80% at 50% -10%, rgba(182,255,46,.06), transparent 60%),
+      radial-gradient(90% 60% at 90% 110%, rgba(255,46,87,.05), transparent 60%);
+  }
+  /* CRT scanlines + vignette overlay */
+  .crt{position:fixed;inset:0;pointer-events:none;z-index:9;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px);
+    mix-blend-mode:multiply;opacity:.5}
+  .vig{position:fixed;inset:0;pointer-events:none;z-index:8;
+    box-shadow:inset 0 0 180px 40px rgba(0,0,0,.7)}
+  @media (prefers-reduced-motion:reduce){.crt{opacity:.28}}
+
+  .wrap{width:var(--wrap);margin-inline:auto}
+  section{padding:clamp(56px,9vw,110px) 0;position:relative}
+  .eyebrow{font-family:var(--font-m);font-size:12px;letter-spacing:.34em;text-transform:uppercase;color:var(--fluo-dim);margin:0 0 14px}
+  h2{font-family:var(--font-d);font-weight:900;letter-spacing:-.01em;text-transform:uppercase;
+     font-size:clamp(28px,5vw,52px);line-height:.98;margin:0 0 10px;text-wrap:balance}
+  h2 .flick{color:var(--fluo)}
+  .lead{color:var(--haze);max-width:64ch;font-size:clamp(16px,1.5vw,18px)}
+  p{max-width:66ch}
+  b,strong{color:var(--paper);font-weight:700}
+  .hi{color:var(--fluo)} .dg{color:var(--blood)} .lv{color:var(--gold)}
+
+  /* ---- HERO ---- */
+  .hero{min-height:96vh;display:flex;flex-direction:column;justify-content:center;gap:26px;padding-top:70px}
+  .plate{font-family:var(--font-m);font-size:12px;letter-spacing:.3em;text-transform:uppercase;color:var(--haze)}
+  .plate b{color:var(--fluo)}
+  .title{font-family:var(--font-d);font-weight:900;text-transform:uppercase;line-height:.86;
+    font-size:clamp(58px,15vw,190px);letter-spacing:-.02em;margin:0;
+    color:var(--paper);
+    text-shadow:
+      3px 0 0 var(--void),0 3px 0 var(--void),
+      6px 6px 0 rgba(182,255,46,.22), 10px 10px 0 rgba(255,46,87,.14);
+  }
+  .title .num{display:block;color:var(--fluo);
+    text-shadow:3px 3px 0 var(--void),8px 8px 0 rgba(255,46,87,.30)}
+  .tag{font-family:var(--font-m);font-size:clamp(13px,1.7vw,17px);letter-spacing:.12em;color:var(--paper);text-transform:uppercase}
+  .tag .sep{color:var(--blood)}
+  .hero .lead{max-width:60ch}
+  .startrow{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-top:6px}
+  .start{font-family:var(--font-m);font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+    background:var(--fluo);color:#0a0b0e;border:0;padding:15px 26px;font-size:14px;cursor:pointer;
+    clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px));
+    box-shadow:5px 5px 0 rgba(255,46,87,.35);text-decoration:none;display:inline-block}
+  .start:hover{transform:translate(-2px,-2px);box-shadow:7px 7px 0 rgba(255,46,87,.5)}
+  .start:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+  .blink{color:var(--gold);font-family:var(--font-m);font-size:12px;letter-spacing:.24em;text-transform:uppercase;animation:bl 1.15s steps(1) infinite}
+  @keyframes bl{50%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){.blink{animation:none}}
+
+  /* ---- generic street card ---- */
+  .card{background:var(--asphalt);border:2px solid var(--edge);padding:22px 22px 20px;position:relative;
+    clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px))}
+  .card h3{font-family:var(--font-d);text-transform:uppercase;font-size:19px;margin:2px 0 8px;letter-spacing:.01em}
+  .card p{color:var(--haze);font-size:15px;margin:0}
+  .grid{display:grid;gap:16px}
+  @media(min-width:720px){.cols-3{grid-template-columns:repeat(3,1fr)} .cols-2{grid-template-columns:repeat(2,1fr)}}
+
+  .kchip{font-family:var(--font-m);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--fluo-dim);border:1px solid var(--edge);padding:3px 9px;display:inline-block}
+
+  /* ---- NOT-callout ---- */
+  .nope{display:flex;flex-wrap:wrap;gap:12px;margin:26px 0 6px}
+  .nope span{font-family:var(--font-m);font-size:13px;letter-spacing:.06em;color:var(--blood);
+    border:1px dashed rgba(255,46,87,.5);padding:8px 14px}
+  .nope span::before{content:"✕ ";font-weight:700}
+
+  /* ---- run loop ---- */
+  .loop{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;margin-top:26px}
+  .node{flex:1 1 150px;background:var(--asphalt2);border:2px solid var(--edge);padding:14px 14px 12px;min-width:140px}
+  .node .n{font-family:var(--font-m);font-size:11px;letter-spacing:.14em;color:var(--gold);text-transform:uppercase}
+  .node .t{font-family:var(--font-d);text-transform:uppercase;font-size:15px;margin:4px 0 4px}
+  .node .d{color:var(--haze);font-size:13px;line-height:1.45}
+  .node.boss{border-color:var(--blood)} .node.boss .n{color:var(--blood)}
+
+  /* ---- meters ---- */
+  .meta{display:grid;gap:18px;margin-top:30px}
+  @media(min-width:720px){.meta{grid-template-columns:1fr 1fr}}
+  .meter{background:var(--asphalt);border:2px solid var(--edge);padding:18px}
+  .meter .lab{display:flex;justify-content:space-between;font-family:var(--font-m);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--haze);margin-bottom:10px}
+  .bar{height:20px;background:#0c0d11;border:2px solid var(--edge);position:relative;overflow:hidden}
+  .bar > i{position:absolute;inset:0;width:var(--w,50%);background:
+     repeating-linear-gradient(90deg,var(--fluo) 0 8px,var(--fluo-dim) 8px 12px);transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+  .bar.gold > i{background:repeating-linear-gradient(90deg,var(--gold) 0 8px,#c98a2c 8px 12px)}
+  .bar.blood > i{background:repeating-linear-gradient(90deg,var(--blood) 0 8px,#a01e3a 8px 12px)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:8px}
+  .stat{background:var(--asphalt2);border:1px solid var(--edge);padding:10px;text-align:center}
+  .stat b{display:block;font-family:var(--font-d);font-size:22px;color:var(--fluo);font-variant-numeric:tabular-nums}
+  .stat span{font-family:var(--font-m);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--haze)}
+
+  /* ---- acts ---- */
+  .acts{display:grid;gap:16px;margin-top:26px}
+  @media(min-width:820px){.acts{grid-template-columns:repeat(3,1fr)}}
+  .act{background:linear-gradient(180deg,var(--asphalt2),var(--asphalt));border:2px solid var(--edge);padding:20px}
+  .act .no{font-family:var(--font-d);font-size:40px;color:var(--edge);line-height:1}
+  .act h4{font-family:var(--font-d);text-transform:uppercase;font-size:17px;margin:6px 0 8px}
+  .act p{color:var(--haze);font-size:14px;margin:0}
+  .subs{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .subs .s{font-family:var(--font-m);font-size:12px;color:var(--haze);border-left:3px solid var(--blood);padding:6px 12px;background:var(--asphalt)}
+
+  /* ---- map / regions ---- */
+  .regs{display:grid;gap:12px;margin-top:26px}
+  @media(min-width:640px){.regs{grid-template-columns:repeat(2,1fr)}}
+  @media(min-width:960px){.regs{grid-template-columns:repeat(3,1fr)}}
+  .reg{display:flex;gap:12px;align-items:baseline;background:var(--asphalt);border:1px solid var(--edge);padding:12px 14px}
+  .reg .dep{font-family:var(--font-d);font-size:22px;color:var(--fluo);min-width:2.2ch;font-variant-numeric:tabular-nums}
+  .reg .nm{font-weight:700;font-size:14px}
+  .reg .ar{display:block;font-family:var(--font-m);font-size:11px;color:var(--haze);letter-spacing:.06em}
+
+  /* ---- unlock ---- */
+  .unlock{display:grid;gap:12px;margin-top:24px}
+  @media(min-width:720px){.unlock{grid-template-columns:repeat(2,1fr)}}
+  .u{display:flex;gap:12px;align-items:flex-start;font-size:15px;color:var(--haze)}
+  .u b{color:var(--paper)}
+  .u .k{font-family:var(--font-m);color:var(--fluo);flex:none}
+
+  /* ---- post credits ---- */
+  .post{border:2px solid var(--blood);background:
+    linear-gradient(180deg,rgba(255,46,87,.06),transparent 40%),var(--asphalt);
+    padding:clamp(24px,4vw,44px);position:relative;overflow:hidden}
+  .post .sig{position:absolute;right:-30px;bottom:-40px;font-size:220px;line-height:1;opacity:.05;filter:grayscale(1)}
+  .post .flag{font-family:var(--font-m);font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--blood)}
+  .post h3{font-family:var(--font-d);text-transform:uppercase;font-size:clamp(22px,3.4vw,34px);margin:12px 0}
+  .post .q{color:var(--paper);font-size:clamp(16px,2vw,20px);border-left:3px solid var(--gold);padding-left:16px;margin:18px 0;max-width:60ch}
+  .post .next{font-family:var(--font-m);color:var(--gold);letter-spacing:.2em;text-transform:uppercase;font-size:13px}
+  .egg{margin-top:22px;font-family:var(--font-m);font-size:13px;color:var(--haze)}
+  .egg b{color:var(--fluo)}
+
+  hr.rz{border:0;height:2px;margin:0;background:repeating-linear-gradient(90deg,var(--edge) 0 10px,transparent 10px 18px)}
+  footer{padding:40px 0 70px;color:var(--haze);font-family:var(--font-m);font-size:12px;letter-spacing:.08em}
+  .reveal{opacity:0;transform:translateY(16px)}
+  .reveal.in{opacity:1;transform:none;transition:opacity .7s ease,transform .7s cubic-bezier(.2,.8,.2,1)}
+  @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none}}
+</style>
+
+<div class="crt"></div><div class="vig"></div>
+
+<header class="wrap hero">
+  <div class="plate">PUNCHLINR &nbsp;//&nbsp; <b>MODE SOLO</b> &nbsp;//&nbsp; PROTOTYPE DE CONCEPT</div>
+  <h1 class="title">EXPLORATION<span class="num">9901</span></h1>
+  <div class="tag">DU TÉR-TÉR AU SOMMET <span class="sep">→</span> ARRIVÉ AU 99, TU REPARS AU 01</div>
+  <p class="lead">Un <b>RPG roguelike</b> qui transpire le rap français. Un môme qui vient de nulle part, une France du rap sous emprise, et un patron qu'on ne voit jamais. <b class="hi">Pas de blind-test. Pas de « devine plus vite ».</b> Du son, un vrai scénario street, et de la sueur.</p>
+  <div class="startrow">
+    <a class="start" href="#came">▶ Insérer une pièce</a>
+    <span class="blink">▮ press start</span>
+  </div>
+</header>
+
+<hr class="rz">
+
+<section id="came" class="wrap reveal">
+  <p class="eyebrow">01 — La came</p>
+  <h2>Tu rappes dans <span class="flick">ta chambre.</span></h2>
+  <p class="lead">Un soir, un pote t'entend à travers la porte. Il capte un truc : <i>« frère… faut que tu poses ça pour de vrai. »</i> Premier live, douze personnes, ça prend pas. Tu recommences. Un petit buzz, puis un vrai.</p>
+  <p style="margin-top:20px">Sauf que plus tu montes, plus tu sens que <b class="dg">quelque chose cloche</b> : des carrières qui explosent sans raison, des vrais talents qu'on enterre, des billets qui circulent en coulisses. Quelqu'un, dans l'ombre, <b>tient toute la France du rap</b>. Et il n'a aucune envie que tu montes jusqu'à lui.</p>
+</section>
+
+<section class="wrap reveal">
+  <p class="eyebrow">02 — Le gameplay</p>
+  <h2>Un <span class="flick">roguelike-RPG</span>, pas un quiz.</h2>
+  <p class="lead">Le cœur du jeu, ce n'est <u>ni</u> deviner un titre, <u>ni</u> appuyer plus vite qu'une IA. C'est <b>monter ta carrière run après run</b>, et te battre au rap avec ta <b>tête</b>, pas tes réflexes.</p>
+  <div class="nope">
+    <span>blind-test</span><span>« devine le son »</span><span>combat au chrono</span><span>tout dans le DLC</span>
+  </div>
+
+  <div class="grid cols-3" style="margin-top:30px">
+    <div class="card"><h3 class="hi">Le monde = une run</h3><p>Chaque ascension est une <b>run roguelike</b> : tu traverses une carte de scènes — open-mic, live, studio, radio, clash, showcase. Tu <b>choisis ton chemin</b>. Un mauvais move, une embrouille, et la run tombe.</p></div>
+    <div class="card"><h3 class="hi">Le combat = du build</h3><p>Tu montes ta <b>prod</b> et tu poses tes <b>bars</b> : un répertoire (punchlines, flows, ad-libs, samples, feats) que tu déploies en <b>stratégie</b>. L'ennemi est défini par son <b>style</b>, pas par un timer.</p></div>
+    <div class="card"><h3 class="hi">Le son porte tout</h3><p>Le <b>vrai beat</b> donne le tempo et l'ambiance de chaque affrontement, et <b>structure les vagues</b> : le refrain enflamme le public, le drop, c'est le boss qui frappe fort. Tu joues <b>avec</b> le morceau.</p></div>
+  </div>
+
+  <div class="meta">
+    <div class="meter">
+      <div class="lab"><span>Le public (crowd)</span><span>ta jauge</span></div>
+      <div class="bar" data-w="78%"><i></i></div>
+      <p style="color:var(--haze);font-size:13px;margin:12px 0 0;font-family:var(--font-m)">Enchaîne des bars propres → combo → <b class="hi">MODE FEU</b> (tout compte double, la foule scande ton blaze).</p>
+    </div>
+    <div class="meter">
+      <div class="lab"><span>L'adversaire</span><span>défini par son style</span></div>
+      <div class="bar blood" data-w="55%"><i></i></div>
+      <div class="stats">
+        <div class="stat"><b>Drill</b><span>agressif</span></div>
+        <div class="stat"><b>Plume</b><span>combos</span></div>
+        <div class="stat"><b>Légende</b><span>signatures</span></div>
+        <div class="stat"><b>Industrie</b><span>triche</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap reveal">
+  <p class="eyebrow">03 — Le sens du nom</p>
+  <h2>9901 <span class="flick">= la montée.</span></h2>
+  <p class="lead">Le nom vient d'une punchline : <i>arrivé au niveau 99, t'es trop fort — alors tu repars au 01.</i> C'est littéralement <b>le game design.</b> Tu grimpes de <span class="lv">01 à 99</span> (XP, niveaux, techniques, répartition de stats). Et à 99 : <b class="lv">prestige</b> — tu repars à zéro dans un monde plus dur, avec <b>une couche de vérité en plus.</b></p>
+  <div class="meta" style="grid-template-columns:1fr">
+    <div class="meter">
+      <div class="lab"><span>Niveau de carrière</span><span class="lv">LVL 62 / 99</span></div>
+      <div class="bar gold" data-w="63%"><i></i></div>
+      <div class="stats" style="margin-top:14px">
+        <div class="stat"><b>4</b><span>Flow</span></div>
+        <div class="stat"><b>5</b><span>Punch</span></div>
+        <div class="stat"><b>3</b><span>Tech</span></div>
+        <div class="stat"><b>4</b><span>Aura</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap reveal">
+  <p class="eyebrow">04 — Le scénario</p>
+  <h2>Un vrai récit, <span class="flick">pas « point A → point B ».</span></h2>
+  <div class="acts">
+    <div class="act"><div class="no">I</div><h4>La chambre → la ville</h4><p>Le come-up humble. Les premiers lives qui prennent pas. Un <b style="color:var(--paper)">rival</b> arrogant qui va te coller toute l'aventure, et une vieille légende qui te prend sous son aile.</p></div>
+    <div class="act"><div class="no">II</div><h4>La tournée de France</h4><p>Région par région, tu découvres les <b class="dg">machinations</b> : trafic, carrières truquées, talents enterrés. Tu remontes les fils. Plus tu montes, plus t'en sais — et plus t'es en danger.</p></div>
+    <div class="act"><div class="no">III</div><h4>L'ombre</h4><p>Tu remontes toute la chaîne jusqu'au <b class="dg">patron qui tient la France</b>. Duel final, révélation de son identité — celle qu'on ne t'a jamais montrée.</p></div>
+  </div>
+  <p style="margin-top:26px;color:var(--haze);font-family:var(--font-m);font-size:12px;letter-spacing:.14em;text-transform:uppercase">Sous-intrigues</p>
+  <div class="subs">
+    <div class="s">Le pote qui te trahit pour un contrat</div>
+    <div class="s">La rappeuse enterrée par le système, que tu aides à revenir</div>
+    <div class="s">Le DJ qui en sait trop</div>
+    <div class="s">Le label qui te tend un piège doré</div>
+    <div class="s">Le clash qui dérape en vraie embrouille</div>
+  </div>
+</section>
+
+<section class="wrap reveal">
+  <p class="eyebrow">05 — Le terrain</p>
+  <h2>Toute <span class="flick">la carte.</span></h2>
+  <p class="lead">Chaque région a sa couleur, son beat, son <b>boss</b> qui rep sa scène. Tu les bats → tu les <b class="hi">débloques</b> (jouables en multi, appelables en featuring).</p>
+  <div class="regs">
+    <div class="reg"><span class="dep">13</span><span><span class="nm">Marseille</span><span class="ar">le vétéran · old-school</span></span></div>
+    <div class="reg"><span class="dep">93</span><span><span class="nm">Seine-Saint-Denis</span><span class="ar">la drill · la rue</span></span></div>
+    <div class="reg"><span class="dep">75</span><span><span class="nm">Paris intra</span><span class="ar">la plume · le conscient</span></span></div>
+    <div class="reg"><span class="dep">69</span><span><span class="nm">Lyon</span><span class="ar">la nouvelle vague</span></span></div>
+    <div class="reg"><span class="dep">59</span><span><span class="nm">Lille</span><span class="ar">la grisaille qui kicke</span></span></div>
+    <div class="reg"><span class="dep">31</span><span><span class="nm">Toulouse</span><span class="ar">le flow ensoleillé</span></span></div>
+    <div class="reg"><span class="dep">33</span><span><span class="nm">Bordeaux</span><span class="ar">l'underground</span></span></div>
+    <div class="reg"><span class="dep">2A</span><span><span class="nm">Corse</span><span class="ar">région secrète 🔒</span></span></div>
+    <div class="reg"><span class="dep">99</span><span><span class="nm">???</span><span class="ar">le sommet · l'ombre 🔒</span></span></div>
+  </div>
+</section>
+
+<section class="wrap reveal">
+  <p class="eyebrow">06 — L'éthique</p>
+  <h2>Tout se gagne <span class="flick">en jouant.</span></h2>
+  <p class="lead"><b>Rien à acheter.</b> Pas de DLC, pas de saison payante. Le contenu, tu le débloques à la sueur — comme les jeux d'avant.</p>
+  <div class="unlock">
+    <div class="u"><span class="k">►</span><span><b>Les rappeurs</b> — bats un boss de région, il rejoint ton roster (multi + featuring en clash).</span></div>
+    <div class="u"><span class="k">►</span><span><b>Le drip 16-bit</b> — casquettes, chaînes, survêts, lunettes pour ton avatar.</span></div>
+    <div class="u"><span class="k">►</span><span><b>Beats &amp; techniques</b> — nouvelles prods, nouveaux coups spéciaux (tes pouvoirs, réutilisés).</span></div>
+    <div class="u"><span class="k">►</span><span><b>Régions &amp; légendes cachées</b> — la Corse, les DOM, des MC secrets.</span></div>
+    <div class="u"><span class="k">►</span><span><b>La salle des trophées</b> — ton palmarès qui se remplit run après run.</span></div>
+    <div class="u"><span class="k">►</span><span><b>New Game+</b> — le prestige 99→01, la tournée en mode puriste.</span></div>
+  </div>
+</section>
+
+<section class="wrap reveal">
+  <p class="eyebrow">07 — Après le générique</p>
+  <div class="post">
+    <div class="sig">♛</div>
+    <div class="flag">◄ SCÈNE POST-GÉNÉRIQUE · 16-BIT ►</div>
+    <h3>Le patron baisse les yeux.</h3>
+    <p style="color:var(--haze);max-width:58ch">Tu viens de faire tomber celui qui tenait toute la France du rap. Fondu au noir. Générique. Puis… une pièce sombre. Le patron, celui que tu croyais tout en haut, est assis face à un écran. À l'autre bout : <b class="dg">une silhouette. Un accent américain. Une chevalière qui brille.</b></p>
+    <p class="q">« Bien joué, petit. Tu as nettoyé la France pour moi. Maintenant… on passe aux choses sérieuses. »</p>
+    <p class="next">▸ à suivre — EXPLORATION 9902</p>
+    <p class="egg">Easter egg qu'on se garde : et si le ricain dans l'ombre, à la toute fin… c'était <b>Jay-Z</b> ? 😏</p>
+  </div>
+</section>
+
+<hr class="rz">
+<footer class="wrap">
+  EXPLORATION 9901 · concept solo pour PUNCHLINR · maquette pour se projeter, pas encore du code · v0.1
+</footer>
+
+<script>
+  (function(){
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){
+      if(e.isIntersecting){e.target.classList.add('in');
+        e.target.querySelectorAll('.bar[data-w]').forEach(function(b){b.querySelector('i').style.width=b.getAttribute('data-w');});
+      }});},{threshold:.18});
+    document.querySelectorAll('.reveal').forEach(function(el){io.observe(el);});
+  })();
+</script>
