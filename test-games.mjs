@@ -82,6 +82,7 @@ async function playGame({ mode, difficulty, rounds, mj = false }, nPlayers = 5) 
     mjDriver.sock.on('round:reveal', async () => { rep.revealCount++; await sleep(120); await ack(mjDriver.sock, 'mj:next', {}); });
   } else {
     host.on('round:reveal', async () => { rep.revealCount++; await sleep(120); host.emit('host:next'); });
+    host.on('battle:reveal', () => host.emit('host:next')); // clash auto (1/partie) : enchaîne après la révélation du duel (le clash n'émet PAS round:reveal → revealCount reste juste)
   }
 
   const start = await ack(host, 'host:start', { rounds, difficulty, mode, mj, mjId: mj ? mjDriver?.id : undefined, rebalance: 'comeback' }, 8000);
@@ -112,6 +113,7 @@ async function testReconnectAndLateJoin() {
   if (!ja?.ok) out.errors.push('join A KO');
   // démarre une partie (multi, 6 manches)
   host.on('round:reveal', () => setTimeout(() => host.emit('host:next'), 100));
+  host.on('battle:reveal', () => setTimeout(() => host.emit('host:next'), 100)); // clash auto : enchaîne après le duel
   a.on('round:prep', () => a.emit('player:ready', {}));
   a.on('round:go', async () => { const ans = await fetchAnswer(code); a.emit('player:answer', { text: ans.title || 'x' }); });
   await ack(host, 'host:start', { rounds: 6, difficulty: 'normal', mode: 'multi', mj: false, rebalance: 'comeback' });
@@ -165,6 +167,7 @@ async function testSeriesAndAwards() {
     socks.push(s);
   }
   host.on('round:reveal', () => setTimeout(() => host.emit('host:next'), 100));
+  host.on('battle:reveal', () => setTimeout(() => host.emit('host:next'), 100)); // clash auto : enchaîne après le duel
   async function oneGame(rounds) {
     const p = new Promise((r) => host.once('game:final', r));
     const st = await ack(host, 'host:start', { rounds, difficulty: 'facile', mode: 'multi', mj: false, rebalance: 'comeback' }, 8000);

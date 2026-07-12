@@ -177,8 +177,8 @@ button, input { font-family: inherit; }
 .ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
 .ring .n { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700;
   font-size: clamp(44px, 8vw, 72px); font-variant-numeric: tabular-nums; color: var(--txt); }
-.cover { width: clamp(120px, 22vw, 180px); height: clamp(120px, 22vw, 180px); border-radius: 3px; object-fit: cover;
-  border: 1px solid var(--line2); box-shadow: 4px 4px 0 rgba(0, 0, 0, .5); }
+.cover { width: clamp(120px, 22vw, 180px); height: clamp(120px, 22vw, 180px); border-radius: 6px; object-fit: cover;
+  border: 1px solid var(--line2); box-shadow: 0 16px 40px -14px rgba(0, 0, 0, .7); }
 
 /* scoreboard */
 .board { display: flex; flex-direction: column; gap: 4px; width: 100%; }
@@ -273,16 +273,27 @@ button, input { font-family: inherit; }
 .board.tvbig .rk { width: clamp(30px, 3vw, 36px); height: clamp(30px, 3vw, 36px); font-size: 16px; border-radius: 5px; }
 .board.tvbig .pts { font-size: clamp(20px, 2.3vw, 30px); }
 .board.tvbig .gain { font-size: clamp(15px, 1.8vw, 21px); }
-/* pastille POUVOIR sur la ligne du joueur au classement (non-poussante : reste dans la ligne existante) */
-.board.tvbig .powpill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 11px; border-radius: 999px;
+/* jusqu'à 8 joueurs sans scroll sur la TV : au-delà de 6, on densifie les lignes (retour showroom tv-reveal) */
+.board.tvbig.dense { gap: clamp(2px, .4vh, 5px); }
+.board.tvbig.dense .prow { padding: clamp(4px, .8vh, 8px) 20px; }
+.board.tvbig.dense .who { font-size: clamp(14px, 1.6vw, 21px); }
+.board.tvbig.dense .who .med { width: clamp(26px, 2.6vw, 34px) !important; height: clamp(26px, 2.6vw, 34px) !important; }
+.board.tvbig.dense .rk { width: clamp(26px, 2.6vw, 32px); height: clamp(26px, 2.6vw, 32px); }
+.board.tvbig.dense .pts { font-size: clamp(17px, 2vw, 25px); }
+/* pastille POUVOIR sur la ligne du joueur au classement (non-poussante : reste dans la ligne existante).
+   Montre AUSSI l'effet en clair (« Vol · −12 000 à X ») pour comprendre pourquoi il a gagné/perdu des points. */
+.board.tvbig .who { min-width: 0; }
+.board.tvbig .powpill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 11px; border-radius: 999px; max-width: clamp(140px, 20vw, 280px); min-width: 0;
   font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .02em; font-size: clamp(12px, 1.2vw, 16px);
   color: var(--pc, var(--fluo)); background: color-mix(in srgb, var(--pc, var(--fluo)) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--pc, var(--fluo)) 55%, transparent); white-space: nowrap; }
+.board.tvbig .powpill .pp-l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 /* remontée / dégringolade au reveal : FLIP-lite piloté par le delta de rang (--d) — slide + flash couleur */
-.board.tvbig .prow.climb { animation: climbin 1.15s cubic-bezier(.2,.8,.3,1.2) both; }
-.board.tvbig .prow.drop { animation: dropin 1.15s cubic-bezier(.2,.8,.3,1.2) both; }
-@keyframes climbin { 0% { opacity: 0; transform: translateY(calc(42px * var(--d, 1))); } 15% { opacity: 1; } 70% { box-shadow: inset 0 0 0 2px var(--green); } 100% { opacity: 1; transform: none; } }
-@keyframes dropin { 0% { opacity: 0; transform: translateY(calc(-42px * var(--d, 1))); } 15% { opacity: 1; } 70% { box-shadow: inset 0 0 0 2px var(--bad); } 100% { opacity: 1; transform: none; } }
+.board.tvbig .prow.climb { animation: climbin 1.7s cubic-bezier(.16,.84,.28,1) both; }
+.board.tvbig .prow.drop { animation: dropin 1.7s cubic-bezier(.16,.84,.28,1) both; }
+/* anim RALENTIE + EXAGÉRÉE (retour showroom tv-reveal) : glisse plus longue, overshoot d'échelle + halo de couleur qui pulse */
+@keyframes climbin { 0% { opacity: 0; transform: translateY(calc(48px * var(--d, 1))) scale(.96); } 15% { opacity: 1; } 55% { transform: translateY(0) scale(1.05); box-shadow: inset 0 0 0 2px var(--green), 0 0 34px -6px var(--green); } 100% { opacity: 1; transform: none; } }
+@keyframes dropin { 0% { opacity: 0; transform: translateY(calc(-48px * var(--d, 1))) scale(.96); } 15% { opacity: 1; } 55% { transform: translateY(0) scale(.985); box-shadow: inset 0 0 0 2px var(--bad), 0 0 34px -6px var(--bad); } 100% { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .board.tvbig .prow, .board.tvbig .prow.climb, .board.tvbig .prow.drop { animation: none; } }
 /* Reveal — bandeau "gros mouvement" (quelqu'un venu de loin), en bas ; apparaît AVEC l'anim retardée (.on) */
 .bigmove { margin-top: 6px; font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .12em;
@@ -309,16 +320,19 @@ button, input { font-family: inherit; }
 .reactbtn .re { font-size: 18px; line-height: 1; }
 
 /* ===== réactions v2 : bouton « Réagir » + panneau catégorisé d'emojis (façon jeux en ligne) ===== */
-.reactdock { width: 100%; max-width: 480px; display: flex; flex-direction: column; align-items: center; margin-top: 6px; }
-.react-fab { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 4px;
-  background: var(--surf); border: 1px solid var(--line2); color: var(--txt); font-weight: 800; font-size: 14px;
+.reactdock { position: relative; width: 100%; max-width: 480px; display: flex; flex-direction: column; align-items: center; margin-top: 6px; }
+.react-fab { display: inline-flex; align-items: center; gap: 9px; padding: 15px 30px; border-radius: 999px;
+  background: var(--surf); border: 1px solid var(--line2); color: var(--txt); font-weight: 800; font-size: 16px;
   cursor: pointer; transition: .14s; box-shadow: var(--etch); }
 .react-fab:active { transform: scale(.94); }
 .react-fab.on { border-color: var(--fluo); color: var(--fluo); }
 .react-fab .rf-e { font-size: 18px; line-height: 1; }
-.react-sheet { width: 100%; margin-top: 10px; background: rgba(18,18,24,.72); border: 1px solid var(--line2);
-  border-radius: 6px; padding: 10px; box-shadow: var(--etch); animation: reactpop .16s ease-out; }
-@keyframes reactpop { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+/* feuille de réactions : s'ouvre VERS LE HAUT (en absolute, ne pousse plus le contenu), anim d'expand façon lecteur Radio (retour showroom ph-reveal) */
+.react-sheet { position: absolute; bottom: calc(100% + 12px); left: 0; right: 0; width: 100%; margin: 0; z-index: 40;
+  max-height: 52vh; overflow-y: auto; background: rgba(18,18,24,.94); border: 1px solid var(--line2);
+  border-radius: 10px; padding: 10px; box-shadow: 0 18px 50px -14px rgba(0,0,0,.8);
+  transform-origin: bottom center; animation: reactRise .34s cubic-bezier(.18,1.05,.32,1) both; }
+@keyframes reactRise { from { opacity: 0; transform: translateY(26px) scale(.95); } 55% { opacity: 1; } to { opacity: 1; transform: none; } }
 .react-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .react-tab { flex: 1; padding: 8px 6px; border-radius: 3px; background: transparent; border: 1px solid var(--line2);
   color: var(--muted); font-weight: 700; font-size: 12.5px; letter-spacing: .02em; cursor: pointer; transition: .12s; }
@@ -1136,6 +1150,22 @@ button, input { font-family: inherit; }
 @keyframes sonarpulse { 0% { width: 12px; height: 12px; opacity: .55; } 100% { width: 40px; height: 40px; opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .sonar .dot, .sonar::before, .sonar::after { animation: none; } }
 
+/* ---- carte perso de la SALLE D'ATTENTE : liseré couleur du rappeur + épithète + hiérarchie nom/pouvoir (retour showroom ph-waiting) ---- */
+.waitcard { display: flex; flex-direction: column; gap: 12px; position: relative; overflow: hidden; }
+.waitcard::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--acc, var(--green)); opacity: .9; }
+.waitcard-top { display: flex; align-items: center; gap: 12px; }
+.waitcard-name { font-family: var(--disp); font-size: 20px; font-weight: 700; text-transform: uppercase; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.waitcard-epi { font-size: 12px; color: var(--muted); font-style: italic; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.waitcard-power { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.08); }
+.wc-plabel { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.wc-pname { font-family: var(--disp); font-size: 15px; font-weight: 700; color: var(--ember); text-transform: uppercase; }
+
+/* ---- déblocable pas encore débloqué : « ? » dans la vignette du roster (character-select / hub) ---- */
+.cs-mq { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; font-size: 40px; color: var(--muted2); z-index: 2; }
+.cs-mystery .cs-thumb { filter: saturate(.15) brightness(.85); }
+.tvcell.lockcell { opacity: .78; }
+.tvcell.lockcell .ini { color: var(--muted2); }
+
 /* ---- points animés "en attente…" ---- */
 .waitdots { display: inline-flex; gap: 5px; align-items: flex-end; }
 .waitdots.inline { margin-left: 7px; transform: translateY(-1px); }
@@ -1190,7 +1220,7 @@ button, input { font-family: inherit; }
 /* ---- feed des pouvoirs (prep = cartes ; playing = puces) ---- */
 .pwfeed { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; width: 100%; max-width: 780px; }
 .pwcard { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 6px; text-align: left;
-  background: var(--surf2); border: 1px solid var(--line2); border-left: 4px solid var(--ember); animation: awin .32s cubic-bezier(.2,.7,.3,1) both; }
+  background: var(--surf2); border: 1px solid var(--line2); animation: awin .32s cubic-bezier(.2,.7,.3,1) both; }
 .pwcard .med { flex: 0 0 auto; }
 .pwcard .pwtxt { min-width: 0; }
 .pwcard .pwhead { font-size: 14.5px; color: var(--txt); }
@@ -1213,18 +1243,21 @@ button, input { font-family: inherit; }
 .pwchip .med { flex: 0 0 auto; }
 .pwchip b { font-family: var(--disp); font-weight: 700; text-transform: uppercase; color: var(--ember); }
 
-/* ===== BANNIÈRE GÉANTE d'activation d'un pouvoir (TV, vue de loin) ===== */
-.powerblast { position: fixed; left: 0; right: 0; top: clamp(60px, 16vh, 190px); z-index: 360; display: flex; justify-content: center;
-  pointer-events: none; padding: 0 3vw; animation: pb-life 4.6s cubic-bezier(.16,.9,.28,1) forwards; }
+/* ===== BANNIÈRES GÉANTES d'activation d'un pouvoir (TV, vues de loin) — EMPILÉES si plusieurs activations simultanées ===== */
+.powerblasts { position: fixed; left: 0; right: 0; top: clamp(52px, 14vh, 170px); z-index: 360; display: flex; flex-direction: column; align-items: center; gap: clamp(8px, 1.4vh, 16px); pointer-events: none; padding: 0 3vw; }
+.powerblast { width: 100%; display: flex; justify-content: center; animation: pb-life 3.4s cubic-bezier(.16,.9,.28,1) forwards;
+  will-change: transform, opacity; } /* promu en calque GPU → l'ombre se rasterise UNE fois, l'anim ne re-peint plus (fin de la saccade) */
 .powerblast .pb-inner { position: relative; display: flex; align-items: center; gap: clamp(16px, 2.4vw, 34px);
   max-width: min(1180px, 94vw); padding: clamp(16px, 2.2vw, 30px) clamp(24px, 3.4vw, 52px);
   background: linear-gradient(100deg, rgba(10,11,14,.97), rgba(16,18,22,.94)); border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--pc, var(--fluo)) 55%, transparent); border-left: 10px solid var(--pc, var(--fluo));
-  box-shadow: 0 26px 80px -20px rgba(0,0,0,.85), 0 0 60px -12px color-mix(in srgb, var(--pc, var(--fluo)) 45%, transparent); overflow: hidden; }
+  border: 1px solid color-mix(in srgb, var(--pc, var(--fluo)) 60%, transparent);
+  /* ombres allégées (blur réduit) + calque isolé : bien moins coûteux que l'ancien double blur 80px/60px repeint chaque frame */
+  box-shadow: 0 14px 34px -16px rgba(0,0,0,.8), 0 0 20px -6px color-mix(in srgb, var(--pc, var(--fluo)) 42%, transparent);
+  overflow: hidden; transform: translateZ(0); contain: layout paint; }
 .powerblast .pb-shine { position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(115deg, transparent 38%, color-mix(in srgb, var(--pc, #fff) 30%, transparent) 50%, transparent 62%);
   transform: translateX(-120%); animation: pb-shine 1.5s ease-out .18s 1; }
-.powerblast .pb-av { flex: 0 0 auto; filter: drop-shadow(0 6px 16px rgba(0,0,0,.6)); }
+.powerblast .pb-av { flex: 0 0 auto; } /* drop-shadow retiré (coûteux à composer) — l'anneau coloré du .med suffit */
 .powerblast .pb-av .med { border: 2px solid color-mix(in srgb, var(--pc, var(--fluo)) 70%, transparent); }
 .powerblast .pb-txt { min-width: 0; text-align: left; }
 .powerblast .pb-line { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
@@ -1287,7 +1320,7 @@ button, input { font-family: inherit; }
 .pw-emblem-fx b { color: var(--txt); font-weight: 800; }
 .pw-slam { position: relative; overflow: hidden; width: 100%; height: 74px; border-radius: 14px; cursor: pointer; border: 2px solid var(--cc);
   font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: clamp(22px, 6.4vw, 30px); color: var(--ink);
-  background: var(--cc); box-shadow: 0 10px 0 color-mix(in srgb, var(--cc) 45%, #000), 0 12px 18px -12px color-mix(in srgb, var(--cc) 40%, transparent), inset 0 6px 14px rgba(255,255,255,.35);
+  background: var(--cc); box-shadow: 0 10px 0 color-mix(in srgb, var(--cc) 45%, #000), inset 0 6px 14px rgba(255,255,255,.35);
   transition: transform .09s ease, box-shadow .09s ease; -webkit-tap-highlight-color: transparent; }
 .pw-slam:disabled { filter: grayscale(.5) brightness(.7); cursor: default; box-shadow: none; }
 .pw-slam:not(:disabled):active { transform: translateY(10px); box-shadow: 0 0 0 color-mix(in srgb, var(--cc) 45%, #000); }
@@ -1298,7 +1331,7 @@ button, input { font-family: inherit; }
 .pw-slam-charge { position: absolute; inset: 0; z-index: 0; background: rgba(255,255,255,.9); transform: scaleX(0); transform-origin: left; }
 .pw-slam:disabled .pw-slam-charge { display: none; }
 .pw-prep.shake .pw-slam-charge { animation: pw-charge .2s linear both; }
-.pw-skip { background: rgba(255,255,255,.05); border: 1px solid color-mix(in srgb, var(--txt) 24%, transparent); border-radius: 10px; color: var(--txt); font-family: var(--ui); font-weight: 700; font-size: 15px; cursor: pointer; padding: 11px 18px; }
+.pw-skip { background: rgba(255,255,255,.07); border: 1px solid color-mix(in srgb, var(--txt) 36%, transparent); border-radius: 10px; color: var(--txt); font-family: var(--ui); font-weight: 700; font-size: 15px; cursor: pointer; padding: 11px 18px; }
 .pw-skip:disabled { opacity: .4; cursor: default; }
 .pw-flash { position: fixed; inset: 0; z-index: 500; pointer-events: none; background: radial-gradient(circle at 50% 45%, var(--cc, var(--fluo)), transparent 70%); mix-blend-mode: screen; animation: pw-flashfx .48s ease-out both; }
 .pw-confirm { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 22px 20px; border-radius: 16px;
@@ -1559,30 +1592,32 @@ button, input { font-family: inherit; }
 .gmeta-round b i { font-style: normal; color: var(--muted); font-size: .62em; }
 .gmeta-chip { font-family: var(--disp); font-weight: 700; font-size: clamp(12px, 1.3vw, 16px); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
   background: rgba(255,255,255,.05); border: 1px solid var(--line2); border-radius: 3px; padding: 5px 11px; }
-/* header EN JEU — mêmes hauteurs pour équilibrer (retour showroom tv-playing) : manche / salon / bouton alignés */
-.topbar.gamebar .gmeta, .topbar.gamebar .salontag, .topbar.gamebar .btn { min-height: 52px; }
-.topbar.gamebar .salontag, .topbar.gamebar .btn { display: inline-flex; align-items: center; }
+/* header EN JEU — TOUTES les pastilles VISIBLES à la MÊME hauteur (retour showroom tv-playing / tv-survivor) :
+   la hauteur doit porter sur les badges (chips difficulté/joueurs + tag salon + bouton retour), PAS sur le conteneur .gmeta. */
+.topbar.gamebar .gmeta { min-height: 52px; align-items: center; }
+.topbar.gamebar .gmeta-chip,
+.topbar.gamebar .salontag,
+.topbar.gamebar .btn { height: 52px; box-sizing: border-box; display: inline-flex; align-items: center; }
 /* tv-podium : titre de fin de partie CENTRÉ dans le header (déplacé de l'eyebrow au-dessus du podium) */
 .hdr-gameover { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; font-size: clamp(20px,2.8vw,34px); color: var(--fluo); white-space: nowrap; pointer-events: none; }
 
-/* ── SHOWROOM : itérations du BUZZ (bzv-1..5) — toutes SANS ombre portée sombre (idée de la v4 = onde sonar) ── */
-.bzv-1 .buzzer,.bzv-2 .buzzer,.bzv-3 .buzzer,.bzv-4 .buzzer,.bzv-5 .buzzer{ animation:none;
-  box-shadow:0 6px 16px rgba(0,0,0,.26), inset 0 6px 14px rgba(255,255,255,.5), inset 0 -10px 18px rgba(0,0,0,.14); }
-.bzv-1 .buzzer::after,.bzv-2 .buzzer::after,.bzv-3 .buzzer::after,.bzv-4 .buzzer::after,.bzv-5 .buzzer::after{ content:''; position:absolute; inset:0; border-radius:50%; border:none; pointer-events:none; }
-.bzv-1 .buzzer:active,.bzv-2 .buzzer:active,.bzv-3 .buzzer:active,.bzv-4 .buzzer:active,.bzv-5 .buzzer:active{ transform:scale(.955);
-  box-shadow:0 3px 9px rgba(0,0,0,.26), inset 0 4px 12px rgba(255,255,255,.42); }
-.bzv-1 .buzzer::before,.bzv-2 .buzzer::before,.bzv-3 .buzzer::before,.bzv-4 .buzzer::before,.bzv-5 .buzzer::before{ content:''; position:absolute; inset:0; border-radius:50%; pointer-events:none; border:2px solid rgba(166,255,0,.6); }
+/* ── SHOWROOM : 4 itérations du BUZZ, TOUTES dérivées de la v4 (onde sonar nette) et SANS ombre portée sombre ──
+   (retour ph-buzz : « je préfère la 4 mais sans l'ombre portée, propose 4 variantes en partant de là ») */
+.bzv-1 .buzzer,.bzv-2 .buzzer,.bzv-3 .buzzer,.bzv-4 .buzzer{ animation:none;
+  box-shadow:0 0 46px rgba(166,255,0,.4), inset 0 8px 16px rgba(255,255,255,.6), inset 0 -14px 24px rgba(166,255,0,.16); }
+.bzv-1 .buzzer::after,.bzv-2 .buzzer::after,.bzv-3 .buzzer::after,.bzv-4 .buzzer::after{ content:''; position:absolute; inset:0; border-radius:50%; border:none; pointer-events:none; }
+.bzv-1 .buzzer:active,.bzv-2 .buzzer:active,.bzv-3 .buzzer:active,.bzv-4 .buzzer:active{ transform:scale(.955);
+  box-shadow:0 0 34px rgba(166,255,0,.34), inset 0 6px 14px rgba(255,255,255,.5); }
+.bzv-1 .buzzer::before,.bzv-2 .buzzer::before,.bzv-3 .buzzer::before,.bzv-4 .buzzer::before{ content:''; position:absolute; inset:0; border-radius:50%; pointer-events:none; border:2px solid rgba(166,255,0,.66); }
 @keyframes sonarwave{ 0%{transform:scale(1);opacity:.7} 100%{transform:scale(1.45);opacity:0} }
-/* 1 : onde simple et douce */
-.bzv-1 .buzzer::before{ animation:sonarwave 1.8s ease-out infinite; }
-/* 2 : onde rapide + 2e onde décalée */
-.bzv-2 .buzzer::before{ animation:sonarwave 1.4s ease-out infinite; }
-.bzv-2 .buzzer::after{ border:2px solid rgba(166,255,0,.5); animation:sonarwave 1.4s ease-out .7s infinite; }
-/* 3 : liseré épais + onde large */
-.bzv-3 .buzzer{ border:3px solid rgba(10,11,12,.22); }
-.bzv-3 .buzzer::before{ border:3px solid rgba(166,255,0,.72); animation:sonarwave 2s ease-out infinite; }
-/* 4 (préférée) : onde nette, courbe vive */
-.bzv-4 .buzzer::before{ border:2px solid rgba(166,255,0,.66); animation:sonarwave 1.6s cubic-bezier(.15,.6,.25,1) infinite; }
-/* 5 : le bouton respire + onde */
-.bzv-5 .buzzer{ animation:buzzpulse 1.2s ease-in-out infinite; }
-.bzv-5 .buzzer::before{ animation:sonarwave 1.5s ease-out infinite; }
+@keyframes buzzbreath{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.035)} }
+/* 1 — v4 pure : une onde nette, courbe vive */
+.bzv-1 .buzzer::before{ animation:sonarwave 1.6s cubic-bezier(.15,.6,.25,1) infinite; }
+/* 2 — v4 + 2e onde décalée (double pulse net) */
+.bzv-2 .buzzer::before{ animation:sonarwave 1.6s cubic-bezier(.15,.6,.25,1) infinite; }
+.bzv-2 .buzzer::after{ border:2px solid rgba(166,255,0,.5); animation:sonarwave 1.6s cubic-bezier(.15,.6,.25,1) .8s infinite; }
+/* 3 — v4 + le disque respire légèrement */
+.bzv-3 .buzzer{ animation:buzzbreath 2.4s ease-in-out infinite; }
+.bzv-3 .buzzer::before{ animation:sonarwave 1.6s cubic-bezier(.15,.6,.25,1) infinite; }
+/* 4 — v4 + liseré fluo plus vif */
+.bzv-4 .buzzer::before{ border:3px solid rgba(166,255,0,.85); animation:sonarwave 1.6s cubic-bezier(.15,.6,.25,1) infinite; }

@@ -47,7 +47,7 @@ function powerNote(type, pw, detail) {
   }
 }
 // stats de partie d'un joueur (remises à zéro à chaque partie) → servent aux trophées de fin
-const newStat = () => ({ att: 0, scored: 0, perfect: 0, firsts: 0, best: 0, zeros: 0, powers: 0, denial: false, gamble: false, solo: 0, firstHalf: 0, secondHalf: 0, worstRank: 1, lowRounds: 0, denialGain: 0 });
+const newStat = () => ({ att: 0, scored: 0, perfect: 0, firsts: 0, best: 0, zeros: 0, powers: 0, denial: false, gamble: false, solo: 0, firstHalf: 0, secondHalf: 0, worstRank: 1, lowRounds: 0, denialGain: 0, datedFinds: 0, oldFinds: 0, newFinds: 0 });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // SERVER_PORT (pas PORT) pour ne pas être capté par un outil qui injecte PORT (ex. preview)
@@ -62,7 +62,7 @@ const MIN_BUZZ_MS = FAST ? 200 : 800; // buzzer : grâce en début de manche (le
 const BATTLE_WIN = 20000;              // auditeurs pour le vainqueur du clash
 const BATTLE_DRAW = 6000;              // consolation aux 2 si personne ne trouve
 const BATTLE_BET_BONUS = 4000;         // bonus pour un spectateur qui a parié sur le bon (pas de perte si raté)
-const BATTLE_AUTO = false;             // ⚠️ déclenchement AUTO du clash : OFF tant que les écrans client ne le gèrent pas (à passer true une fois l'UI hôte+joueur prête). Le forçage dev (host:forceBattle) marche indépendamment.
+const BATTLE_AUTO = true;              // clash auto : 1/partie, ~milieu, ≥3 joueurs. (Le crash live n'est PAS le clash : il survient en pleine LECTURE d'extrait, manche 3-4, avant le clash — cause native RAM/GPU, hors code JS.) Forçage dev host:forceBattle indépendant.
 const BATTLE_INTRO_MS = FAST ? 700 : 4500;
 const BATTLE_BET_MS = FAST ? 1200 : 10000;
 const BATTLE_PLAY_MS = FAST ? 2500 : 22000;
@@ -87,15 +87,16 @@ const RUSH_TRACK_MAX_MS = FAST ? 3000 : 30000; // durée MAX d'un morceau : si n
 const RUSH_RAMP_SCALE = 58; // vers le morceau ~59, on atteint le fond du bac (montée PLUS DOUCE : on reste grand public longtemps au début)
 const RUSH_RAMP_EXP   = 1.9; // > 1 = facile longtemps puis ça grimpe (exposant relevé → début encore plus accessible)
 function rushDifficulty(n) { return Math.min(1, Math.pow(Math.max(0, (n || 1) - 1) / RUSH_RAMP_SCALE, RUSH_RAMP_EXP)); }
-function rushLabel(p) { return p < 0.30 ? 'Grand public' : p < 0.55 ? 'Connaisseur' : p < 0.80 ? 'Digger' : 'Puriste'; } // libellé affiché, évolue avec p
+function rushLabel(p) { return p < 0.30 ? 'Grand public' : p < 0.55 ? 'Connaisseur' : p < 0.80 ? 'Digger' : 'RobMaïzi'; } // libellé affiché, évolue avec p
 
 // Difficulté = QUELS morceaux tombent (popularité via le rank Deezer), PAS la durée.
 // Le son joue toujours généreusement ; offset = on démarre en plein milieu sur les niveaux durs.
 const DIFFICULTY = {
-  facile:    { label: 'Grand public', tier: 'top',  windowMs: W(30000), mult: 1.0, offset: false },
-  normal:    { label: 'Connaisseur',  tier: 'high', windowMs: W(26000), mult: 1.3, offset: false },
-  difficile: { label: 'Digger',       tier: 'mid',  windowMs: W(22000), mult: 1.6, offset: true },
-  puriste:   { label: 'Puriste',      tier: 'deep', windowMs: W(20000), mult: 2.0, offset: true },
+  // 3 NIVEAUX (2026-07-11) : Grand public (facile, jouable avec des non-spécialistes) → Connaisseur (atteignable
+  // mais pas donné) → RobMaïzi (vraiment dur, digger+underground fusionnés). `bands` = bandes de notoriété couvertes.
+  facile:    { label: 'Grand public', tier: 'top',  bands: ['top'],         windowMs: W(30000), mult: 1.0, offset: false },
+  normal:    { label: 'Connaisseur',  tier: 'high', bands: ['high'],        windowMs: W(26000), mult: 1.5, offset: false },
+  puriste:   { label: 'RobMaïzi',     tier: 'mid',  bands: ['mid', 'deep'], windowMs: W(21000), mult: 2.0, offset: true },
 };
 const MODES = ['multi', 'buzzer', 'quiz', 'rush'];
 
@@ -106,7 +107,7 @@ const io = new Server(httpServer, { cors: { origin: '*' } });
 /* ------------------------------------------------------------------ */
 /* Pool de morceaux (Deezer)                                           */
 /* ------------------------------------------------------------------ */
-let POOL = [];
+let POOL = []; // pool élargi (canon variété 2026-07-11 injecté dans .pool-cache.json)
 let poolIndex = new Map();       // id(string) -> track (lookup O(1) pour /api/preview)
 const previewCache = new Map();  // id -> Buffer mp3 (rapatrié À LA VOLÉE quand le morceau tombe → URL stable)
 const UA = { headers: { 'User-Agent': 'punchline-party-game' } };
@@ -309,9 +310,15 @@ function matchThemes(t, themes) {
   if (!list.length) return true;
   return list.some((th) => matchTheme(t, th));
 }
+// MULTI-DÉCENNIE : normalise en liste (accepte array OU string legacy ; 'all'/vide = pas de filtre).
+function eraList(era) {
+  if (Array.isArray(era)) return era.filter((x) => x && x !== 'all');
+  return (era && era !== 'all') ? [era] : [];
+}
 function selectPool(era, themes) {
   let s = livePool(); // exclut les extraits injouables (repérés au préchauffage) → jamais de manche muette
-  if (era && era !== 'all') s = s.filter((t) => t.year && inEra(t.year, era));
+  const eras = eraList(era);
+  if (eras.length) s = s.filter((t) => t.year && eras.some((e) => inEra(t.year, e))); // UNION des décennies cochées
   const list = themeList(themes);
   if (list.length) s = s.filter((t) => matchThemes(t, list));
   return s;
@@ -351,7 +358,10 @@ try { DIFF_LABELS = JSON.parse(fs.readFileSync(path.join(__dirname, 'difficulty-
 try { DIFF_EXCLUDE = new Set(JSON.parse(fs.readFileSync(path.join(__dirname, 'difficulty-exclude.json'), 'utf8'))); } catch { DIFF_EXCLUDE = new Set(); }
 function dnorm(s) { return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\(.*?\)|\[.*?\]/g, '').replace(/\b(feat|ft|featuring|avec)\b\.?/g, '').replace(/,.*$/, '').replace(/[^a-z0-9]+/g, ''); }
 function dkey(t) { return dnorm(t.artist) + '|' + dnorm(t.title); }
-function isOffTopic(t) { return DIFF_EXCLUDE.has(dkey(t)); } // pas du rap (variété/pop qui a fuité dans le catalogue) → jamais en jeu
+// Artistes bannis EN ENTIER (RnB / variété / parodie qui a fui via les canons) : exclusion PAR ARTISTE, robuste
+// aux titres qu'on n'a pas listés (le pool vient de Deezer → impossible de tous les énumérer à la main).
+const EXCLUDE_ARTISTS = new Set(['dadju', 'fatalbazooka']);
+function isOffTopic(t) { return EXCLUDE_ARTISTS.has(dnorm(t.artist)) || DIFF_EXCLUDE.has(dkey(t)); } // artiste banni OU titre non-rap → jamais en jeu
 function trackBand(t) { return DIFF_LABELS[dkey(t)] || 'mid'; } // hors liste (titre ajouté après) → difficile par défaut, JAMAIS facile
 let _bandCache = null, _bandLen = -1;
 function computeBands() { // memoïsé sur POOL.length (comme artistPeaks) — bande PRÉ-CALCULÉE + éraNorm pour l'ORDRE
@@ -372,12 +382,15 @@ function tierSlice(arr, tier) {
   const byEra = (a, b) => (eraNorm.get(b) || 0) - (eraNorm.get(a) || 0);
   const seen = new Set(); // le pool a des ré-éditions (même titre, id différent) → une partie ne doit JAMAIS rejouer le même son
   const dedup = (list) => list.filter((t) => { const k = dnorm(t.artist) + '|' + dnorm(t.title); if (seen.has(k)) return false; seen.add(k); return true; });
-  let sel = dedup(arr.filter((t) => band.get(t) === tier).sort(byEra));
+  const bands = Array.isArray(tier) ? tier : [tier]; // une difficulté peut couvrir plusieurs bandes (RobMaïzi = mid+deep)
+  let sel = dedup(arr.filter((t) => bands.includes(band.get(t))).sort(byEra));
   const MIN = 30; // assez pour une partie 24 manches sans que pickPlaylist ne retombe sur TOUTES les difficultés
   if (sel.length < MIN) {
-    const order = ['top', 'high', 'mid', 'deep'], i = order.indexOf(tier);
-    for (const d of [1, -1, 2, -2, 3]) {
-      const nb = order[i + d]; if (!nb) continue;
+    const order = ['top', 'high', 'mid', 'deep'];
+    const idxs = bands.map((b) => order.indexOf(b));
+    const dist = (b) => Math.min(...idxs.map((i) => Math.abs(order.indexOf(b) - i))); // distance à la bande la plus proche déjà incluse
+    const near = order.filter((b) => !bands.includes(b)).sort((a, b) => dist(a) - dist(b));
+    for (const nb of near) {
       sel = sel.concat(dedup(arr.filter((t) => band.get(t) === nb).sort(byEra)));
       if (sel.length >= MIN) break;
     }
@@ -388,26 +401,44 @@ function poolForTier(tier) { return tierSlice(livePool(), tier); } // compat (Su
 // ÉQUILIBRAGE DES ÉPOQUES (époque = « toutes ») : le pool est très orienté récent (mesuré : 90s 3% · 00s 15% ·
 // 10s 33% · 20s 40%). On échantillonne par DÉCENNIE selon une cible « à peu près autant partout, léger surpoids
 // 2010/2020 » au lieu de la répartition brute → un blind-test balaie les époques au lieu de matraquer du récent.
-const ERA_WEIGHT = { '90': 0.19, '00': 0.22, '10': 0.26, '20': 0.28, 'x': 0.12 }; // décennies ~égales, léger surpoids récent ; 'x' = année inconnue (~9% du pool, à ne pas exclure)
+// Pondération DÉPENDANTE DE LA DIFFICULTÉ (bande curée). Grand public (top) veut les hits d'AUJOURD'HUI → penche
+// NET récent ; Puriste/Digger assument le patrimoine (deep cuts anciens) → vrai balayage d'époques. 'x' = année inconnue.
+const ERA_WEIGHT_BY_TIER = {
+  top:  { '90': 0.05, '00': 0.10, '10': 0.32, '20': 0.45, 'x': 0.08 }, // Grand public : penche NET récent
+  high: { '90': 0.10, '00': 0.16, '10': 0.30, '20': 0.36, 'x': 0.08 }, // Connaisseur : léger surpoids récent
+  mid:  { '90': 0.16, '00': 0.22, '10': 0.28, '20': 0.26, 'x': 0.08 }, // Digger : équilibré
+  deep: { '90': 0.19, '00': 0.22, '10': 0.26, '20': 0.25, 'x': 0.08 }, // Puriste : balaye tout
+};
+const ERA_WEIGHT = ERA_WEIGHT_BY_TIER.mid; // défaut (appels sans tier / legacy)
+// Pondération d'époque quand une difficulté couvre PLUSIEURS bandes (RobMaïzi = mid+deep) → on moyenne les cibles.
+function eraWeightFor(tier) {
+  const bands = Array.isArray(tier) ? tier : [tier];
+  if (bands.length === 1) return ERA_WEIGHT_BY_TIER[bands[0]] || ERA_WEIGHT;
+  const acc = { '90': 0, '00': 0, '10': 0, '20': 0, 'x': 0 };
+  for (const b of bands) { const w = ERA_WEIGHT_BY_TIER[b] || ERA_WEIGHT; for (const k in acc) acc[k] += (w[k] || 0); }
+  for (const k in acc) acc[k] /= bands.length;
+  return acc;
+}
 function eraBucket(t) { const y = t.year || 0; return !y ? 'x' : y <= 1999 ? '90' : y <= 2009 ? '00' : y <= 2019 ? '10' : '20'; }
 function shuffleArr(a) { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; }
 // Interleaving par « déficit » : à chaque tirage on prend la décennie la plus EN RETARD sur sa cible. Avantage
 // clé : TOUT PRÉFIXE de la sortie respecte déjà la cible → marche pour une partie de N manches (blind test /
 // buzzer) ET pour un FLUX potentiellement infini (Survivor, qui enchaîne et peut s'arrêter à tout moment).
 // Plafonné par la dispo : quand une décennie rare (90s) s'épuise, les autres complètent proprement.
-function sampleBalancedByEra(src, n) {
+function sampleBalancedByEra(src, n, tier) {
+  const W = eraWeightFor(tier);                                       // pondération d'époques selon la difficulté (gère les bandes multiples)
   const g = { '90': [], '00': [], '10': [], '20': [], 'x': [] };
   for (const t of src) g[eraBucket(t)].push(t);
   for (const k in g) g[k] = shuffleArr(g[k]);
-  const keys = Object.keys(ERA_WEIGHT);
-  const totW = keys.reduce((s, k) => s + ERA_WEIGHT[k], 0);
+  const keys = Object.keys(W);
+  const totW = keys.reduce((s, k) => s + W[k], 0);
   const ptr = {}, cnt = {}; for (const k of keys) { ptr[k] = 0; cnt[k] = 0; }
   const take = Math.min(n, src.length), out = [];
   while (out.length < take) {
     let best = null, bestDef = -Infinity;
     for (const k of keys) {
       if (ptr[k] >= g[k].length) continue;                            // décennie épuisée
-      const def = (out.length + 1) * (ERA_WEIGHT[k] / totW) - cnt[k];  // le plus sous sa cible l'emporte
+      const def = (out.length + 1) * (W[k] / totW) - cnt[k];          // le plus sous sa cible l'emporte
       if (def > bestDef) { bestDef = def; best = k; }
     }
     if (!best) break;
@@ -417,7 +448,7 @@ function sampleBalancedByEra(src, n) {
 }
 // Tire n morceaux : ÉPOQUE + THÈME → DIFFICULTÉ → aléatoire. Repli PROGRESSIF si le combo est trop restrictif
 // (on lâche d'abord la difficulté, puis époque/thème) → le jeu reste TOUJOURS jouable, jamais 0 morceau.
-function pickPlaylist(n, tier, era = 'all', themes = 'all') {
+function pickPlaylist(n, tier, era = 'all', themes = 'all', played = null) {
   const base = selectPool(era, themes);
   const tiered = tierSlice(base, tier);
   let src;
@@ -426,9 +457,17 @@ function pickPlaylist(n, tier, era = 'all', themes = 'all') {
   else src = tierSlice(livePool(), tier);            // filtre trop restrictif → on le lâche, on garde la difficulté
   if (src.length < Math.min(n, 3)) src = livePool(); // ultime filet (morts exclus)
   if (src.length < Math.min(n, 3)) src = POOL;       // réseau/préchauffage KO → au pire tout le pool
+  // ANTI-RÉPÉTITION SALON : on écarte les titres DÉJÀ JOUÉS dans la série. Si le pool NON-JOUÉ de CETTE difficulté
+  // ne suffit plus pour remplir une partie, on RECYCLE ce pool (on efface SA mémoire, pas celle des autres
+  // difficultés/époques) → un son peut alors repasser une 2e fois. (Même logique que pickQuiz.)
+  if (played && played.size) {
+    let avail = src.filter((t) => !played.has(dkey(t)));
+    if (avail.length < Math.min(n, src.length)) { for (const t of src) played.delete(dkey(t)); avail = src; }
+    src = avail;
+  }
   const take = Math.min(n, src.length);
-  // époque « toutes » → on rééquilibre les décennies ; époque imposée → on la respecte (src déjà mono-époque)
-  return era === 'all' ? sampleBalancedByEra(src, take) : shuffleArr(src).slice(0, take);
+  // 0 ou ≥2 décennies → rééquilibrage PONDÉRÉ PAR DIFFICULTÉ (balaye les époques sélectionnées) ; 1 seule décennie → simple shuffle
+  return eraList(era).length === 1 ? shuffleArr(src).slice(0, take) : sampleBalancedByEra(src, take, tier);
 }
 
 /* ------------------------------------------------------------------ */
@@ -449,7 +488,7 @@ function newRoom(code, hostId, hostToken) {
     phase: 'lobby', players: new Map(), playlist: [], roundIndex: 0, totalRounds: 8,
     settings: { difficulty: 'normal', mode: 'multi', mj: false, rebalance: 'comeback' },
     current: null, answers: new Map(), timer: null, buzzTimer: null, lastReveal: null, createdAt: Date.now(),
-    gamesPlayed: 0, lastFinal: null, usedQuiz: new Set(),
+    gamesPlayed: 0, lastFinal: null, usedQuiz: new Set(), playedTracks: new Set(),
   };
 }
 
@@ -537,6 +576,7 @@ function beginRound(room) {
   // le morceau est choisi MAINTENANT (avant la fenêtre pouvoirs → le hint peut révéler ses lettres)
   room.current = room.playlist[room.roundIndex];
   if (room.settings.mode !== 'quiz') { cacheTrack(room.current); cacheTrack(room.playlist[room.roundIndex + 1]); } // extrait de la manche + la suivante, prêts avant la lecture
+  if (room.settings.mode !== 'quiz' && room.current) (room.playedTracks || (room.playedTracks = new Set())).add(dkey(room.current)); // mémorise le son JOUÉ → anti-répétition entre parties du salon
   room.muted = new Set(); room.mutedBy = new Map(); room.mutedDenied = new Map(); // qui a muselé qui + points RÉELLEMENT refusés (trophée braqueur)
   room.ready = new Set();
   room.firstScorerId = null; // 1er à trouver cette manche (pour firstblood)
@@ -568,10 +608,13 @@ function beginRound(room) {
     // du dernier pouvoir a le temps de finir (plus de débordement sur le début de la manche ni de son en retard)
     room.cdTimer = setTimeout(() => startCountdown(room), seconds * 1000);
   } else {
-    // quiz / Maître du jeu : pas de pouvoirs → décompte direct
+    // quiz / Maître du jeu / Buzzer / manche 1 : pas de fenêtre pouvoirs → décompte direct.
+    // On PRÉCHARGE quand même l'extrait (sauf quiz = sans musique) → le son ne démarre plus en retard
+    // au 1er tour d'un Blind Test, en Maître du jeu ou en Buzzer (retour showroom tv-playing 15:05).
     room.phase = 'countdown';
     const seconds = FAST ? 1 : 5;
-    io.to(room.hostId).emit('round:countdown', { seconds, index: room.roundIndex, total: room.totalRounds });
+    const preload = room.settings.mode !== 'quiz' ? (room.current?.preview || '') : '';
+    io.to(room.hostId).emit('round:countdown', { seconds, index: room.roundIndex, total: room.totalRounds, preload });
     io.to(room.code).emit('round:countdown', { seconds });
     room.cdTimer = setTimeout(() => startRound(room), seconds * 1000);
   }
@@ -713,7 +756,11 @@ function endRound(room) {
     }
     // stats de partie (trophées de fin) — le MJ n'est pas noté
     if (!p.isMJ && p.stat) {
-      if (points > 0) { p.stat.scored++; roundScorers.push(p.id); } else p.stat.zeros++;
+      if (points > 0) {
+        p.stat.scored++; roundScorers.push(p.id);
+        const yr = room.settings.mode !== 'quiz' ? (room.current?.year || 0) : 0; // année du son reconnu → trophées « À l'ancienne » / « La Relève »
+        if (yr > 0) { p.stat.datedFinds++; if (yr < 2010) p.stat.oldFinds++; else if (yr >= 2020) p.stat.newFinds++; }
+      } else p.stat.zeros++;
       if (titleHit && artistHit) p.stat.perfect++;
       if (points > p.stat.best) p.stat.best = points;
       p.stat[half] += Math.max(0, points);
@@ -774,19 +821,19 @@ function pickBattleDuelists(room, force = false) {
   if (room.settings.mode !== 'multi' && room.settings.mode !== 'buzzer') return null; // modes audio only
   if (room.settings.mj) return null;                                                  // pas d'événement auto en MJ
   const act = [...room.players.values()].filter((p) => p.connected && !p.isMJ && !p.waiting).sort((a, b) => b.score - a.score);
-  if (act.length < (force ? 3 : 4)) return null;                                       // JAMAIS de duel à < 3 joueurs actifs (à 2 on serait en duel en boucle = inutile)
-  if (force) return { a: act[0].id, b: act[1].id, flavor: 'sommet' };
-  if (!BATTLE_AUTO) return null;                                                       // auto désactivé tant que l'UI n'est pas prête
+  if (act.length < 3) return null;                                                     // JAMAIS de clash à < 3 actifs (2 duellistes + ≥1 parieur)
+  if (force) return { a: act[0].id, b: act[1].id, flavor: 'sommet' };                  // dev/test : top 2, ignore le timing
+  if (!BATTLE_AUTO) return null;                                                       // interrupteur global
+  if ((room.battlesThisGame || 0) >= 1) return null;                                   // EXACTEMENT UN clash par partie
   const total = room.totalRounds || 16;
-  if ((room.battlesThisGame || 0) >= 2) return null;                                   // max 2/partie
-  if (room.roundIndex < Math.max(3, Math.ceil(total * 0.4))) return null;             // jamais dans le 1er tiers
-  if (room.roundIndex >= total - 1) return null;                                       // pas juste avant la fin
-  if (room.roundIndex - (room.lastBattleRound ?? -99) < 3) return null;                // cooldown entre 2 clashs
+  if (total < 4) return null;                                                          // partie trop courte pour intercaler un clash
+  const triggerAt = Math.min(total - 2, Math.floor(total / 2));                        // ~milieu de partie, en gardant ≥1 manche après
+  if (room.roundIndex < triggerAt) return null;                                        // pas encore le moment
+  if (room.roundIndex >= total - 1) return null;                                       // jamais à la dernière manche
+  // 1re occasion atteinte AVEC ≥3 joueurs → on lance (sinon ça glisse jusqu'à total-2).
   const gapTop = act[0].score - act[1].score;
-  const dramatic = gapTop <= 45000;                                                    // top serré = « duel au sommet »
-  if (Math.random() > (dramatic ? 0.32 : 0.16)) return null;                           // imprévisible
-  if (dramatic) return { a: act[0].id, b: act[1].id, flavor: 'sommet' };
-  return { a: act[act.length - 2].id, b: act[act.length - 1].id, flavor: 'rattrapage' }; // sinon : bas du classement
+  if (gapTop <= 45000) return { a: act[0].id, b: act[1].id, flavor: 'sommet' };        // haut du tableau serré = duel au sommet
+  return { a: act[act.length - 2].id, b: act[act.length - 1].id, flavor: 'rattrapage' }; // sinon : les 2 derniers (chance de remontée)
 }
 
 function startBattle(room, aId, bId, flavor) {
@@ -813,7 +860,7 @@ function startBattleBets(room) {
 function startBattlePlay(room) {
   if (room.phase !== 'battle-bet' || !room.battle) return;
   const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
-  const t = (pickPlaylist(1, diff.tier, room.settings.era, room.settings.themes) || [])[0];
+  const t = (pickPlaylist(1, diff.bands, room.settings.era, room.settings.themes) || [])[0];
   if (!t) { endBattle(room, null); return; }
   cacheTrack(t);
   room.battle.track = t;
@@ -872,8 +919,16 @@ function finishGame(room) {
   if (winner && winner.score > 0) winner.gameWins = (winner.gameWins || 0) + 1;
   room.gamesPlayed = (room.gamesPlayed || 0) + 1;
   // trophées de la partie qui vient de se finir
-  const rawAwards = computeAwards(active, { total: room.totalRounds, mode: room.settings.mode, mj: room.settings.mj, fmt: fmtAud, recentIds: room.recentAwardIds || [] });
-  room.recentAwardIds = rawAwards.map((a) => a.id); // mémo des trophées de CETTE partie → décotés à la suivante (l'assortiment tourne dans la série)
+  const plYears = (room.playlist || []).map((t) => t?.year || 0).filter(Boolean);
+  room.awardCounts = room.awardCounts || {};
+  room.awardLog = room.awardLog || []; // ids des dernières parties (la + récente en tête) → rotation par récence
+  const rawAwards = computeAwards(active, {
+    total: room.totalRounds, mode: room.settings.mode, mj: room.settings.mj, fmt: fmtAud,
+    recentGames: room.awardLog, counts: room.awardCounts,                              // rotation (récence) + couverture (jamais-vu)
+    hadModern: plYears.some((y) => y >= 2010), hadOld: plYears.some((y) => y < 2010),   // « À l'ancienne » / « La Relève » : n'a de sens que si l'autre époque était jouable
+  });
+  for (const a of rawAwards) room.awardCounts[a.id] = (room.awardCounts[a.id] || 0) + 1; // tally cumulé sur la série (couverture)
+  room.awardLog = [rawAwards.map((a) => a.id), ...room.awardLog].slice(0, 6); // fenêtre glissante des 6 dernières parties
   const awards = rawAwards.map((a) => { const pl = room.players.get(a.playerId); return { ...a, playerName: pl?.name || '', avatar: pl?.avatar || null }; });
   // classement général de la série (cumul de toutes les parties)
   const standings = active
@@ -1133,7 +1188,7 @@ io.on('connection', (socket) => {
       mode: wantMode,
       mj: useMj,
       rebalance: ['comeback', 'snowball', 'off'].includes(rebalance) ? rebalance : 'comeback',
-      era: typeof era === 'string' ? era : 'all',     // ÉPOQUE (année) — filtre le pool musical
+      era: eraList(era).length ? eraList(era) : 'all',     // ÉPOQUE(S) — multi-décennie (array) ou 'all' ; filtre le pool musical
       themes: themeList(themes !== undefined ? themes : theme), // THÈMES/STYLES (multi, union) — array ; rétro-compat string `theme`
       rushStartSec: Math.min(180, Math.max(30, (rushStartSec | 0) || 60)), // Survivor : SEUL réglage = chrono de départ (difficulté progressive)
       quizNoVf: !!quizNoVf, // Quiz : exclure les Vrai/Faux
@@ -1154,7 +1209,8 @@ io.on('connection', (socket) => {
       room.playlist = pickQuiz(rounds || 8, room.settings.difficulty, room.usedQuiz, { noVf: room.settings.quizNoVf }); // filtre difficulté + anti-répétition salon (+ option sans Vrai/Faux)
     } else {
       const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
-      room.playlist = pickPlaylist(rounds || 8, diff.tier, room.settings.era, room.settings.themes);
+      if (!room.playedTracks) room.playedTracks = new Set(); // salons créés avant l'ajout du champ
+      room.playlist = pickPlaylist(rounds || 8, diff.bands, room.settings.era, room.settings.themes, room.playedTracks); // + anti-répétition salon (série)
       cacheTracks(room.playlist); // rapatrie les extraits de la partie en fond (le décompte couvre la manche 1)
     }
     room.totalRounds = room.playlist.length;
@@ -1595,7 +1651,8 @@ io.on('connection', (socket) => {
   socket.on('host:resetSeries', (_p, cb) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
-    room.gamesPlayed = 0; room.lastFinal = null;
+    room.gamesPlayed = 0; room.lastFinal = null; room.playedTracks = new Set(); // série remise à zéro → les sons peuvent repasser
+    room.awardCounts = {}; room.awardLog = []; // rotation des trophées remise à zéro avec la série
     for (const p of room.players.values()) { p.total = 0; p.gameWins = 0; p.totalRounds = 0; }
     cb?.({ ok: true });
     emitLobby(room);
@@ -1686,6 +1743,41 @@ app.get('/api/dev/room', (_req, res) => {
   res.json({ code: room?.code || null });
 });
 app.get('/api/pool', (_req, res) => res.json(POOL.map((t) => ({ id: t.id, artist: t.artist, title: t.title, rank: t.rank })).sort((a, b) => b.rank - a.rank)));
+// ── Outil de curation (base-musicale.html) : pool jouable enrichi + bande + statut de label, EN DIRECT
+// (plus de blob figé dans le HTML). `k` = clé serveur (dnorm) → le tool la renvoie telle quelle à /apply, match garanti.
+app.get('/api/curation', (_req, res) => {
+  const { band } = computeBands();
+  const seen = new Set(), rows = [];
+  for (const t of livePool()) {
+    const k = dkey(t); if (seen.has(k)) continue; seen.add(k); // dédup ré-éditions (comme tierSlice)
+    rows.push({ id: t.id, k, a: t.artist, t: t.title, b: band.get(t) || 'mid', labeled: !!DIFF_LABELS[k], c: t.cover || '', y: t.year || 0, g: t.tags || [], rank: t.rank || 0, preview: '/api/preview/' + t.id });
+  }
+  const exSeen = new Set(), excluded = [];
+  for (const t of POOL) { // colonne « Hors pool » = exclus PAR TITRE (réversibles) ; les artistes bannis restent hors-liste
+    const k = dkey(t); if (!DIFF_EXCLUDE.has(k) || exSeen.has(k)) continue; exSeen.add(k);
+    excluded.push({ id: t.id, k, a: t.artist, t: t.title, c: t.cover || '', y: t.year || 0, g: t.tags || [], rank: t.rank || 0, preview: '/api/preview/' + t.id });
+  }
+  const counts = { top: 0, high: 0, mid: 0, deep: 0, unlabeled: 0 };
+  for (const r of rows) { counts[r.b] = (counts[r.b] || 0) + 1; if (!r.labeled) counts.unlabeled++; }
+  res.json({ counts: { ...counts, playable: rows.length, excluded: excluded.length }, rows, excluded });
+});
+// ── Applique les reclassements du tool DIRECTEMENT sur disque + hot-reload (plus besoin de redémarrer le serveur).
+// body: { labels:{clé→'top'|'high'|'mid'|'deep'}, exclude:[clés], unexclude:[clés] }. Backup .bak avant écriture.
+app.post('/api/curation/apply', express.json({ limit: '4mb' }), (req, res) => {
+  try {
+    const { labels = {}, exclude = [], unexclude = [] } = req.body || {};
+    const lp = path.join(__dirname, 'difficulty-labels.json'), ep = path.join(__dirname, 'difficulty-exclude.json');
+    try { if (fs.existsSync(lp)) fs.copyFileSync(lp, lp + '.bak'); if (fs.existsSync(ep)) fs.copyFileSync(ep, ep + '.bak'); } catch { /* backup best-effort */ }
+    const VALID = new Set(['top', 'high', 'mid', 'deep']);
+    let nL = 0; for (const k in labels) if (VALID.has(labels[k])) { DIFF_LABELS[k] = labels[k]; nL++; }
+    for (const k of exclude) DIFF_EXCLUDE.add(k);
+    for (const k of unexclude) DIFF_EXCLUDE.delete(k);
+    fs.writeFileSync(lp, JSON.stringify(DIFF_LABELS));
+    fs.writeFileSync(ep, JSON.stringify([...DIFF_EXCLUDE]));
+    _bandCache = null; _bandLen = -1; // invalide le cache de bandes → le jeu reflète les changements SANS redémarrage
+    res.json({ ok: true, labels: nL, excluded: exclude.length, unexcluded: unexclude.length, totalLabels: Object.keys(DIFF_LABELS).length, totalExcluded: DIFF_EXCLUDE.size });
+  } catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
+});
 // Morceau de DÉBLOCAGE d'un challenger : résolu à la volée via Deezer (title+artist) → extrait 30 s proxifié.
 // L'arrivée épique (ChallengerReveal) lit /api/unlock-preview?... et joue l'URL → plus besoin de mp3 locaux.
 const unlockCache = new Map(); // "title|artist" -> preview url (ou '' si injouable)

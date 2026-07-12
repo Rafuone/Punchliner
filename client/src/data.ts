@@ -97,12 +97,17 @@ export const AVATARS: Avatar[] = [
   { id: 'junglejack', name: 'Jungle Jack', color: '#2E3A1E', cat: 'Rookies', img: true, power: { name: 'Flow Dévastateur', effect: 'Flow dévastateur : le 1er à trouver rafle +48 000 auditeurs. Les autres qui trouvent : +16 000.' }, stats: { flow: 5, punch: 4, tech: 4, aura: 3 } },
   { id: 'lafeve', name: 'La Fève', color: '#5C1F1F', cat: 'Rookies', img: true, power: { name: 'Hors du Temps', effect: 'Planant, hors du temps : score au max même à la dernière seconde. +11 000 auditeurs si tu marques.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 4 } },
   { id: 'okis', name: 'Okis', color: '#3A2E2E', cat: 'Rookies', img: true, power: { name: 'La Crème', effect: 'La crème du rap artisanal : +8 500 auditeurs garantis à chaque manche, pendant 4 manches.' }, stats: { flow: 3, punch: 3, tech: 4, aura: 3 } },
-  // ---- Ex-déblocables : DÉVERROUILLÉS (le gating a été retiré le 2026-07-10) → sélectionnables comme tous les autres, rangés dans leur catégorie ----
-  { id: 'freezecorleone', name: 'Freeze Corleone', color: '#241F38', cat: 'Drill', img: true, power: { name: 'Freeze Raël', effect: 'Propos problématiques : ta réponse ×1.8 si tu marques cette manche… sinon il se fait cancel (-20 000 auditeurs).' }, stats: { flow: 5, punch: 5, tech: 5, aura: 4 } },
-  { id: 'lino', name: 'Lino', color: '#38414F', cat: 'Plume', img: true, power: { name: 'Requiem', effect: 'Il écrit le requiem du n°1 : 0 auditeur pour lui cette manche, et lui rafle 6 000 auditeurs au passage.' }, stats: { flow: 4, punch: 5, tech: 5, aura: 4 } },
-  { id: 'diams', name: "Diam's", color: '#B23A6B', cat: 'Mainstream', img: true, power: { name: 'Jeune Demoiselle', effect: "Carton mainstream qui s'emballe : +15 000 auditeurs, +6 000 de plus par manche gagnée d'affilée (max +30 000)." }, stats: { flow: 4, punch: 4, tech: 3, aura: 5 } },
-  { id: 'disiz', name: 'Disiz', color: '#45607C', cat: 'Conscient', img: true, power: { name: "J'pète les plombs", effect: 'Il pète les plombs et remonte : récupère la moitié de ton retard sur le n°1 (si tu es à la traîne).' }, stats: { flow: 4, punch: 4, tech: 4, aura: 4 } },
-  { id: 'caballerojeanjass', name: 'Caballero & JeanJass', color: '#3E8E5E', cat: 'Alternative', img: true, power: { name: 'Double Hélice', effect: 'À deux sur le mic : ta prochaine bonne réponse ×1.6.' }, stats: { flow: 4, punch: 5, tech: 4, aura: 4 } },
+  // ---- Robin & Kevin (Alternative) : potes libraires de Tsukimi, deux frangins fans de rap/manga/ciné ----
+  { id: 'robinkevin', name: 'Robin & Kevin', color: '#3E2A63', cat: 'Alternative', img: true,
+    power: { name: "L'Intégrale", effect: 'Deux frères complétistes, zéro demi-mesure : une fois lancés, ils vont au bout. Ta réponse ×mult qui grossit à chaque bonne réponse d\'affilée (jusqu\'à ×2).' },
+    stats: { flow: 5, punch: 4, tech: 4, aura: 5 }, statLabels: ['Diggin\'', 'Mangas', 'Ciné', 'Passion'] },
+  // ---- Déblocables (locked:true) : CACHÉS du character-select tant que pas dans localStorage `pl_unlocked` ;
+  //      conditions dans UNLOCKS. Rangés dans leur vraie catégorie (montrés à part une fois débloqués ; « ??? » dans le roster). ----
+  { id: 'freezecorleone', name: 'Freeze Corleone', color: '#241F38', cat: 'Drill', img: true, locked: true, power: { name: 'Freeze Raël', effect: 'Propos problématiques : ta réponse ×1.8 si tu marques cette manche… sinon il se fait cancel (-20 000 auditeurs).' }, stats: { flow: 5, punch: 5, tech: 5, aura: 4 } },
+  { id: 'lino', name: 'Lino', color: '#38414F', cat: 'Plume', img: true, locked: true, power: { name: 'Requiem', effect: 'Il écrit le requiem du n°1 : 0 auditeur pour lui cette manche, et lui rafle 6 000 auditeurs au passage.' }, stats: { flow: 4, punch: 5, tech: 5, aura: 4 } },
+  { id: 'diams', name: "Diam's", color: '#B23A6B', cat: 'Mainstream', img: true, locked: true, power: { name: 'Jeune Demoiselle', effect: "Carton mainstream qui s'emballe : +15 000 auditeurs, +6 000 de plus par manche gagnée d'affilée (max +30 000)." }, stats: { flow: 4, punch: 4, tech: 3, aura: 5 } },
+  { id: 'disiz', name: 'Disiz', color: '#45607C', cat: 'Conscient', img: true, locked: true, power: { name: "J'pète les plombs", effect: 'Il pète les plombs et remonte : récupère la moitié de ton retard sur le n°1 (si tu es à la traîne).' }, stats: { flow: 4, punch: 4, tech: 4, aura: 4 } },
+  { id: 'caballerojeanjass', name: 'Caballero & JeanJass', color: '#3E8E5E', cat: 'Alternative', img: true, locked: true, power: { name: 'Double Hélice', effect: 'À deux sur le mic : ta prochaine bonne réponse ×1.6.' }, stats: { flow: 4, punch: 5, tech: 4, aura: 4 } },
 ];
 
 export const avatarById = (id?: string | null): Avatar | undefined => AVATARS.find((a) => a.id === id);
@@ -111,7 +116,7 @@ export const avatarById = (id?: string | null): Avatar | undefined => AVATARS.fi
 // Le vrai déblocage (persistance + alerte « nouveau challenger » en fin de partie) viendra après.
 export type LockedSlot = { id: string; objective: string };
 export const LOCKED_SLOTS: LockedSlot[] = [
-  { id: 'lock1', objective: 'Décroche le Disque de Diamant sur une seule manche, en difficulté Puriste.' },
+  { id: 'lock1', objective: 'Décroche le Disque de Diamant sur une seule manche, en difficulté RobMaïzi.' },
   { id: 'lock2', objective: 'Termine une partie avec moins de 1 000 auditeurs. Le vrai fond du sac.' },
   { id: 'lock3', objective: 'Gagne 3 parties d’affilée dans la même série.' },
   { id: 'lock4', objective: 'Sois le premier à trouver sur 5 manches d’une même partie.' },
@@ -133,7 +138,7 @@ export const UNLOCKS: { id: string; objective: string; check: (c: UnlockCtx) => 
   { id: 'diams', objective: 'Termine une partie de Blind Test.', check: (c) => c.mode === 'multi' },
   { id: 'caballerojeanjass', objective: 'Termine une partie de Quiz.', check: (c) => c.mode === 'quiz' },
   { id: 'lino', objective: 'Termine une partie en mode Buzzer.', check: (c) => c.mode === 'buzzer' },
-  { id: 'freezecorleone', objective: 'Termine une partie en difficulté Puriste.', check: (c) => c.difficulty === 'puriste' },
+  { id: 'freezecorleone', objective: 'Termine une partie en difficulté RobMaïzi.', check: (c) => c.difficulty === 'puriste' },
   { id: 'disiz', objective: 'Termine une partie en Grand public (facile).', check: (c) => c.difficulty === 'facile' },
 ];
 export const unlockObjective = (id: string) => UNLOCKS.find((u) => u.id === id)?.objective || 'À débloquer.';
@@ -181,6 +186,8 @@ export const BIOS: Record<string, Bio> = {
   diams: { from: 'Paris (née à Nicosie)', since: '1999', sales: '« Dans ma bulle » diamant (best-seller 2006)', note: 'La reine du rap 2000s. A tout raflé, puis a tout quitté.' },
   disiz: { from: 'Évry (91), origines sénégalaises', since: '2000', sales: '« L\'Amour » (2022) encensé', note: 'La Peste. De « J\'pète les plombs » à « L\'Amour », il se réinvente sans fin.' },
   caballerojeanjass: { from: 'Bruxelles (Belgique)', since: '2015', sales: 'Saga « Double Hélice » · culte web', note: 'Le duo chill de Bruxelles. Punchlines, weed et second degré.' },
+  // ---- Robin & Kevin (Alternative) : potes libraires de Tsukimi ----
+  robinkevin: { from: 'Librairie Tsukimi', since: 'Tome 1', sales: 'Rayon rap ET manga au complet', note: 'Deux frangins libraires, complétistes fous : ils écoutent toute la disca et lisent tous les tomes. Rap, manga, ciné — ils vont au bout de tout.' },
   // ---- persos fictifs : données bidon (chambrage) ----
   bishok: { from: 'Maroc', since: '???', sales: '0 disque, 100 % conviction', note: 'Le révolté. Décrypte les complots. Grosses stats… mais pas de rappeur.' },
   bilaldu92: { from: 'Le 92', since: '2006', sales: '3 CD vendus (à sa famille)', note: 'Sa carrière tient dans un buzz de 2006. Depuis, silence radio.' },
@@ -190,7 +197,7 @@ export const BIOS: Record<string, Bio> = {
 export const bioOf = (id?: string): Bio | undefined => (id ? BIOS[id] : undefined);
 
 // Surnoms affichés sous le nom dans le showcase (character select + roster du hub)
-export const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 76', kortex: 'Le Clasheur', bouss: 'La Voix', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème', freezecorleone: 'Le Complotiste', lino: 'La Lame', diams: 'La Demoiselle', disiz: 'La Peste', caballerojeanjass: 'Le Duo' };
+export const EPITHETS: Record<string, string> = { jul: "L'OVNI", pnl: 'Les Frères', booba: 'Le Duc', damso: 'Dems', sch: 'Le S', ninho: 'Le Boss', nekfeu: 'Le Feu', orelsan: 'San', iam: 'Les Sages', solaar: 'Le Prince', gazo: 'La Drill', vald: "L'Alien", oxmo: 'Le Poète', fabe: 'Le Sage', kery: 'Le Combattant', medine: "L'Insoumis", youssoupha: 'La Plume', gims: 'Meugui', lafouine: 'Laouni', kaaris: 'Riska', rohff: 'Le Padre', alphawann: 'Le Technicien', laylow: 'Le Visionnaire', jewelusain: 'Le Conteur', plk: 'Le Polak', bishok: 'Le Révolté', bilaldu92: 'La Zermi du 92', alexdu76: 'La Star du 76', kortex: 'Le Clasheur', bouss: 'La Voix', huntrill: 'Nouvelle Trap', jolagreen23: 'La Green', junglejack: 'La Jungle', lafeve: 'La New Wave', okis: 'La Crème', freezecorleone: 'Le Complotiste', lino: 'La Lame', diams: 'La Demoiselle', disiz: 'La Peste', caballerojeanjass: 'Le Duo', robinkevin: 'Tsukibro' };
 
 // Aperçu d'artistes par thème (étape « LA PLAYLIST » du ConfigWizard) : 3-4 têtes d'affiche GRAND PUBLIC
 // réellement taggées avec ce thème dans server/tracks.js (ARTIST_TAGS) — pour que l'hôte se projette.
@@ -214,10 +221,9 @@ export const THEME_ARTISTS: Record<string, string[]> = {
 };
 
 export const DIFFICULTIES = [
-  { key: 'facile', label: 'Grand public', desc: 'Les gros hits, tout le monde connaît' },
-  { key: 'normal', label: 'Connaisseur', desc: 'Classiques + sons bien connus' },
-  { key: 'difficile', label: 'Digger', desc: 'Deep cuts, sons moins streamés' },
-  { key: 'puriste', label: 'Puriste', desc: 'Le fond du bac, pour les vrais' },
+  { key: 'facile', label: 'Grand public', desc: 'Les gros hits — jouable même sans être calé en rap' },
+  { key: 'normal', label: 'Connaisseur', desc: 'Atteignable, mais pas donné' },
+  { key: 'puriste', label: 'RobMaïzi', desc: 'Digger + underground — pour les vrais' },
 ];
 
 export const MODES = [
@@ -322,6 +328,8 @@ export const AWARD_ICONS: Record<string, string> = {
   ghost: SVG('<path d="M5 20V11a7 7 0 0 1 14 0v9l-2.5-2-2.5 2-2-2-2 2z"/><circle cx="9.5" cy="10.5" r="1" fill="currentColor"/><circle cx="14.5" cy="10.5" r="1" fill="currentColor"/>'),
   skull: SVG('<path d="M5 10.5a7 7 0 0 1 14 0V13l-1 2h-1.5v3H7.5v-3H6l-1-2z"/><circle cx="9" cy="11" r="1.4" fill="currentColor"/><circle cx="15" cy="11" r="1.4" fill="currentColor"/>'),
   medal: SVG('<circle cx="12" cy="14" r="6"/><path d="M9 3.5l3 5 3-5"/><circle cx="12" cy="14" r="2"/>'),
+  vinyl: SVG('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>'),
+  sprout: SVG('<path d="M12 21v-8"/><path d="M12 13C12 9.2 9.2 7.6 5.6 7.6 5.6 11.2 8.2 13 12 13z"/><path d="M12 13c0-3.2 2.6-4.8 5.6-4.8C17.6 11.4 15 13 12 13z"/>'),
 };
 export const awardIcon = (id?: string) => AWARD_ICONS[id || ''] || AWARD_ICONS.medal;
 
@@ -343,6 +351,8 @@ export const AWARDS_INFO: AwardInfo[] = [
   { id: 'sage', title: 'Le Sage', icon: 'feather', blurb: 'Finit dans le haut du panier SANS aucun pouvoir.' },
   { id: 'perdantmagnifique', title: 'Le Perdant Magnifique', icon: 'up', blurb: 'Fait une énorme partie… et finit 2ᵉ. Rageant.' },
   { id: 'champion', title: 'La Ceinture', icon: 'crown', blurb: 'Champion de la partie.' },
+  { id: 'alancienne', title: 'À l\'Ancienne', icon: 'vinyl', blurb: 'Ne reconnaît QUE des sons d\'avant 2010, alors qu\'il y avait du récent.' },
+  { id: 'releve', title: 'La Relève', icon: 'sprout', blurb: 'Ne reconnaît QUE du 2020 et après, alors qu\'il y avait des classiques.' },
   // ---- les salés (on est là pour se chambrer) ----
   { id: 'mitraillette', title: 'La Mitraillette', icon: 'spray', blurb: 'Balance un max de réponses au petit bonheur.', salty: true },
   { id: 'feudepaille', title: 'Feu de Paille', icon: 'fire', blurb: 'Démarre en fusée… s\'éteint sur la fin.', salty: true },

@@ -3,7 +3,7 @@ import { avatarById, initials, THEME_ARTISTS } from '../data';
 import '../wizard.css';
 
 /* ====== réglages envoyés au serveur (mappés depuis le wizard) ====== */
-export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; mjId?: string; rebalance: string; era: string; themes: string[]; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean; rushPlayerId?: string };
+export type WizSettings = { rounds: number; difficulty: string; mode: string; mj: boolean; mjId?: string; rebalance: string; era: string[]; themes: string[]; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean; rushPlayerId?: string };
 type Music = { nowPlaying: number; musicOn: boolean; onToggle: () => void; onNext: () => void; onPrev: () => void; bassRef: { current: number }; barsRef: { current: number[] }; waveRef?: { current: Uint8Array }; tracks: { title: string; artist: string }[] };
 type Player = { id: string; name: string; avatar?: string };
 type SpotifyCtl = { state: string; spotifyOn: boolean; deezerOn: boolean; onToggleSpotify: () => void; onToggleDeezer: () => void };
@@ -16,7 +16,7 @@ const GAMES = [
   { id: 'buzz', name: 'Buzzer', cat: 'Station · Duel', family: 'multi', soon: false, desc: 'Le premier qui buzze prend la main.' },
   { id: 'quiz', name: 'Quiz', cat: 'Station · Culture', family: 'multi', soon: false, desc: 'Blazes, années, albums… en QCM.' },
   { id: 'rush', name: 'Survivor', cat: 'Station · Chrono', family: 'solo', soon: false, desc: 'Enchaîne les sons, bats le record.' },
-  { id: 'adventure', name: 'Aventure', cat: 'Station · Campagne', family: 'solo', soon: true, desc: 'Campagne solo à débloquer.' },
+  { id: 'adventure', name: '9901', cat: 'Station · Campagne', family: 'solo', soon: true, desc: 'Campagne solo à débloquer.' },
 ];
 const ERAS = [
   { id: 'all', big: '∞', lab: 'Toutes', sub: 'époques' },
@@ -41,10 +41,9 @@ const THEMES_EXTRA = [
   { id: 'legendes', name: 'Légendes', sub: 'Le panthéon' }, { id: 'trap', name: 'Trap FR', sub: 'Hi-hats' },
 ];
 const DIFFS = [
-  { key: 'facile', name: 'Grand public', desc: 'Les gros hits, tout le monde connaît', signal: 1 },
-  { key: 'normal', name: 'Connaisseur', desc: 'Classiques + sons bien connus', signal: 2 },
-  { key: 'difficile', name: 'Digger', desc: 'Deep cuts, sons moins streamés', signal: 3 },
-  { key: 'puriste', name: 'Puriste', desc: 'Le fond du bac, pour les vrais', signal: 4 },
+  { key: 'facile', name: 'Grand public', desc: 'Les gros hits — jouable même sans être calé en rap', signal: 1 },
+  { key: 'normal', name: 'Connaisseur', desc: 'Atteignable, mais pas donné', signal: 2 },
+  { key: 'puriste', name: 'RobMaïzi', desc: 'Digger + underground, pour les vrais', signal: 3 },
 ];
 const FORMATS = [
   { rounds: 8, label: 'Petit set', desc: 'Une partie courte pour lancer la soirée.' },
@@ -111,7 +110,6 @@ const A = '#eef0f1', F = '#E4FF1A';
 const DIFF_ILLU = [
   `<svg viewBox="0 0 128 128" fill="none"><g stroke="${A}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="64" cy="96" rx="46" ry="16"/><ellipse cx="64" cy="96" rx="24" ry="8"/><path d="M18 96V83M110 96V83M40 100V88M88 100V88"/><path d="M18 83a46 16 0 0 1 92 0"/><path d="M30 80V54M98 80V54"/><path d="M22 50h16v8H22zM90 50h16v8H90z" fill="${F}" fill-opacity="0.16" stroke="${F}"/><circle cx="64" cy="42" r="24"/><circle cx="64" cy="42" r="15" stroke-width="1.6"/><circle cx="64" cy="42" r="4.5" fill="${F}" fill-opacity="0.28" stroke="${F}"/><circle cx="64" cy="42" r="1.6" fill="${A}" stroke="none"/></g></svg>`,
   `<svg viewBox="0 0 128 128" fill="none"><g stroke="${A}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M28 60a36 36 0 0 1 72 0"/><rect x="20" y="56" width="16" height="24" rx="5" fill="rgba(255,255,255,.08)" stroke="${A}"/><rect x="92" y="56" width="16" height="24" rx="5" fill="rgba(255,255,255,.08)" stroke="${A}"/><rect x="38" y="72" width="52" height="38" rx="6"/><rect x="46" y="80" width="36" height="18" rx="3" fill="${F}" fill-opacity="0.14" stroke="${F}"/><circle cx="56" cy="89" r="4.5" stroke="${F}"/><circle cx="72" cy="89" r="4.5" stroke="${F}"/><path d="M46 104h8M60 104h8M74 104l6 0" stroke-width="2.2"/></g></svg>`,
-  `<svg viewBox="0 0 128 128" fill="none"><g stroke="${A}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 66l44-10 44 10v34l-44 12-44-12z" fill="rgba(255,255,255,.05)" stroke="${A}"/><path d="M20 66l44 10 44-10M64 76v36"/><path d="M30 62v34M37 61v35M44 60v36M51 61v35"/><path d="M62 40l22 5v34l-22-5z" fill="${F}" fill-opacity="0.16" stroke="${F}"/><circle cx="88" cy="52" r="14"/><circle cx="88" cy="52" r="5" stroke="${F}"/></g></svg>`,
   `<svg viewBox="0 0 128 128" fill="none"><g stroke="${A}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M64 20l-30 46h60z" fill="${F}" fill-opacity="0.12" stroke="${F}" stroke-width="1.6"/><rect x="34" y="30" width="60" height="60" rx="4"/><rect x="41" y="37" width="46" height="46" rx="3"/><circle cx="64" cy="60" r="18"/><circle cx="64" cy="60" r="11" stroke-width="1.4"/><circle cx="64" cy="60" r="6" fill="${F}" fill-opacity="0.26" stroke="${F}"/><rect x="40" y="98" width="48" height="20" rx="3" fill="rgba(255,255,255,.05)" stroke="${A}"/><path d="M46 104h5v4h-5zM55 104h5v4h-5zM64 104h5v4h-5zM73 104h5v4h-5z" fill="${F}" fill-opacity="0.2" stroke="${F}" stroke-width="1.6"/></g></svg>`,
 ];
 const H = (s: string) => ({ dangerouslySetInnerHTML: { __html: s } });
@@ -169,7 +167,7 @@ function drawScope(canvas: HTMLCanvasElement, wave: Uint8Array) {
 export default function ConfigWizard({ poolSize, roomCode, players, playerList = [], onStart, onBack, music, onOpenHub, spotify }: Props) {
   const [step, setStep] = useState(0);
   const [game, setGame] = useState('blind');
-  const [era, setEra] = useState('all');
+  const [eras, setEras] = useState<string[]>([]); // MULTI-décennie : vide = toutes époques ; sinon UNION des décennies cochées
   const [themes, setThemes] = useState<string[]>([]); // MULTI-thème : vide = tout le rap ; sinon UNION des styles cochés
   const [diff, setDiff] = useState('facile');
   const [rounds, setRounds] = useState<number | 'inf'>(16);
@@ -190,14 +188,17 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
   useEffect(() => { if (isRush && step === 2) setStep(3); }, [isRush, step]); // Survivor n'a pas d'étape difficulté : on ne s'y arrête jamais
 
   const themeName = themes.length === 0 ? 'Tout le rap FR' : themes.map((id) => [...THEMES_MAIN, ...THEMES_EXTRA].find((t) => t.id === id)?.name).filter(Boolean).join(' + ');
-  const eraName = era === 'all' ? 'Toutes époques' : (ERAS.find((e) => e.id === era)!.big + 's · ' + ERAS.find((e) => e.id === era)!.lab);
+  const eraTag = (ids: string[]) => ids.map((id) => { const e = ERAS.find((x) => x.id === id); return e ? e.big + 's' : null; }).filter(Boolean).join(' + ');
+  const eraName = eras.length === 0 ? 'Toutes époques'
+    : eras.length === 1 ? (ERAS.find((e) => e.id === eras[0])!.big + 's · ' + ERAS.find((e) => e.id === eras[0])!.lab)
+    : eraTag(eras);
   // chaque étape porte son index RÉEL (step). Survivor n'a PAS d'étape difficulté (progressive) → on la retire
   // du parcours : une étape en moins dans la carte de match.
   const rows = [
     { step: 0, k: 'Le jeu', v: GAMES.find((g) => g.id === game)!.name },
     isQuiz
       ? { step: 1, k: 'Questions', v: quizNoVf ? 'Sans Vrai/Faux' : 'QCM + Vrai/Faux' }
-      : { step: 1, k: 'Playlist', v: themeName + (era === 'all' ? '' : ' · ' + ERAS.find((e) => e.id === era)!.big + 's') },
+      : { step: 1, k: 'Playlist', v: themeName + (eras.length === 0 ? '' : ' · ' + eraTag(eras)) },
     ...(isRush ? [] : [{ step: 2, k: 'Difficulté', v: DIFFS.find((d) => d.key === diff)!.name }]),
     isRush
       ? { step: 3, k: 'Chrono', v: rushStartSec + ' s' }
@@ -227,7 +228,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     const r = rounds === 'inf' ? Math.min(poolSize, 50) : Math.min(rounds, poolSize);
     const isMj = orch === 'mj' && mjAllowed;
     const mode = game === 'buzz' ? 'buzzer' : game === 'quiz' ? 'quiz' : game === 'rush' ? 'rush' : 'multi';
-    onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance, era, themes,
+    onStart({ rounds: r, difficulty: diff, mode, mj: isMj, mjId: isMj ? (mjId || playerList[0]?.id) : undefined, rebalance, era: eras, themes,
       rushStartSec: isRush ? rushStartSec : undefined, quizNoVf: isQuiz ? quizNoVf : undefined,
       rushPlayerId: isRush ? rushPlayerId : undefined });
   }
@@ -421,6 +422,11 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                   title={spotify.deezerOn ? 'Deezer actif — cliquer pour couper' : 'Deezer coupé — cliquer pour activer'}>
                   <img className="dzimg" src="/deezer.svg" alt="" aria-hidden="true" /><span className="dzword">deezer</span>
                 </button>
+                {spotify.state !== 'ready' && typeof window !== 'undefined' && window.location.hostname !== '127.0.0.1' && (
+                  <div style={{ flexBasis: '100%', fontSize: 11.5, color: 'var(--muted)', marginTop: 4, lineHeight: 1.4 }}>
+                    Pour <b style={{ color: 'var(--txt)' }}>Spotify</b> : ouvre le jeu sur <b style={{ color: 'var(--fluo)' }}>http://127.0.0.1:{window.location.port || '5173'}/host</b> — Spotify refuse « localhost » et les IP du réseau local.
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -492,10 +498,16 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
             {step === 1 && !isQuiz && (
               <>
                 <div className="axis">
-                  <div className="axis-head"><span className="axis-chip"><span>Époque</span></span><span className="axis-note">Tune la décennie</span></div>
-                  <div className="tuner">{ERAS.map((e) => (
-                    <button key={e.id} className={`knob ${era === e.id ? 'sel' : ''}`} onClick={() => setEra(e.id)}><span {...H(dial(era === e.id))} /><span className="kl"><b>{e.big === '∞' ? 'TOUT' : e.big + 's'}</b><small>{e.sub}</small></span></button>
-                  ))}</div>
+                  <div className="axis-head"><span className="axis-chip"><span>Époque</span></span><span className="axis-note">Coche une ou plusieurs décennies</span></div>
+                  <div className="tuner">{ERAS.map((e) => {
+                    const on = e.id === 'all' ? eras.length === 0 : eras.includes(e.id);
+                    const toggle = () => e.id === 'all'
+                      ? setEras([])
+                      : setEras((prev) => prev.includes(e.id) ? prev.filter((x) => x !== e.id) : [...prev, e.id]);
+                    return (
+                      <button key={e.id} className={`knob ${on ? 'sel' : ''}`} onClick={toggle}><span {...H(dial(on))} /><span className="kl"><b>{e.big === '∞' ? 'TOUT' : e.big + 's'}</b><small>{e.sub}</small></span></button>
+                    );
+                  })}</div>
                 </div>
                 <div className="axis">
                   <div className="axis-head"><span className="axis-chip"><span>Thématique · Ville · Sous-genre</span></span><span className="axis-note">Appuie sur un poussoir</span></div>
@@ -515,9 +527,9 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 <button key={d.key} className={`diff-tile pick ${diff === d.key ? 'sel on' : ''}`} onClick={() => setDiff(d.key)}>
                   {diff === d.key && <canvas className="scope" aria-hidden="true" />}
                   <div className="diff-illu"><img src={`/difficulty/${d.key}.png`} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /><span className="diff-illu-svg" {...H(DIFF_ILLU[i])} /></div>
-                  <div className="diff-idx">Signal {d.signal}/4</div>
+                  <div className="diff-idx">Signal {d.signal}/3</div>
                   <div className="diff-name">{d.name}</div>
-                  <div className="vu">{[0, 1, 2, 3].map((b) => <i key={b} className={b < d.signal ? (d.signal === 4 && b === 3 ? 'hot' : 'on') : ''} />)}</div>
+                  <div className="vu">{[0, 1, 2].map((b) => <i key={b} className={b < d.signal ? (d.signal === 3 && b === 2 ? 'hot' : 'on') : ''} />)}</div>
                   <div className="diff-desc">{d.desc}</div>
                 </button>
               ))}</div>

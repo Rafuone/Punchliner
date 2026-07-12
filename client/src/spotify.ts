@@ -55,6 +55,14 @@ function randStr(n = 64) {
 }
 
 export async function spotifyLogin() {
+  // Spotify (policy 2025) EXIGE une redirect URI en IP loopback LITTÉRALE (http://127.0.0.1) : « localhost » ET les IP
+  // de LAN en http:// sont REFUSÉS. REDIRECT_URI = origin + '/host' → si l'hôte n'est PAS ouvert sur http://127.0.0.1,
+  // l'écran Spotify répond « Invalid redirect URI » et la popup ne revient JAMAIS avec un code (= « jamais connecté »).
+  // On bloque tôt avec un message clair au lieu d'une popup vouée à l'échec. (Les téléphones gardent l'IP LAN, indépendant.)
+  if (window.location.hostname !== '127.0.0.1') {
+    setErr('Pour Spotify : ouvre l’hôte sur http://127.0.0.1:' + (window.location.port || '5173') + '/host — Spotify refuse « localhost » et les IP du réseau local.');
+    return;
+  }
   const verifier = randStr(64);
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
   // verifier en localStorage (PAS sessionStorage) : un aller-retour OAuth peut vider le sessionStorage sur

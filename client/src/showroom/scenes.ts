@@ -64,17 +64,41 @@ const base = (mode: string, extra: any = {}, difficulty = 'facile') => ({
 
 const SESSION = { code: 'PUNCH', playerId: 'me', name: 'Rafuo', avatar: 'disiz' };
 
+// Reveal à 8 joueurs (vérifier : tout tient sans scroll + anim de rang + note du pouvoir sur le board)
+const REVEAL8 = () => {
+  const rows: any[] = [
+    { id: 'p1', name: 'Rafuo', avatar: 'disiz', score: 142000, d: 0, pts: 30000, hit: true },
+    { id: 'p3', name: 'Léo', avatar: 'ninho', score: 128000, d: 1, pts: 26000, hit: true },
+    { id: 'p2', name: 'MoMo', avatar: 'sch', score: 121000, d: -1, pts: 12000, hit: true, power: { name: 'Vol', type: 'steal', note: '−12 000 à Rafuo' } },
+    { id: 'p6', name: 'Yanis', avatar: 'booba', score: 98000, d: 3, pts: 24000, hit: true },
+    { id: 'p4', name: 'Sofiane', avatar: 'jul', score: 76000, d: 0, pts: 8000, hit: false },
+    { id: 'p7', name: 'Inès', avatar: 'damso', score: 61000, d: -2, pts: 0, hit: false },
+    { id: 'p5', name: 'Manon', avatar: 'gazo', score: 44000, d: 0, pts: 12000, hit: true },
+    { id: 'p8', name: 'Karim', avatar: 'orelsan', score: 20000, d: 0, pts: 0, hit: false },
+  ];
+  return {
+    roundIndex: 5, total: 16,
+    track: { title: 'DKR', artist: 'Booba', cover: 'https://cdn-images.dzcdn.net/images/cover/564dd3853a925bcd433b4e9846e78d09/250x250-000000-80-0-0.jpg' },
+    quiz: null, hideBoard: false, lastRound: false,
+    results: rows.map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, isMJ: false, points: p.pts, titleHit: p.hit, artistHit: p.hit, answer: p.hit ? 'dkr booba' : '', tried: true, power: p.power || null, hitBy: null })),
+    scores: rows.map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, score: p.score, connected: true, charge: 0, charges: 0, isMJ: false, rankDelta: p.d, total: p.score, gameWins: 0 })),
+  };
+};
+
 export const SCENES: Scene[] = [
   // ─────────── TV (écran / hôte) ───────────
   { id: 'tv-lobby', label: 'Lobby (code + QR)', group: 'tv', comp: 'host', note: "Écran d'accueil : code du salon, QR, joueurs qui rejoignent.", make: () => base('multi', { phase: 'lobby' }) },
   { id: 'tv-prep', label: 'Fenêtre POUVOIRS (prep)', group: 'tv', comp: 'host', make: () => base('multi', { phase: 'prep', round: { index: 1, roundIndex: 1, total: 16, endsAt: now() + 9000, mode: 'multi', difficulty: 'Grand public', prep: true } }) },
   { id: 'tv-playing', label: 'Manche — Blind Test', group: 'tv', comp: 'host', make: () => base('multi', { phase: 'playing', round: { index: 5, roundIndex: 5, total: 16, endsAt: now() + 22000, durationMs: 30000, mode: 'multi', difficulty: 'Grand public', mj: false, preview: '', startAt: 0 } }) },
   { id: 'tv-reveal', label: 'Révélation + scores', group: 'tv', comp: 'host', make: () => base('multi', { phase: 'reveal', round: { index: 5, roundIndex: 5, total: 16, mode: 'multi', difficulty: 'Grand public', mj: false }, reveal: REVEAL(false, false) }) },
+  { id: 'tv-reveal8', label: 'Révélation — 8 joueurs', group: 'tv', comp: 'host', note: 'Tenue à 8 joueurs (sans scroll) + anim de rang + note du pouvoir sur le board.', make: () => { const r = REVEAL8(); return base('multi', { phase: 'reveal', players: r.scores, round: { index: 5, roundIndex: 5, total: 16, mode: 'multi', difficulty: 'Grand public', mj: false }, reveal: r }); } },
   { id: 'tv-podium', label: 'Podium (fin de partie)', group: 'tv', comp: 'host', note: 'Récap de la partie + série (à séparer — Cycle 2).', make: () => base('multi', { phase: 'final', final: FINAL() }) },
   { id: 'tv-buzz-wait', label: 'Buzzer — en attente', group: 'tv', comp: 'host', make: () => base('buzzer', { phase: 'playing', round: { index: 5, roundIndex: 5, total: 16, endsAt: now() + 22000, durationMs: 30000, mode: 'buzzer', difficulty: 'Grand public', mj: false, preview: '', startAt: 0 }, buzz: { winnerId: null, winnerName: null, winnerAvatar: null, open: true, lockedOut: [], endsAt: 0, answerMs: 15000 } }) },
   { id: 'tv-buzz-win', label: 'Buzzer — quelqu’un a buzzé', group: 'tv', comp: 'host', make: () => base('buzzer', { phase: 'playing', round: { index: 5, roundIndex: 5, total: 16, endsAt: now() + 22000, durationMs: 30000, mode: 'buzzer', difficulty: 'Grand public', mj: false, preview: '', startAt: 0 }, buzz: { winnerId: 'p2', winnerName: 'MoMo', winnerAvatar: 'sch', open: false, lockedOut: [], endsAt: now() + 15000, answerMs: 15000 } }) },
   { id: 'tv-quiz', label: 'Quiz (QCM)', group: 'tv', comp: 'host', make: () => base('quiz', { phase: 'playing', roundIndex: 3, round: { index: 3, roundIndex: 3, total: 16, endsAt: now() + 18000, durationMs: 20000, mode: 'quiz', difficulty: 'Culture', mj: false, quiz: QUIZ } }) },
   { id: 'tv-survivor', label: 'Survivor (contre-la-montre)', group: 'tv', comp: 'host', make: () => base('rush', { phase: 'playing', round: { mode: 'rush', trackNo: 4, endsAt: now() + 40000, rushMax: 60000, passMs: 5000, bonusMs: 8000, difficulty: 'Grand public', scores: P(), rushPlayerId: 'p1', rushPlayerName: 'Rafuo' } }) },
+  { id: 'tv-clash-intro', label: 'Clash — intro (VS)', group: 'tv', comp: 'host', note: 'Manche battle 1v1 (1 par partie, au milieu, ≥3 joueurs). Le carton VS.', make: () => base('multi', { phase: 'battle-intro', battle: { a: { id: 'p1', name: 'Rafuo', avatar: 'disiz' }, b: { id: 'p2', name: 'MoMo', avatar: 'sch' }, flavor: 'sommet', betBonus: 4000, win: 20000, tallyA: [], tallyB: [] } }) },
+  { id: 'tv-clash-reveal', label: 'Clash — résultat', group: 'tv', comp: 'host', note: 'Vainqueur + parieurs gagnants/perdants + le morceau révélé.', make: () => base('multi', { phase: 'battle-reveal', battle: { a: { id: 'p1', name: 'Rafuo', avatar: 'disiz' }, b: { id: 'p2', name: 'MoMo', avatar: 'sch' }, betBonus: 4000, reveal: { a: 'p1', b: 'p2', winnerId: 'p1', draw: false, points: 20000, betBonus: 4000, track: { title: 'DKR', artist: 'Booba', cover: 'https://cdn-images.dzcdn.net/images/cover/564dd3853a925bcd433b4e9846e78d09/250x250-000000-80-0-0.jpg' }, bets: [{ id: 'p3', won: true }, { id: 'p4', won: false }, { id: 'p5', won: true }], scores: P() } } }) },
 
   // ─────────── Téléphone (joueur) ───────────
   { id: 'ph-form', label: 'Formulaire → character-select', group: 'phone', comp: 'player', note: 'Tape un code + un blaze puis « Entre dans le cercle » pour ouvrir le character-select.', session: null, make: () => ({ phase: 'lobby', players: P() }) },

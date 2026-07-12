@@ -105,7 +105,7 @@ function Chrome() {
   const [activeId, setActiveId] = useState(SCENES[0].id);
   const [nonce, setNonce] = useState(0);
   const [combo, setCombo] = useState(false);
-  const [buzzVar, setBuzzVar] = useState(4);
+  const [buzzVar, setBuzzVar] = useState(1);
   const [target, setTarget] = useState(false);
   const [box, setBox] = useState({ w: 900, h: 600 });
   const [, force] = useState(0);
@@ -178,6 +178,18 @@ function Chrome() {
 
   function pick(id: string) { setActiveId(id); setNonce((n) => n + 1); }
 
+  // TEST multi-activation : envoie 4 activations de pouvoir ÉCHELONNÉES à la TV (bannières empilées + feed).
+  function simulatePowers() {
+    const win = tvRef.current && tvRef.current.contentWindow; if (!win) return;
+    const acts = [
+      { name: 'MoMo', avatar: 'sch', power: 'Vol', effect: '−12 000 auditeurs à Rafuo' },
+      { name: 'Léo', avatar: 'ninho', power: 'Certifié Diamant', effect: '×1.6 ce tour' },
+      { name: 'Sofiane', avatar: 'jul', power: 'La Machine', effect: '+21 000 auditeurs' },
+      { name: 'Manon', avatar: 'gazo', power: 'Drill', effect: '−15 000 à MoMo' },
+    ];
+    acts.forEach((a, i) => setTimeout(() => { try { win.postMessage({ __sr: 'deliver', event: 'power:used', payload: a }, '*'); } catch {} }, i * 550));
+  }
+
   const gap = 14, pad = 6;
   const availW = box.w - pad * 2, availH = box.h - pad * 2;
   let tv = { w: 0, h: 0 }, phScale = 1;
@@ -227,6 +239,7 @@ function Chrome() {
           <div className="sr-title">{scene.label}{scene.note && <span className="sr-note"> — {scene.note}</span>}</div>
           <div className="sr-actions">
             <button className={'sr-btn' + (target ? ' hot' : '')} onClick={() => setTarget((t) => !t)} title="Clique un élément de la scène pour l'ajouter au retour">🎯 {target ? 'Ciblage ON' : 'Cibler'}</button>
+            {scene.comp === 'host' && <button className="sr-btn" onClick={simulatePowers} title="Envoie 4 activations de pouvoir échelonnées à la TV (test multi-activation + bannières empilées)">⚡ Simuler pouvoirs</button>}
             {PAIR[activeId] && <button className={'sr-btn' + (combo ? ' on' : '')} onClick={() => setCombo((c) => !c)}>{combo ? '✕ Vue croisée' : (isPhone ? '＋ Voir la TV' : '＋ Voir le téléphone')}</button>}
             <button className="sr-btn" onClick={() => setNonce((n) => n + 1)}>↻ Rejouer l'anim</button>
           </div>
@@ -240,7 +253,7 @@ function Chrome() {
         {showBuzzIter && (
           <div className="sr-iter">
             <div className="sr-iterlabel">Itérations du buzz</div>
-            <div className="sr-iterbtns">{[1, 2, 3, 4, 5].map((v) => <button key={v} className={'sr-iterbtn' + (buzzVar === v ? ' on' : '')} onClick={() => { setBuzzVar(v); setNonce((n) => n + 1); }}>{v}</button>)}</div>
+            <div className="sr-iterbtns">{[1, 2, 3, 4].map((v) => <button key={v} className={'sr-iterbtn' + (buzzVar === v ? ' on' : '')} onClick={() => { setBuzzVar(v); setNonce((n) => n + 1); }}>{v}</button>)}</div>
           </div>
         )}
         <FeedbackPanel key={activeId} sceneId={activeId} label={scene.label} />

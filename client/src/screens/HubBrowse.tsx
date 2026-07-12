@@ -3,7 +3,7 @@
 // tout le roster en grille (aligné à gauche, zéro scroll). Slots verrouillés cliquables → objectif à
 // accomplir. Pas de P1/P2, pas de silhouette SVG fantôme.
 import { useState, useRef, useEffect } from 'react';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, EPITHETS, AWARDS_INFO, awardIcon, LOCKED_SLOTS, bioOf, fmtAud } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, EPITHETS, AWARDS_INFO, awardIcon, unlockObjective, bioOf, fmtAud } from '../data';
 import { socket } from '../socket';
 import GrungeBg from '../GrungeBg';
 import { hasSpotifySession, spotifyLogin, searchPlaylists, getMyPlaylists, getPlaylistTracks, spotifyPlayContext, spotifyPlayUri, spotifyPause, spotifyTogglePlay, spotifyNext, spotifyPrev, spotifySeek, spotifyRepeat, spotifyShuffle, onPlayerState, spotifyLastError } from '../spotify';
@@ -68,7 +68,8 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
   const [selId, setSelId] = useState(AVATARS[0].id);
   const figRef = useRef<HTMLDivElement>(null);
   const sel = avatarById(selId) || AVATARS[0];
-  const lockedSel = LOCKED_SLOTS.find((s) => s.id === selId) || null;
+  const unlocked: string[] = (() => { try { return JSON.parse(localStorage.getItem('pl_unlocked') || '[]'); } catch { return []; } })();
+  const lockedSel = (!!sel.locked && !unlocked.includes(sel.id)) ? sel : null; // déblocable pas encore débloqué (par device) → ??? + objectif
   const bio = bioOf(selId);
   const [board, setBoard] = useState<any[]>([]); // classement mondial Survivor (un ladder = un créneau de départ)
   const [lbConfigs, setLbConfigs] = useState<{ startSec: number; count: number }[]>([]); // créneaux dispos (onglets)
@@ -473,7 +474,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
   const nameFs = nmU.length > 12 ? 'clamp(34px,4.4vw,58px)' : nmU.length > 8 ? 'clamp(42px,5.2vw,72px)' : 'clamp(50px,6vw,84px)';
   const SL = sel.statLabels || ['Flow', 'Punch', 'Tech', 'Aura'];
   const statRows: [string, number][] = [[SL[0], sel.stats.flow], [SL[1], sel.stats.punch], [SL[2], sel.stats.tech], [SL[3], sel.stats.aura]];
-  const idx = lockedSel ? LOCKED_SLOTS.indexOf(lockedSel) + 1 : 0;
+  const idx = lockedSel ? AVATARS.filter((a) => a.locked).findIndex((a) => a.id === sel.id) + 1 : 0;
 
   return (
     <div className={`hub-overlay tvros${isLegend(sel.cat) && !lockedSel ? ' irid' : ''}`} style={{ ['--c' as any]: lockedSel ? '#20222a' : sel.color, ['--cc' as any]: lockedSel ? '#7d8590' : CATEGORY_COLORS[sel.cat] }}>
@@ -510,7 +511,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
           {lockedSel ? (
             <div className="tvros-obj">
               <div className="tvros-blabel">Objectif à accomplir</div>
-              <div className="tvros-objtxt">{lockedSel.objective}</div>
+              <div className="tvros-objtxt">{unlockObjective(sel.id)}</div>
               <div className="tvros-objnote">Réussis-le en partie pour révéler ce rappeur.</div>
             </div>
           ) : (
@@ -549,12 +550,15 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
 
       {/* GRILLE : tout le roster, aligné à gauche, tuiles biseautées */}
       <div className="tvros-grid">
-        {ROSTER.map((a) => (
-          <button key={a.id} className={`tvcell ${isLegend(a.cat) ? 'irid' : ''} ${selId === a.id ? 'sel' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[a.cat], ['--c' as any]: a.color }}
-            onMouseEnter={() => setSelId(a.id)} onClick={() => setSelId(a.id)} title={a.name}>
-            {a.img ? <img src={`/avatars/${a.id}.png`} alt={a.name} onError={hideOnErr} /> : <span className="ini">{initials(a.name)}</span>}
+        {ROSTER.map((a) => {
+          const aLocked = !!a.locked && !unlocked.includes(a.id); // pas encore débloqué → vignette ???
+          return (
+          <button key={a.id} className={`tvcell ${isLegend(a.cat) ? 'irid' : ''} ${selId === a.id ? 'sel' : ''} ${aLocked ? 'lockcell' : ''}`} style={{ ['--cc' as any]: aLocked ? '#7d8590' : CATEGORY_COLORS[a.cat], ['--c' as any]: aLocked ? '#20222a' : a.color }}
+            onMouseEnter={() => setSelId(a.id)} onClick={() => setSelId(a.id)} title={aLocked ? '???' : a.name}>
+            {aLocked ? <span className="ini">?</span> : a.img ? <img src={`/avatars/${a.id}.png`} alt={a.name} onError={hideOnErr} /> : <span className="ini">{initials(a.name)}</span>}
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

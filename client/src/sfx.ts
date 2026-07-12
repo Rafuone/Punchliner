@@ -15,8 +15,8 @@ const URLS: Record<string, string> = {
 };
 const VOL: Record<string, number> = { hover: 0.34, click: 0.5, confirm: 0.6, error: 0.58, scratch: 0.62, horn: 0.6, countdown: 0.5, launch: 0.62, recap: 0.4, airhorn: 0.65 };
 // Durée MAX de lecture (ms) par son : au-delà on COUPE net. Absent = le son joue en entier.
-// NB : 'scratch' est désormais SYNTHÉTISÉ (playScratch, WebAudio) → il ne passe plus par ce cap.
-const MAXMS: Record<string, number> = {};
+// 'scratch' (activation de pouvoir) = vrai sample DJ mais COUPÉ court (~340 ms) → punchy, plus la longue traînée.
+const MAXMS: Record<string, number> = { scratch: 340 };
 const stopTimers: Record<string, ReturnType<typeof setTimeout> | undefined> = {};
 const cache: Record<string, HTMLAudioElement> = {};
 const off = () => { try { return localStorage.getItem('pl_sfx_off') === '1'; } catch { return false; } };
@@ -122,7 +122,8 @@ export function playScratch() {
 export function sfx(key: keyof typeof URLS, opts?: { rate?: number }) {
   try {
     if (typeof window === 'undefined' || off()) return;
-    if (key === 'scratch') { playScratch(); return; } // route spéciale → scratch synthétisé (pas de preview)
+    // 'scratch' repasse par le lecteur <audio> (fiable, comme hover/click/confirm) + cap MAXMS court —
+    // le synth WebAudio (playScratch) restait MUET sur certaines machines/TV. Le sample est coupé net à 340 ms.
     const url = URLS[key]; if (!url) return;
     let a = cache[key];
     if (!a) { a = new Audio(url); a.preload = 'auto'; cache[key] = a; }

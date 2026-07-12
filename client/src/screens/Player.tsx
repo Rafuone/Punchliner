@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { socket } from '../socket';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO, EPITHETS, REACTIONS, END_REACTIONS, TRASH_TALK } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO, UNLOCKS, unlockObjective, EPITHETS, REACTIONS, END_REACTIONS, TRASH_TALK } from '../data';
 import GrungeBg from '../GrungeBg';
 import { sfx } from '../sfx';
 
@@ -76,7 +76,7 @@ export default function Player() {
   const [step, setStep] = useState<'form' | 'char' | 'roster' | 'trophies'>('form'); // avant d'avoir rejoint (+ pages hub : roster / palmarès)
   const [unlockedTrophies, setUnlockedTrophies] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('pl_trophies') || '[]'); } catch { return []; } });
   const [revealTrophies, setRevealTrophies] = useState(true); // aperçu : tout afficher (sinon non-débloqués grisés)
-  const [unlockedChars] = useState<string[]>([]); // challengers déblocables DÉSACTIVÉS pour l'instant (rien affiché comme débloqué)
+  const [unlockedChars, setUnlockedChars] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('pl_unlocked') || '[]'); } catch { return []; } }); // challengers déjà débloqués (persistés par device dans pl_unlocked)
   const [newChars, setNewChars] = useState<string[]>([]); // débloqués À L'INSTANT (bannière de fin de partie)
   const [changing, setChanging] = useState(false); // change de rappeur entre deux parties (rouvre le character select)
   const [joined, setJoined] = useState(false);
@@ -199,7 +199,22 @@ export default function Player() {
       setPlayers(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setReplayVote(null); setReplayTally({ yes: 0, voted: 0, total: 0 }); setPhase('final');
       const mineAw = (d.awards || []).filter((a: any) => a.playerId === meId.current).map((a: any) => a.id);
       if (mineAw.length) setUnlockedTrophies((prev) => { const s = Array.from(new Set([...prev, ...mineAw])); try { localStorage.setItem('pl_trophies', JSON.stringify(s)); } catch {} return s; });
-      // Déblocage des CHALLENGERS désactivé pour l'instant (Alexandre : conditions à refondre + affichage à repenser).
+      // Déblocage des CHALLENGERS : selon MON résultat de cette partie (persisté par device dans pl_unlocked).
+      const board = (d.scores || []).filter((p: any) => !p.isMJ);
+      const myIdx = board.findIndex((p: any) => p.id === meId.current);
+      if (myIdx >= 0) {
+        const meP = board[myIdx];
+        const ctx = { won: myIdx === 0, rank: myIdx + 1, certifShort: certif(meP.score, d.rounds || 0).short, awardIds: mineAw, difficulty: d.settings?.difficulty, mode: d.settings?.mode, rounds: d.rounds || 0 };
+        setUnlockedChars((prev) => {
+          const hit = UNLOCKS.find((u) => !prev.includes(u.id) && u.check(ctx as any)); // UN SEUL par partie (déblocage progressif, comme la TV)
+          const fresh = hit ? [hit.id] : [];
+          setNewChars(fresh); // bannière « nouveau challenger » (vide si rien)
+          if (!fresh.length) return prev;
+          const next = Array.from(new Set([...prev, ...fresh]));
+          try { localStorage.setItem('pl_unlocked', JSON.stringify(next)); } catch {}
+          return next;
+        });
+      } else setNewChars([]);
     });
     // Manche CLASH (1v1 + paris) — additif, contrat serveur fixe.
     socket.on('battle:intro', (d: any) => { setBattle({ a: d.a, b: d.b, flavor: d.flavor }); setBetPick(null); setGuess(''); setFeedback(null); setPhase('battle-intro'); });
@@ -443,6 +458,7 @@ export default function Player() {
     const changeMode = joined && changing;
     const sel = av || AVATARS[0];
     const nmU = sel.name.toUpperCase();
+    const selLocked = browse && !!sel.locked && !unlockedChars.includes(sel.id); // aperçu roster : déblocable pas encore débloqué → showcase « ??? » + objectif
     // taille du nom adaptée à sa longueur → ne déborde jamais sur les stats
     const nameFs = nmU.length > 11 ? 'clamp(17px,5vw,24px)' : nmU.length > 8 ? 'clamp(20px,6vw,29px)' : 'clamp(24px,7.5vw,35px)';
     return (
@@ -485,25 +501,27 @@ export default function Player() {
           <div className="cs-stage" ref={stageRef} style={{ ['--c' as any]: sel.color }}>
             <div className="cs-pbg" />
             <div className="cs-skel" aria-hidden="true" />
-            <div className="cs-wm">{initials(sel.name)[0]}</div>
-            {sel.img && <img className="cs-pimg" src={`/avatars/${sel.id}.png`} alt="" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onLoad={(e) => e.currentTarget.parentElement?.classList.add('imgok')} onError={hideOnErr} />}
-            {sel.img && <img className="cs-tear" src={`/avatars/${sel.id}.png`} alt="" aria-hidden="true" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
+            <div className="cs-wm">{selLocked ? '?' : initials(sel.name)[0]}</div>
+            {!selLocked && sel.img && <img className="cs-pimg" src={`/avatars/${sel.id}.png`} alt="" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onLoad={(e) => e.currentTarget.parentElement?.classList.add('imgok')} onError={hideOnErr} />}
+            {!selLocked && sel.img && <img className="cs-tear" src={`/avatars/${sel.id}.png`} alt="" aria-hidden="true" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
             <div className="cs-pvig" />
             <div className="cs-vhs" aria-hidden="true"><i className="lines" /><i className="tint" /><i className="noise" /><i className="band" /></div>
-            {!sel.img && <span className="cs-slot">Portrait — image à venir</span>}
-            <div className="cs-catchip"><span>{sel.cat}</span></div>
-            <div className="cs-stats-ov">
+            {!selLocked && !sel.img && <span className="cs-slot">Portrait — image à venir</span>}
+            <div className="cs-catchip"><span>{selLocked ? 'Verrouillé' : sel.cat}</span></div>
+            {!selLocked && <div className="cs-stats-ov">
               {(() => { const L = sel.statLabels || ['Flow', 'Punch', 'Tech', 'Aura']; return [[L[0], sel.stats.flow], [L[1], sel.stats.punch], [L[2], sel.stats.tech], [L[3], sel.stats.aura]] as [string, number][]; })().map(([lab, v]) => (
                 <div className="cs-srow" key={lab}><span className="cs-slab">{lab}</span><span className="cs-sbar">{[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= v ? 'on' : ''} />)}</span></div>
               ))}
-            </div>
+            </div>}
             <div className="cs-nameplate">
-              <div className="cs-name" style={{ fontSize: nameFs }}>{sel.name.toUpperCase()}</div>
-              <div className="cs-epi">« {EPITHETS[sel.id] || sel.power.name} »</div>
+              <div className="cs-name" style={{ fontSize: selLocked ? 'clamp(38px,12vw,64px)' : nameFs }}>{selLocked ? '???' : sel.name.toUpperCase()}</div>
+              <div className="cs-epi">{selLocked ? 'Challenger mystère' : `« ${EPITHETS[sel.id] || sel.power.name} »`}</div>
             </div>
           </div>
           <div className="cs-infobar">
-            <div className="cs-pow"><div className="k">Pouvoir signature</div><div className="nm">{sel.power.name}</div><div className="fx">{boldFx(sel.power.effect)}</div></div>
+            {selLocked
+              ? <div className="cs-pow"><div className="k">Comment le débloquer</div><div className="fx">{unlockObjective(sel.id)}</div></div>
+              : <div className="cs-pow"><div className="k">Pouvoir signature</div><div className="nm">{sel.power.name}</div><div className="fx">{boldFx(sel.power.effect)}</div></div>}
           </div>
         </div>
 
@@ -543,15 +561,17 @@ export default function Player() {
                 <div className="cs-catrow">
                   {shown.map((a) => {
                     const taken = takenIds.has(a.id);
+                    const lockedNow = !!a.locked && !unlockedChars.includes(a.id); // browse : pas encore débloqué → ???
                     return (
-                      <button type="button" key={a.id} className={`cs-cell ${avatarId === a.id ? 'sel' : ''} ${taken ? 'lock' : ''}`} disabled={taken} onClick={() => !taken && setAvatarId(a.id)}>
-                        <div className="cs-thumb" style={{ ['--c' as any]: a.color, ...(a.crop?.z ? { ['--z' as any]: a.crop.z } : {}) }}>
+                      <button type="button" key={a.id} className={`cs-cell ${avatarId === a.id ? 'sel' : ''} ${taken ? 'lock' : ''} ${lockedNow ? 'cs-mystery' : ''}`} disabled={taken} onClick={() => !taken && setAvatarId(a.id)}>
+                        <div className="cs-thumb" style={{ ['--c' as any]: lockedNow ? '#20222a' : a.color, ...(a.crop?.z ? { ['--z' as any]: a.crop.z } : {}) }}>
                           <div className="cs-tskel" aria-hidden="true" />
-                          {a.img && <img src={`/avatars/${a.id}.png`} alt="" onLoad={(e) => e.currentTarget.parentElement?.classList.add('imgok')} onError={hideOnErr} />}
+                          {!lockedNow && a.img && <img src={`/avatars/${a.id}.png`} alt="" onLoad={(e) => e.currentTarget.parentElement?.classList.add('imgok')} onError={hideOnErr} />}
+                          {lockedNow && <span className="cs-mq" aria-hidden="true">?</span>}
                           <div className="tg" />
                           {taken && <span className="cs-taken">PRIS</span>}
                         </div>
-                        <span className="cs-cn">{a.name}</span>
+                        <span className="cs-cn">{lockedNow ? '???' : a.name}</span>
                       </button>
                     );
                   })}
@@ -591,12 +611,18 @@ export default function Player() {
             <p style={{ margin: '5px 0 0' }}>Reste chaud.</p>
           </div>
           {av && (
-            <div className="glass pad" style={{ display: 'flex', alignItems: 'center', gap: 12, maxWidth: 320, width: '100%' }}>
-              <RMed id={av.id} size={46} />
-              <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
-                <div className="eyebrow" style={{ fontSize: 11 }}>Ton rappeur</div>
-                <div style={{ fontFamily: 'var(--disp)', fontSize: 19, fontWeight: 700, textTransform: 'uppercase', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{av.name}</div>
-                <div style={{ fontSize: 13, color: 'var(--ember)', marginTop: 3 }}>{av.power.name}</div>
+            <div className="glass pad waitcard" style={{ maxWidth: 340, width: '100%', ['--acc' as any]: av.color }}>
+              <div className="waitcard-top">
+                <RMed id={av.id} size={56} />
+                <div style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
+                  <div className="eyebrow" style={{ fontSize: 10 }}>Ton rappeur</div>
+                  <div className="waitcard-name">{av.name}</div>
+                  <div className="waitcard-epi">« {EPITHETS[av.id] || av.cat} »</div>
+                </div>
+              </div>
+              <div className="waitcard-power">
+                <span className="wc-plabel">Pouvoir</span>
+                <span className="wc-pname">{av.power.name}</span>
               </div>
             </div>
           )}
@@ -1061,9 +1087,9 @@ export default function Player() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginTop: 8, width: '100%', maxWidth: 380 }}>
             <span className="eyebrow" style={{ color: 'var(--fluo)' }}>On rejoue ?</span>
             {replayVote === null ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', alignItems: 'center' }}>
-                <button className="btn warm big" style={{ whiteSpace: 'nowrap' }} onClick={() => castReplayVote(true)}>Rejouer →</button>
-                <button className="btn" style={{ whiteSpace: 'nowrap' }} onClick={() => castReplayVote(false)}>Pas cette fois</button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', alignItems: 'center' }}>
+                <button className="btn warm big" style={{ width: '100%', whiteSpace: 'nowrap' }} onClick={() => castReplayVote(true)}>Rejouer →</button>
+                <button className="exit-link" onClick={() => castReplayVote(false)}>Pas cette fois</button>
               </div>
             ) : (
               <p className="feedback good" style={{ margin: 0 }}>{replayVote ? 'Tu veux rejouer' : 'Tu passes'} · <button className="exit-link" style={{ display: 'inline' }} onClick={() => castReplayVote(!replayVote)}>changer d'avis</button></p>

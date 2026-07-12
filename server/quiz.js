@@ -44,9 +44,13 @@ function shuffle(arr) {
 // persistant sur la durée de vie du salon). Quand le pool de cette difficulté est épuisé, on le recycle.
 export function pickQuiz(n, difficulty = 'normal', usedSet = null, opts = {}) {
   const d = DIFFS.includes(difficulty) ? difficulty : 'normal';
+  // 3 NIVEAUX de jeu (2026-07-11) : RobMaïzi (puriste) englobe les questions 'difficile' ET 'puriste' (miroir de
+  // la musique : RobMaïzi = mid+deep) → aucune question « difficile » orpheline maintenant que le jeu ne demande plus ce niveau.
+  const DIFF_BANDS = { facile: ['facile'], normal: ['normal'], difficile: ['difficile', 'puriste'], puriste: ['difficile', 'puriste'] };
+  const bands = DIFF_BANDS[d] || [d];
   const noVf = !!opts.noVf; // option hôte : exclure les Vrai/Faux
   const full = QUIZ.filter((q) => !noVf || q.format !== 'vf'); // banque filtrée (repli SANS réintroduire les VF exclus)
-  let pool = full.filter((q) => q.diff === d);
+  let pool = full.filter((q) => bands.includes(q.diff));
   if (pool.length < n) pool = full; // sécurité : difficulté trop maigre → toute la banque (toujours filtrée)
   const used = usedSet || new Set();
   let avail = pool.filter((q) => !used.has(q.id));

@@ -19,7 +19,7 @@ const C = 2 * Math.PI * 54;
 const HKEY = 'pl_host';
 const SILENT = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAACAgICAgICAgICAgICAgIA=';
 // Petites punchlines qui tournent sous le vinyle (TV, vues de loin) : COURTES = lues en un clin d'oeil.
-const PLAY_QUIPS = ['Balance le son', 'Ça sent le classique', "Tends bien l'oreille", 'Prod de malade', 'Devine avant le drop', 'Chuuut... ça arrive', 'Le beat parle pour lui', 'Qui reconnait ?'];
+const PLAY_QUIPS = ['Balance le son', 'Ça sent le classique', "Tends bien l'oreille", 'Prod de malade', 'Devine avant le drop', 'Chuuut... ça arrive', 'Le beat parle pour lui', 'Qui reconnaît ?', 'Monte le volume', 'Tu connais ou pas ?', 'Ferme les yeux, écoute', 'Ça part vite', 'On teste tes oreilles', 'Le classique arrive', 'Grosse prod, non ?'];
 
 // prénom du podium à taille ADAPTATIVE (façon maillot de basket) : grand si court, réduit s'il déborde
 function fitName(el: HTMLDivElement | null, maxW: number, base: number, min: number) {
@@ -102,8 +102,8 @@ export default function Host() {
   }, []);
   const [powerFeed, setPowerFeed] = useState<any[]>([]); // pouvoirs activés (qui + quoi + effet) → mis en avant sur la TV
   const powerKeyRef = useRef(0);
-  const [powerBanner, setPowerBanner] = useState<any>(null); // bannière GÉANTE d'activation d'un pouvoir (TV, vue de loin) — auto-masquée
-  const powerBannerTimer = useRef<any>(null);
+  const [powerBanners, setPowerBanners] = useState<any[]>([]); // bannières GÉANTES d'activation (TV, vues de loin) — EMPILÉES si plusieurs joueurs activent en même temps (jusqu'à 8), chacune auto-masquée
+  const [quip, setQuip] = useState(() => PLAY_QUIPS[Math.floor(Math.random() * PLAY_QUIPS.length)]); // punchline sous le vinyle, tirée AU SORT et renouvelée à chaque manche (Blind Test)
   const [round, setRound] = useState<any>({ index: 0, total: 0, endsAt: 0, durationMs: 25000, mode: 'multi', difficulty: '' });
   const [answered, setAnswered] = useState<string[]>([]);
   const [buzzWinner, setBuzzWinner] = useState<{ name: string; avatar?: string | null; endsAt?: number; answerMs?: number } | null>(null);
@@ -275,6 +275,7 @@ export default function Host() {
       if (d.preload) { try { const pre = preloadRef.current || (preloadRef.current = new Audio()); pre.muted = true; pre.preload = 'auto'; if (pre.getAttribute('src') !== d.preload) { pre.src = d.preload; pre.load(); } } catch {} }
     });
     socket.on('round:host', (d: any) => { sfxStop('scratch'); if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setReveal(null); setAnswered([]); setBuzzWinner(null); buzzActiveRef.current = false; setRound(d); setPhase('playing');
+      if (d.mode === 'multi') setQuip((q) => { if (PLAY_QUIPS.length < 2) return q; let n = q; while (n === q) n = PLAY_QUIPS[Math.floor(Math.random() * PLAY_QUIPS.length)]; return n; }); // nouvelle punchline aléatoire par manche
       if (d.mode === 'quiz') { previewRef.current = { url: '', clipMs: 30000, startAt: 0 }; stopAllMusicExcept('lobby'); } // QUIZ = pas d'extrait ; on garde l'instru lobby (Alpha Wann) en fond, on coupe menu/Deezer/Spotify de façon fiable
       else playRound(d); });
     // Mode Survivor (contre-la-montre) : le son s'enchaîne automatiquement à chaque nouveau morceau
@@ -291,8 +292,11 @@ export default function Host() {
       // BUZZER : le son avait été coupé au buzz → on le REMET pour la révélation (titre + artiste). En Blind Test wantAudioRef reste true → no-op.
       if (!wantAudioRef.current && previewRef.current.url) { wantAudioRef.current = true; if (usingSpotifyRef.current) { try { spotifyTogglePlay(); } catch {} } else playPreview(previewRef.current.url, previewRef.current.startAt, 0); }
     });
-    socket.on('game:final', (d: any) => { stopAllMusic(); previewRef.current = { url: '', startAt: 0 }; setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setPendingUnlock(null); setShowReveal(false); setPhase('final'); }); // musique de podium retirée ; le déblocage se joue APRÈS les trophées ; un challenger déjà débloqué ne réapparaît plus
-    socket.on('power:used', (d: any) => { const key = powerKeyRef.current++; setPowerFeed((f) => [...f.slice(-4), { ...d, key }]); sfx('scratch'); setPowerBanner({ ...d, key }); clearTimeout(powerBannerTimer.current); powerBannerTimer.current = setTimeout(() => setPowerBanner((b: any) => (b && b.key === key ? null : b)), 4600); }); // + bannière géante 4,6 s (déborde volontairement sur le décompte → entre dans la manche)
+    socket.on('game:final', (d: any) => { stopAllMusic(); previewRef.current = { url: '', startAt: 0 }; setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setShowReveal(false);
+      const unlock = computeUnlock(d, unlockedRef.current); // 1er challenger débloqué cette partie (par cet écran) → arrivée épique APRÈS les trophées
+      if (unlock) { unlockedRef.current.add(unlock); try { localStorage.setItem('pl_unlocked', JSON.stringify([...unlockedRef.current])); } catch {} setPendingUnlock(unlock); } else setPendingUnlock(null);
+      setPhase('final'); }); // musique de podium retirée ; un challenger déjà débloqué ne réapparaît plus
+    socket.on('power:used', (d: any) => { const key = powerKeyRef.current++; setPowerFeed((f) => [...f.slice(-4), { ...d, key }]); sfx('scratch'); setPowerBanners((b) => [...b, { ...d, key }]); setTimeout(() => setPowerBanners((b) => b.filter((x) => x.key !== key)), 3400); }); // bannières géantes EMPILÉES (render = 2 dernières visibles) : activations simultanées lisibles en pile, chacune 3,4 s ; le pwfeed liste TOUS les activateurs
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('reaction', (d: any) => {
       const key = reactKeyRef.current++;
@@ -506,7 +510,7 @@ export default function Host() {
     sfx('launch');
     socket.emit('host:start', { rounds: settings.rounds, difficulty: settings.difficulty, mode: settings.mode, mj: settings.mj, rebalance: settings.rebalance }, (res: any) => res?.error && setError(res.error));
   }
-  function startWizard(s: { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string; mjId?: string; era?: string; themes?: string[]; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean }) {
+  function startWizard(s: { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string; mjId?: string; era?: string | string[]; themes?: string[]; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean }) {
     lastWizRef.current = s; // mémorise pour un éventuel « Rejouer » (Survivor notamment)
     const a = audioRef.current;
     if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); audioReadyRef.current = true; } // ce clic « Lancer » débloque l'autoplay pour toute la partie
@@ -623,17 +627,21 @@ export default function Host() {
         })}
       </div>
     )}
-    {powerBanner && (
-      <div className="powerblast" key={powerBanner.key} style={{ ['--pc' as any]: catColor(powerBanner.avatar) }} aria-hidden="true">
-        <div className="pb-inner">
-          <span className="pb-shine" />
-          <div className="pb-av"><Med avatarId={powerBanner.avatar} size={124} /></div>
-          <div className="pb-txt">
-            <div className="pb-line"><b className="pb-who">{powerBanner.name}</b> ACTIVE</div>
-            <div className="pb-power">{powerBanner.power}</div>
-            {powerBanner.effect && <div className="pb-eff">{powerBanner.effect}</div>}
+    {powerBanners.length > 0 && (
+      <div className="powerblasts" aria-hidden="true">
+        {powerBanners.slice(-2).map((pb) => (
+          <div className="powerblast" key={pb.key} style={{ ['--pc' as any]: catColor(pb.avatar) }}>
+            <div className="pb-inner">
+              <span className="pb-shine" />
+              <div className="pb-av"><Med avatarId={pb.avatar} size={124} /></div>
+              <div className="pb-txt">
+                <div className="pb-line"><b className="pb-who">{pb.name}</b> ACTIVE</div>
+                <div className="pb-power">{pb.power}</div>
+                {pb.effect && <div className="pb-eff">{pb.effect}</div>}
+              </div>
+            </div>
           </div>
-        </div>
+        ))}
       </div>
     )}
     {audioLocked && (
@@ -651,13 +659,13 @@ export default function Host() {
           {['prep', 'countdown', 'playing', 'reveal'].includes(phase) && (<>
             <span className="gmeta">
               {round.mode === 'rush'
-                ? <span className="gmeta-round"><span className="gl">Survivor</span><b>{round.trackNo || 1}<i> morceau</i></b></span>
+                ? <span className="gmeta-round"><span className="gl">Morceau</span><b>{round.trackNo || 1}</b></span>
                 : <span className="gmeta-round"><span className="gl">Manche</span><b>{round.index + 1}<i>/{round.total}</i></b></span>}
               {round.mode !== 'quiz' && <span className="gmeta-chip">{round.difficulty}</span>}
               <span className="gmeta-chip">{players.length} j.{waiting > 0 ? ` · ${waiting} att.` : ''}</span>
             </span>
             <span className="salontag"><span className="lbl">Salon</span><b className="cd">{code}</b></span>
-            <button className="btn" style={{ padding: '9px 15px', fontSize: 14 }} onClick={() => socket.emit('host:restart')}>← Salon</button>
+            <button className="btn" style={{ padding: '9px 15px', fontSize: 14, gap: 8 }} onClick={() => socket.emit('host:restart')}><span aria-hidden="true">←</span><span>Salon</span></button>
           </>)}
         </span>
       </div>
@@ -837,7 +845,7 @@ export default function Host() {
                 </div>
               </div>
               <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
-              <span className="playmeta playquip">{PLAY_QUIPS[(round.index || 0) % PLAY_QUIPS.length]}</span>
+              <span className="playmeta playquip">{quip}</span>
               {answered.length > 0 && <div className="answered">{answered.map((n) => <span className="abadge" key={n}>{n}</span>)}</div>}
             </>
           )}
@@ -909,13 +917,13 @@ export default function Host() {
               </div>
             )
           ) : (
-          <div className="board tvbig" style={{ maxWidth: 780 }}>
+          <div className={`board tvbig${reveal.scores.filter((p: any) => !p.isMJ).length > 6 ? ' dense' : ''}`} style={{ maxWidth: 780 }}>
             {reveal.scores.filter((p: any) => !p.isMJ).map((p: any, i: number) => {
               const r = reveal.results.find((x: any) => x.id === p.id);
               const d = p.rankDelta || 0;
               return (
                 <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}${rankAnim ? (d > 0 ? ' climb' : d < 0 ? ' drop' : '') : ''}`} key={p.id} style={{ ['--d' as any]: Math.min(Math.abs(d) || 1, 4), animationDelay: `${i * 0.09}s` }}>
-                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={46} />{p.name}{r && r.power && <span className="powpill" style={{ ['--pc' as any]: catColor(p.avatar) }} title={r.power.note}>⚡ {r.power.name}</span>}</span>
+                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={46} />{p.name}{r && r.power && <span className="powpill" style={{ ['--pc' as any]: catColor(p.avatar) }} title={r.power.note}>⚡ <span className="pp-l">{r.power.name}{r.power.note ? ` · ${r.power.note}` : ''}</span></span>}</span>
                   <span className="row" style={{ gap: 12 }}>
                     {d !== 0 && (
                       <span style={{ color: d > 0 ? 'var(--green)' : 'var(--bad)', display: 'inline-flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 12 }}>

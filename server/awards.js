@@ -182,6 +182,22 @@ export const AWARDS = [
     if (!s.length || s[0].score <= 0) return null;
     return { playerId: s[0].id, desc: `Champion de la partie. La ceinture est à lui.` };
   } },
+  { id: 'alancienne', title: 'À l\'Ancienne', icon: 'vinyl', weight: 9, pick(list, c) {
+    // n'a reconnu QUE des sons d'avant 2010 — et il y avait bien du récent à trouver aussi (sinon c'est gratuit)
+    if (c.mode === 'quiz' || !c.hadModern) return null;
+    const cands = list.filter((p) => p.datedFinds >= 4 && p.oldFinds === p.datedFinds);
+    if (!cands.length) return null;
+    const p = rand(cands);
+    return { playerId: p.id, desc: `Que des classiques d'avant 2010 — ${p.name} s'est arrêté à l'époque du CD. Le vrai goût.` };
+  } },
+  { id: 'releve', title: 'La Relève', icon: 'sprout', weight: 8, pick(list, c) {
+    // le pendant moderne : n'a reconnu QUE du 2020+ — et il y avait bien du vieux à trouver aussi
+    if (c.mode === 'quiz' || !c.hadOld) return null;
+    const cands = list.filter((p) => p.datedFinds >= 4 && p.newFinds === p.datedFinds);
+    if (!cands.length) return null;
+    const p = rand(cands);
+    return { playerId: p.id, desc: `Que du 2020 et après — ${p.name} est né dans l'auto-tune. Les anciens ? Connaît pas.` };
+  } },
 ];
 
 // Décerne jusqu'à `max` trophées. On évalue tous les détecteurs, on trie par poids (+ un peu d'aléa
@@ -196,8 +212,9 @@ export function computeAwards(active, ctx, max = 3) {
     powers: p.stat?.powers || 0, denial: !!p.stat?.denial, gamble: !!p.stat?.gamble,
     solo: p.stat?.solo || 0, firstHalf: p.stat?.firstHalf || 0, secondHalf: p.stat?.secondHalf || 0,
     worstRank: p.stat?.worstRank || (i + 1), lowRounds: p.stat?.lowRounds || 0, denialGain: p.stat?.denialGain || 0,
+    datedFinds: p.stat?.datedFinds || 0, oldFinds: p.stat?.oldFinds || 0, newFinds: p.stat?.newFinds || 0,
   }));
-  const c = { N: list.length, total: ctx.total || 0, mode: ctx.mode, mj: !!ctx.mj, fmt: ctx.fmt || ((n) => String(Math.round(n || 0))) };
+  const c = { N: list.length, total: ctx.total || 0, mode: ctx.mode, mj: !!ctx.mj, hadModern: !!ctx.hadModern, hadOld: !!ctx.hadOld, fmt: ctx.fmt || ((n) => String(Math.round(n || 0))) };
   const hits = [];
   for (const a of AWARDS) {
     let res = null;
@@ -208,23 +225,34 @@ export function computeAwards(active, ctx, max = 3) {
   // Un poids fort reste favorisé mais ne gagne plus systématiquement — un w=2 bat un w=10 ~17 % du temps.
   // De plus, on DÉCOTE (×0.35) les trophées décernés à la partie PRÉCÉDENTE (ctx.recentIds) : l'assortiment
   // tourne d'une partie à l'autre → on ne retombe pas toujours sur les mêmes, on sent qu'on peut en débloquer d'autres.
-  const recent = new Set(ctx.recentIds || []);
-  for (const h of hits) { const w = recent.has(h.id) ? h.weight * 0.35 : h.weight; h.k = Math.pow(Math.random(), 1 / Math.max(0.5, w)); }
+  // VARIÉTÉ SUR LA SÉRIE. ctx.recentGames = ids des dernières parties (la + récente en tête). Deux règles :
+  //  (1) ROTATION DURE : on ne re-décerne PAS un trophée vu dans les RECENT_WIN dernières parties tant qu'il reste
+  //      d'autres trophées « frais » déclenchés pour remplir → l'assortiment tourne vraiment (fini « toujours les mêmes »).
+  //  (2) COUVERTURE : un trophée JAMAIS décerné de la série est boosté (×2.6) → on finit par voir les rares.
+  //  Fallback : s'il n'y a pas assez de frais, on complète avec les récents (mieux vaut 3 trophées qu'un seul).
+  const log = ctx.recentGames || [];
+  const counts = ctx.counts || {};
+  const RECENT_WIN = 3;
+  const agoOf = (id) => { for (let i = 0; i < log.length; i++) if (log[i] && log[i].includes(id)) return i + 1; return Infinity; };
+  const fresh = (h) => agoOf(h.id) > RECENT_WIN;
+  // tirage pondéré (Efraimidis-Spirakis) : poids de base × boost de couverture pour le jamais-vu
+  for (const h of hits) { const boost = (counts[h.id] || 0) === 0 ? 2.6 : 1; h.k = Math.pow(Math.random(), 1 / Math.max(0.4, h.weight * boost)); }
   hits.sort((x, y) => y.k - x.k);
   const out = [], usedAwards = new Set(), usedPlayers = new Set();
-  // 1re passe : un trophée par joueur max (on varie les têtes)
-  for (const h of hits) {
-    if (out.length >= max) break;
-    if (usedAwards.has(h.id) || usedPlayers.has(h.playerId)) continue;
-    out.push(h); usedAwards.add(h.id); usedPlayers.add(h.playerId);
-  }
-  // 2e passe : s'il reste des places, on autorise un 2e trophée pour un même joueur
-  if (out.length < max) {
+  // passes successives : FRAIS d'abord (1 trophée/joueur, puis 2e/joueur), puis fallback sur les récents pour remplir
+  const passes = [
+    (h) => fresh(h) && !usedPlayers.has(h.playerId),
+    (h) => fresh(h),
+    (h) => !usedPlayers.has(h.playerId),
+    () => true,
+  ];
+  for (const ok of passes) {
     for (const h of hits) {
       if (out.length >= max) break;
-      if (usedAwards.has(h.id)) continue;
-      out.push(h); usedAwards.add(h.id);
+      if (usedAwards.has(h.id) || !ok(h)) continue;
+      out.push(h); usedAwards.add(h.id); usedPlayers.add(h.playerId);
     }
+    if (out.length >= max) break;
   }
   return out.map(({ id, title, icon, playerId, desc }) => ({ id, title, icon, playerId, desc }));
 }

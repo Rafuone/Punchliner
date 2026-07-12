@@ -54,6 +54,8 @@ export const POWERS = {
   junglejack: { name: 'Flow Dévastateur',         type: 'firstblood', base: 16000, first: 32000 }, // flow rapide et dévastateur
   lafeve:     { name: 'Hors du Temps',            type: 'freeze',   self: 11000 }, // new wave expérimentale, hors du temps
   okis:       { name: 'La Crème',                 type: 'sustain',  amount: 8500, rounds: 4 }, // artisanal : petit revenu garanti sur la durée
+  // ===== Alternative — les libraires-diggers complétistes de Tsukimi (Robin & Kevin) =====
+  robinkevin: { name: "L'Intégrale",              type: 'combo',    base: 1.3, per: 0.2, cap: 2.05 }, // complétistes : une fois lancés ils vont AU BOUT → ×mult qui grossit avec la série (récompense les longues séries)
   // ===== Déblocables (calibrer avec sim-balance.mjs comme le reste) =====
   freezecorleone: { name: 'Freeze Raël',      type: 'wager',    mult: 1.8, penalty: 20000 }, // propos problématiques : ×2 ou cancel
   lino:           { name: 'Requiem',          type: 'sabotage', targets: 1, grab: 6000 },     // muselle le n°1 ET lui rafle une part (le requiem)
