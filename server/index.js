@@ -1706,6 +1706,14 @@ io.on('connection', (socket) => {
 /* ------------------------------------------------------------------ */
 /* HTTP                                                                */
 /* ------------------------------------------------------------------ */
+// CORS pour /api (dev local) : permet de POSTER depuis une page externe (ex. open.spotify.com → import direct de playlist publique).
+app.use('/api', (req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.get('/api/health', (_req, res) => res.json({ ok: true, pool: POOL.length, playable: POOL.length - DEAD.size, rooms: rooms.size, previews: previewCache.size, warmup: { ...warm, pct: warm.total ? Math.round((warm.done / warm.total) * 100) : 100 } }));
 // Extraits servis PAR NOUS (mp3 en cache) → URL stables, jamais expirées. Range-request pour le seek.
 app.get('/api/preview/:id', async (req, res) => {
@@ -1743,23 +1751,26 @@ app.get('/api/dev/room', (_req, res) => {
   res.json({ code: room?.code || null });
 });
 app.get('/api/pool', (_req, res) => res.json(POOL.map((t) => ({ id: t.id, artist: t.artist, title: t.title, rank: t.rank })).sort((a, b) => b.rank - a.rank)));
-// ── Outil de curation (base-musicale.html) : pool jouable enrichi + bande + statut de label, EN DIRECT
-// (plus de blob figé dans le HTML). `k` = clé serveur (dnorm) → le tool la renvoie telle quelle à /apply, match garanti.
+// ── Liste de curation ACTIVE (base-musicale) : servie depuis canon-active.json (la LISTE à affiner), jointe au
+// pool résolu (audio/pochette/année) là où c'est dispo. Les titres pas encore résolus s'affichent SANS extrait
+// (l'audio se remplit au fur et à mesure de la résolution Deezer). La bande = label serveur (source de vérité) sinon
+// la bande de la liste. `k` = clé serveur (dnorm) → base-musicale la renvoie telle quelle à /apply, match garanti.
+let _canonActive = null;
+function canonActive() { if (_canonActive) return _canonActive; try { _canonActive = JSON.parse(fs.readFileSync(path.join(__dirname, 'canon-active.json'), 'utf8')); } catch { _canonActive = []; } return _canonActive; }
+let _poolByKey = null, _pbkLen = -1;
+function poolByKey() { if (_poolByKey && _pbkLen === POOL.length) return _poolByKey; const m = new Map(); for (const t of POOL) { const k = dkey(t); if (!m.has(k)) m.set(k, t); } _poolByKey = m; _pbkLen = POOL.length; return m; }
 app.get('/api/curation', (_req, res) => {
-  const { band } = computeBands();
+  const list = canonActive(), pk = poolByKey();
   const seen = new Set(), rows = [];
-  for (const t of livePool()) {
-    const k = dkey(t); if (seen.has(k)) continue; seen.add(k); // dédup ré-éditions (comme tierSlice)
-    rows.push({ id: t.id, k, a: t.artist, t: t.title, b: band.get(t) || 'mid', labeled: !!DIFF_LABELS[k], c: t.cover || '', y: t.year || 0, g: t.tags || [], rank: t.rank || 0, preview: '/api/preview/' + t.id });
+  for (const c of list) {
+    if (seen.has(c.k)) continue; seen.add(c.k);
+    const t = pk.get(c.k);
+    const b = DIFF_EXCLUDE.has(c.k) ? 'exc' : (DIFF_LABELS[c.k] || c.band || 'mid');
+    rows.push({ id: t ? t.id : null, k: c.k, a: c.a, t: c.t, b, labeled: !!DIFF_LABELS[c.k], c: t ? (t.cover || '') : '', y: t ? (t.year || 0) : 0, dec: c.dec || 'x', g: t ? (t.tags || []) : [], f: t ? (t.feats2 || []) : [], sp: c.sp || '', rank: t ? (t.rank || 0) : 0, preview: t ? '/api/preview/' + t.id : '' });
   }
-  const exSeen = new Set(), excluded = [];
-  for (const t of POOL) { // colonne « Hors pool » = exclus PAR TITRE (réversibles) ; les artistes bannis restent hors-liste
-    const k = dkey(t); if (!DIFF_EXCLUDE.has(k) || exSeen.has(k)) continue; exSeen.add(k);
-    excluded.push({ id: t.id, k, a: t.artist, t: t.title, c: t.cover || '', y: t.year || 0, g: t.tags || [], rank: t.rank || 0, preview: '/api/preview/' + t.id });
-  }
-  const counts = { top: 0, high: 0, mid: 0, deep: 0, unlabeled: 0 };
-  for (const r of rows) { counts[r.b] = (counts[r.b] || 0) + 1; if (!r.labeled) counts.unlabeled++; }
-  res.json({ counts: { ...counts, playable: rows.length, excluded: excluded.length }, rows, excluded });
+  const counts = { top: 0, high: 0, mid: 0, deep: 0, exc: 0, noaudio: 0 };
+  for (const r of rows) { counts[r.b] = (counts[r.b] || 0) + 1; if (!r.preview && !r.sp) counts.noaudio++; }
+  res.json({ counts: { ...counts, playable: rows.length, excluded: counts.exc }, rows, excluded: [] });
 });
 // ── Applique les reclassements du tool DIRECTEMENT sur disque + hot-reload (plus besoin de redémarrer le serveur).
 // body: { labels:{clé→'top'|'high'|'mid'|'deep'}, exclude:[clés], unexclude:[clés] }. Backup .bak avant écriture.
@@ -1777,6 +1788,106 @@ app.post('/api/curation/apply', express.json({ limit: '4mb' }), (req, res) => {
     _bandCache = null; _bandLen = -1; // invalide le cache de bandes → le jeu reflète les changements SANS redémarrage
     res.json({ ok: true, labels: nL, excluded: exclude.length, unexcluded: unexclude.length, totalLabels: Object.keys(DIFF_LABELS).length, totalExcluded: DIFF_EXCLUDE.size });
   } catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
+});
+// ── Import de playlists Spotify (depuis base-musicale, qui lit le token de la session hôte) : ajoute/reclasse les
+// titres dans la liste active + les labels, par catégorie. { tracks:[{artist,title,band('top'|'high'|'mid'),year?}] }
+// Fusionne des titres dans la liste active + les labels (partagé par /import et /drop-spotify). Backup .bak + hot-reload.
+function mergeCanonTracks(tracks) {
+  const VALID = new Set(['top', 'high', 'mid']);
+  const list = canonActive();
+  const byKey = new Map(list.map((c) => [c.k, c]));
+  const decY = (y) => !y ? 'x' : y < 2000 ? '90' : y < 2010 ? '00' : y < 2020 ? '10' : '20';
+  let added = 0, updated = 0;
+  for (const t of tracks) {
+    if (!t || !t.artist || !t.title || !VALID.has(t.band)) continue;
+    const k = dkey({ artist: t.artist, title: t.title });
+    if (!k || k === '|') continue;
+    if (byKey.has(k)) { const c = byKey.get(k); if (DIFF_LABELS[k] !== t.band) updated++; c.band = t.band; if (t.year) c.dec = decY(t.year); if (t.spId) c.sp = t.spId; }
+    else { const c = { k, a: t.artist, t: t.title, dec: decY(t.year || 0), band: t.band }; if (t.spId) c.sp = t.spId; list.push(c); byKey.set(k, c); added++; }
+    DIFF_LABELS[k] = t.band;
+  }
+  const lp = path.join(__dirname, 'canon-active.json'), dp = path.join(__dirname, 'difficulty-labels.json');
+  try { fs.copyFileSync(lp, lp + '.bak'); fs.copyFileSync(dp, dp + '.bak'); } catch { /* best-effort */ }
+  fs.writeFileSync(lp, JSON.stringify(list));
+  fs.writeFileSync(dp, JSON.stringify(DIFF_LABELS));
+  _canonActive = list; _bandCache = null; _bandLen = -1;
+  return { added, updated, total: list.length };
+}
+app.post('/api/curation/import', express.json({ limit: '4mb' }), (req, res) => {
+  try { res.json({ ok: true, ...mergeCanonTracks((req.body && req.body.tracks) || []) }); }
+  catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
+});
+// Glisser-déposer d'un morceau depuis Spotify : on ne connaît que l'id → on résout titre+artiste via la PAGE EMBED
+// publique (open.spotify.com/embed/track/{id} → champs "name"/"subtitle"), SANS token → plus de 403.
+app.post('/api/curation/drop-spotify', express.json({ limit: '32kb' }), async (req, res) => {
+  try {
+    const ids = ((req.body && req.body.ids) || []).slice(0, 30);
+    const band = req.body && req.body.band;
+    if (!['top', 'high', 'mid'].includes(band)) return res.status(400).json({ error: 'catégorie invalide' });
+    const unesc = (s) => { try { return JSON.parse('"' + s + '"'); } catch { return s; } };
+    const tracks = [];
+    for (const id of ids) {
+      if (!/^[a-zA-Z0-9]{22}$/.test(id)) continue;
+      try {
+        const r = await fetch('https://open.spotify.com/embed/track/' + id, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        if (!r.ok) continue;
+        const html = await r.text();
+        const nm = html.match(/"name":"((?:[^"\\]|\\.)*)"/);
+        const title = nm ? unesc(nm[1]) : '';
+        const artArr = html.match(/"artists":\[(.*?)\]/);   // artiste(s) réel(s) — pas "subtitle" (= une classe CSS)
+        const arts = [];
+        if (artArr) { const re = /"name":"((?:[^"\\]|\\.)*)"/g; let m; while ((m = re.exec(artArr[1]))) arts.push(unesc(m[1])); }
+        const artist = arts.length ? (arts[0] + (arts.length > 1 ? ' feat. ' + arts.slice(1).join(', ') : '')) : '';
+        if (title && artist) tracks.push({ artist, title, band, spId: id });
+      } catch { /* skip */ }
+    }
+    if (!tracks.length) return res.json({ ok: false, error: 'titre Spotify illisible' });
+    res.json({ ok: true, resolved: tracks.map((t) => t.artist + ' - ' + t.title), ...mergeCanonTracks(tracks) });
+  } catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
+});
+// Résout une playlist via sa PAGE EMBED (jusqu'à 100 titres, sans token) → {artist,title,band,spId}. subtitle = artiste(s), uri = id.
+async function playlistEmbedTracks(id, band) {
+  const r = await fetch('https://open.spotify.com/embed/playlist/' + id, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!r.ok) return [];
+  const html = await r.text();
+  const nd = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]+?)<\/script>/);
+  if (!nd) return [];
+  let items = [];
+  try { items = JSON.parse(nd[1])?.props?.pageProps?.state?.data?.entity?.trackList || []; } catch { return []; }
+  const out = [];
+  for (const it of items) {
+    const title = (it && it.title) || '', subtitle = (it && it.subtitle) || '';
+    if (!title || !subtitle) continue;
+    const m = ((it && it.uri) || '').match(/spotify:track:([a-zA-Z0-9]{22})/);
+    const parts = subtitle.split(',').map((s) => s.trim()).filter(Boolean);
+    const artist = parts.length > 1 ? parts[0] + ' feat. ' + parts.slice(1).join(', ') : subtitle;
+    out.push({ artist, title, band, spId: m ? m[1] : '' });
+  }
+  return out;
+}
+// Synchronise les playlists de server/spotify-playlists.json via leur embed (≤100 titres chacune, frais, sans token).
+app.post('/api/curation/sync-playlists', express.json({ limit: '8kb' }), async (_req, res) => {
+  try {
+    let pls = [];
+    try { pls = JSON.parse(fs.readFileSync(path.join(__dirname, 'spotify-playlists.json'), 'utf8')); } catch { return res.status(400).json({ error: 'spotify-playlists.json introuvable' }); }
+    const report = []; let all = [];
+    for (const p of pls) {
+      if (!['top', 'high', 'mid'].includes(p.band) || !p.id) continue;
+      const tr = await playlistEmbedTracks(p.id, p.band);
+      report.push({ name: p.name, band: p.band, lus: tr.length });
+      all = all.concat(tr);
+    }
+    res.json({ ok: true, report, ...mergeCanonTracks(all) });
+  } catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
+});
+// ── Boîte à PROMPT de base-musicale (comme le retour du showroom) : append un retour global dans un fichier lisible
+// (server/base-musicale-notes.md) → je le relis pour itérer sur la liste.
+app.post('/api/curation/note', express.json({ limit: '64kb' }), (req, res) => {
+  const note = String((req.body && req.body.note) || '').trim();
+  if (!note) return res.json({ ok: false, error: 'vide' });
+  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  try { fs.appendFileSync(path.join(__dirname, 'base-musicale-notes.md'), `\n## Retour ${stamp}\n${note}\n`); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
 });
 // Morceau de DÉBLOCAGE d'un challenger : résolu à la volée via Deezer (title+artist) → extrait 30 s proxifié.
 // L'arrivée épique (ChallengerReveal) lit /api/unlock-preview?... et joue l'URL → plus besoin de mp3 locaux.
