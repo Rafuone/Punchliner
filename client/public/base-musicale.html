@@ -2,11 +2,14 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PUNCHLINR — Base musicale · Curation</title>
 <style>
+  @font-face{font-family:'Satoshi';src:url('/fonts/satoshi-400.woff2') format('woff2');font-weight:400;font-display:swap}
+  @font-face{font-family:'Satoshi';src:url('/fonts/satoshi-500.woff2') format('woff2');font-weight:500;font-display:swap}
+  @font-face{font-family:'Satoshi';src:url('/fonts/satoshi-700.woff2') format('woff2');font-weight:700;font-display:swap}
   :root{ --bg:#0e0f11; --card:#16181c; --card2:#1b1e23; --line:#2a2e35; --txt:#f1f2ef; --muted:#9aa0a6;
     --top:#a6ff00; --high:#49a9ff; --mid:#ff9a3e; --deep:#ff5db1; --exc:#7a828c; }
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 'Satoshi',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden}
   header{flex:0 0 auto;background:linear-gradient(180deg,#0e0f11 70%,rgba(14,15,17,.92));border-bottom:1px solid var(--line);padding:12px 16px 10px}
   h1{margin:0;font-size:18px;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
   h1 b{color:var(--top)}
@@ -73,6 +76,12 @@
   #spbar #spclose{flex:0 0 auto;background:#1a1c22;border:1px solid var(--line);color:#9aa;border-radius:6px;width:30px;height:30px;cursor:pointer}
   .toast.on{opacity:1}
   .toast.err{background:#20120f;border-color:#e66;color:#f88}
+  .toast{max-width:min(560px,92vw)}
+  .toast.stick{pointer-events:auto;cursor:pointer;padding-right:34px}
+  .toast.stick::after{content:'✕';position:absolute;right:12px;top:50%;transform:translateY(-50%);opacity:.55;font-size:12px}
+  .btn.busy{opacity:.75;cursor:progress}
+  .btn.busy::after{content:'';display:inline-block;width:10px;height:10px;margin-left:7px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-1px;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
   #ovl{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;place-items:center;z-index:99;padding:24px}
   #ovl.on{display:grid}
   #ovl .box{background:#14161b;border:1px solid #2a2e35;border-radius:10px;padding:16px;max-width:760px;width:100%}
@@ -90,54 +99,87 @@
   <div class="bar">
     <input type="search" id="q" placeholder="Rechercher artiste / titre…">
     <div class="chips" id="dec"></div>
-    <select id="scene"><option value="">Toutes scènes</option></select>
-    <span class="tgl" id="tUnl">Sans audio <b id="tUnlN" style="color:var(--mid)"></b></span>
-    <span class="tgl" id="tEd">Modifiés <b id="tEdN" style="color:var(--top)"></b></span>
-    <span class="tgl on" id="tAuto">▶ auto-suivant</span>
+    <span class="tgl" id="tUnl" title="N'afficher que les titres sans extrait jouable (à résoudre)">Sans audio <b id="tUnlN" style="color:var(--mid)"></b></span>
+    <span class="tgl" id="tEd" title="N'afficher que TES reclassements pas encore envoyés au serveur (bouton ⚡ Appliquer)">Modifiés <b id="tEdN" style="color:var(--top)"></b></span>
+    <span style="font-size:11px;color:#7a7a7a;line-height:1.3">⌨ 1·2·3 classer · Espace = écouter · Ctrl+Z annuler · clic carte = sélectionner</span>
     <div class="act">
-      <button class="btn" id="spimp" title="Importer tes playlists Spotify (grand public / connaisseurs / Rob MyZ) dans les bonnes catégories">🎧 Importer Spotify</button>
-      <button class="btn" id="spfill" title="Chercher sur Spotify l'audio des titres muets (nécessite Spotify connecté dans le jeu)">🔊 Remplir audio</button>
-      <button class="btn" id="prompt" title="Un retour global sur la liste, pour que Claude itère">✍️ Prompt</button>
-      <button class="btn" id="reload">↻ Recharger</button>
-      <button class="btn go" id="exp">💾 Exporter</button>
+      <button class="btn" id="spfill" title="Cherche sur Spotify (ton compte) l'audio + la cover des titres muets. À lancer sur http://127.0.0.1:5173">🔊 Remplir l'audio manquant</button>
       <button class="btn apply" id="apply">⚡ Appliquer au serveur</button>
     </div>
   </div>
 </header>
 <div class="board" id="board">
-  <section class="col" data-c="gp"><div class="colh"><span class="dot" style="background:var(--top)"></span>Grand public<span class="n" id="n-gp"></span></div><div class="colb" id="b-gp"></div></section>
+  <section class="col" data-c="gp"><div class="colh"><span class="dot" style="background:var(--top)"></span>Mainstream<span class="n" id="n-gp"></span></div><div class="colb" id="b-gp"></div></section>
   <section class="col" data-c="co"><div class="colh"><span class="dot" style="background:var(--high)"></span>Connaisseur<span class="n" id="n-co"></span></div><div class="colb" id="b-co"></div></section>
-  <section class="col" data-c="rm"><div class="colh"><span class="dot" style="background:var(--mid)"></span>RobMaïzi<span class="n" id="n-rm"></span></div><div class="colb" id="b-rm"></div></section>
+  <section class="col" data-c="rm"><div class="colh"><span class="dot" style="background:var(--mid)"></span>Puriste<span class="n" id="n-rm"></span></div><div class="colb" id="b-rm"></div></section>
   <section class="col" data-c="ex"><div class="colh"><span class="dot" style="background:var(--exc)"></span>Hors pool<span class="n" id="n-ex"></span></div><div class="colb" id="b-ex"></div></section>
 </div>
 <audio id="au"></audio>
 <div id="spbar"><div id="sp-embed"></div><button id="spclose" title="Fermer le lecteur Spotify">✕</button></div>
+<div id="apool"><div class="ah"><b id="apool-t">Top Spotify</b><button id="apool-x" title="Fermer">✕</button></div><div id="apool-b"></div></div>
+<style>
+#apool{position:fixed;top:0;right:0;width:360px;max-width:92vw;height:100%;background:#141414;border-left:1px solid #2a2a2a;box-shadow:-8px 0 30px #000a;transform:translateX(102%);transition:transform .18s;z-index:60;display:flex;flex-direction:column}
+#apool.on{transform:none}
+#apool .ah{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #2a2a2a;font-size:15px}
+#apool .ah button{margin-left:auto;background:none;border:0;color:#ccc;font-size:16px;cursor:pointer;line-height:1}
+#apool-b{overflow:auto;padding:4px 6px}
+.ap-row{display:flex;align-items:center;gap:8px;padding:7px 6px}
+.ap-row+.ap-row{border-top:1px solid #232323}
+.ap-row.has{opacity:.55}
+.ap-meta{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+.ap-n{color:#666;font-size:12px;width:16px;text-align:right;flex:none}
+.ap-t{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ap-a{font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ap-in{font-size:11px;color:#7ec87e;white-space:nowrap;flex:none}
+.ap-add{display:flex;gap:3px;flex:none}
+.ap-add button{font-size:10px;padding:3px 5px;background:#222;border:1px solid #3a3a3a;color:#ddd;border-radius:5px;cursor:pointer}
+.ap-add button:hover{background:#2e2e2e}
+.ap-msg{padding:16px;color:#999;font-size:13px;line-height:1.5}
+.rk{font-size:10px;font-weight:800;border-radius:5px;padding:1px 5px;margin-right:5px;flex:none}
+.rk.rtop{color:#0b0b0b;background:#ffcf5a}
+.rk.rmid{color:#ffcf5a;background:#2a2410;border:1px solid #5a4a1e}
+.rk.rlow{color:#9a9a9a;background:#1e1e1e;border:1px solid #333}
+.card.sel{outline:2px solid var(--top);outline-offset:-2px;background:#1b2410}
+#selbar{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(160%);transition:transform .18s;display:flex;align-items:center;gap:8px;background:#12140e;border:1px solid var(--top);padding:9px 12px;border-radius:10px;z-index:55;box-shadow:0 8px 30px #000a;font-size:13px;flex-wrap:wrap;max-width:94vw}
+#selbar.on{transform:translateX(-50%)}
+#selbar button{font-size:12px;padding:5px 9px;border-radius:6px;border:1px solid #3a3a3a;background:#1c1e16;color:#ddd;cursor:pointer}
+#selbar button:hover{border-color:var(--top)}
+#selbar button.clr{margin-left:6px;border-color:#553;color:#caa}
+#selbar button[data-c="gp"]{color:#a6ff00;border-color:#3d5200}
+#selbar button[data-c="co"]{color:#49a9ff;border-color:#1d4a70}
+#selbar button[data-c="rm"]{color:#ff9a3e;border-color:#6b4213}
+#selbar button[data-c="ex"]{color:#9aa0a6;border-color:#3a3f45}
+#selbar button[data-c="gp"]:hover{background:#a6ff00;color:#0b0b0b;border-color:#a6ff00}
+#selbar button[data-c="co"]:hover{background:#49a9ff;color:#0b0b0b;border-color:#49a9ff}
+#selbar button[data-c="rm"]:hover{background:#ff9a3e;color:#0b0b0b;border-color:#ff9a3e}
+#selbar button[data-c="ex"]:hover{background:#7a828c;color:#0b0b0b;border-color:#7a828c}
+.card.playing .play{background:var(--top)!important;color:#0b0b0b!important;border-color:var(--top);animation:playpulse 1.1s ease-in-out infinite}
+@keyframes playpulse{0%,100%{box-shadow:0 0 0 0 rgba(166,255,0,.55)}50%{box-shadow:0 0 0 6px rgba(166,255,0,0)}}
+#nowplaying{position:fixed;bottom:16px;right:16px;display:none;align-items:center;gap:9px;background:#12140e;border:1px solid var(--top);padding:8px 11px;border-radius:10px;z-index:56;box-shadow:0 8px 26px #000a;max-width:min(360px,80vw)}
+#nowplaying.on{display:flex}
+#nowplaying .npd{width:8px;height:8px;border-radius:50%;background:var(--top);flex:none;animation:playpulse 1.1s ease-in-out infinite}
+#nowplaying #np-txt{font-size:12px;color:#dfe3d8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#nowplaying #np-stop{background:none;border:0;color:#aaa;cursor:pointer;font-size:14px;flex:none;line-height:1}
+</style>
 <div class="toast" id="toast"></div>
-<div id="ovl"><div class="box"><b>Reclassements (à appliquer)</b>
-  <p style="color:#9aa;font-size:12px;margin:6px 0">« ⚡ Appliquer au serveur » écrit direct dans <code>difficulty-labels.json</code> + <code>difficulty-exclude.json</code> (backup <code>.bak</code>, hot-reload). Ce JSON = repli manuel.</p>
-  <textarea id="expt" readonly></textarea>
-  <div class="r"><button class="btn" id="expdl">⬇ Télécharger curation.json</button><button class="btn" id="expcp">Copier</button><button class="btn" id="expcl" style="margin-left:auto">Fermer</button></div>
-</div></div>
-<div id="pvl"><div class="box"><b>✍️ Un mot pour Claude — retour global sur la liste</b>
-  <p style="color:#9aa;font-size:12px;margin:6px 0">Ce que tu remarques (ex. « trop de X en grand public », « il manque tel artiste », « la 2000s est trop maigre »…). J'itère derrière. Enregistré côté serveur (<code>base-musicale-notes.md</code>).</p>
-  <textarea id="pnote" placeholder="Ton retour…"></textarea>
-  <div class="r"><button class="btn go" id="psend">Envoyer à Claude</button><button class="btn" id="pcl" style="margin-left:auto">Fermer</button></div>
-</div></div>
+<div id="selbar"><b><span id="selN">0</span> sélectionné(s)</b><span style="opacity:.65">→ déplacer :</span><button data-c="gp">Mainstream</button><button data-c="co">Connaisseur</button><button data-c="rm">Puriste</button><button data-c="ex">✕ Hors pool</button><button id="selclr" class="clr">Désélectionner</button></div>
+<div id="nowplaying"><span class="npd"></span><span id="np-txt"></span><button id="np-stop" title="Arrêter la lecture">✕</button></div>
 <script>
 // ── mapping 3 difficultés ↔ 4 colonnes (RobMaïzi = mid+deep, avec sous-nuance Digger/Puriste) ─────────
 const COLS = { gp:{band:'top'}, co:{band:'high'}, rm:{band:'mid'}, ex:{band:'exc'} };
 const BAND2COL = { top:'gp', high:'co', mid:'rm', deep:'rm', exc:'ex' };
 const TARGET_GP = 300;                                  // objectif « grand public » (actuellement ~160)
-const CAP = 160;                                        // rendu max par colonne (le reste via « afficher plus »)
+const CAP = 90;                                         // rendu max par colonne (le reste via « afficher plus ») — baissé pour alléger l'affichage sur petites configs
 const el = (id)=>document.getElementById(id);
 const esc = (s)=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 let ALL = [], EXSET = new Set(), SUM = {};
 let changes = {}; try{ changes = JSON.parse(localStorage.getItem('pl_curation_v2')||'{}'); }catch(e){}
 const save = ()=>{ try{ localStorage.setItem('pl_curation_v2', JSON.stringify(changes)); }catch(e){} };
-const filt = { q:'', dec:new Set(['90','00','10','20','x']), scene:'', unl:false, ed:false };
+const filt = { q:'', dec:new Set(['90','00','10','20','x']), scene:'', unl:false, ed:false, nocov:false };
+let _sel = new Set(), _hist = [];   // sélection multiple + pile d'annulation (Ctrl+Z)
 const caps = { gp:CAP, co:CAP, rm:CAP, ex:CAP };
-let auto = true, activeKey = null;
+let activeKey = null;
 
 const decOf = (y)=> !y ? 'x' : y<2000?'90':y<2010?'00':y<2020?'10':'20';
 const decRow = (r)=> (r.dec && r.dec!=='x') ? r.dec : decOf(r.y);   // décennie : celle de la liste, sinon déduite de l'année
@@ -152,36 +194,29 @@ let spCtrl = null;
 window.onSpotifyIframeApiReady = (API) => { try{ API.createController(el('sp-embed'), { width:'100%', height:80, uri:'spotify:track:4cOdK2wGLETKBW3PvgPWqT' }, (c)=>{ spCtrl = c; }); }catch(e){} };
 function spPlay(id){ if(!spCtrl) return false; try{ el('spbar').classList.add('on'); spCtrl.loadUri('spotify:track:'+id); spCtrl.play(); return true; }catch(e){ return false; } }
 el('spclose') && el('spclose').addEventListener('click', ()=>{ try{ spCtrl && spCtrl.pause(); }catch(e){} el('spbar').classList.remove('on'); });
-function stop(){ try{au.pause();}catch(e){} try{ if(spCtrl) spCtrl.pause(); }catch(e){} if(curCard){curCard.classList.remove('playing');curCard=null;} }
+el('np-stop') && el('np-stop').addEventListener('click', stop);
+function showNow(r){ const n=el('nowplaying'); if(!n) return; el('np-txt').textContent=r.t+' — '+r.a; n.classList.add('on'); }
+function hideNow(){ const n=el('nowplaying'); if(n) n.classList.remove('on'); }
+function stop(){ try{au.pause();}catch(e){} try{ if(spCtrl) spCtrl.pause(); }catch(e){} if(curCard){curCard.classList.remove('playing');curCard=null;} hideNow(); }
 function playRec(r, card){
   if(curCard===card){ stop(); return; }
   stop(); activeKey = r.k;
-  if(r.sp && spPlay(r.sp)){ card.classList.add('playing'); curCard = card; card.scrollIntoView({block:'nearest'}); return; }   // Spotify d'abord (titres importés)
+  if(r.sp && spPlay(r.sp)){ card.classList.add('playing'); curCard = card; card.scrollIntoView({block:'nearest'}); showNow(r); return; }   // Spotify d'abord (titres importés)
   if(!r.preview){ return; }                             // ni Spotify ni Deezer → rien à jouer
   au.src = r.preview; au.play().catch(()=>{});
   card.classList.add('playing'); curCard = card;
-  card.scrollIntoView({block:'nearest'});
+  card.scrollIntoView({block:'nearest'}); showNow(r);
 }
-au.addEventListener('ended', ()=>{
-  if(!auto || !curCard) { stop(); return; }
-  const next = curCard.nextElementSibling;
-  stop();
-  if(next && next.classList.contains('card')){ const k=next.dataset.k; const r=ALL.find(x=>x.k===k); if(r) playRec(r,next); }
-});
+au.addEventListener('ended', ()=>{ stop(); });   // on joue UN extrait puis stop (plus d'enchaînement auto)
 
 // ── data ──────────────────────────────────────────────────────────────────────────────────────────────
 async function load(){
   el('st').textContent='chargement…';
-  const res = await fetch('/api/curation').then(r=>r.json()).catch(()=>null);
+  const res = await fetch('/api/curation?_='+Date.now(), {cache:'no-store'}).then(r=>r.json()).catch(()=>null);   // anti-cache : sinon le navigateur resert l'ancien décompte après un drop
   if(!res){ el('st').textContent='⚠ serveur injoignable (lance le localhost)'; return; }
   EXSET = new Set(res.excluded.map(r=>r.k));
   ALL = res.rows.map(r=>({...r, ex:false})).concat(res.excluded.map(r=>({...r, b:'exc', labeled:true, ex:true})));
-  buildScenes(); render();
-}
-function buildScenes(){
-  const s = new Set(); for(const r of ALL) for(const g of (r.g||[])) s.add(g);
-  const sel = el('scene'); const cur = sel.value;
-  sel.innerHTML = '<option value="">Toutes scènes</option>' + [...s].sort().map(g=>`<option${g===cur?' selected':''}>${esc(g)}</option>`).join('');
+  render();
 }
 
 // ── rendu ────────────────────────────────────────────────────────────────────────────────────────────
@@ -191,26 +226,28 @@ function passFilter(r){
   if(filt.scene && !(r.g||[]).includes(filt.scene)) return false;
   if(filt.unl && !isUnl(r)) return false;
   if(filt.ed && !changes[r.k]) return false;
+  if(filt.nocov && r.c) return false;
   return true;
 }
 function cardHTML(r){
-  const t = effTarget(r), col = BAND2COL[t];
+  const t = effTarget(r);
   const cov = r.c ? `<img class="cov" loading="lazy" src="${esc(r.c)}" alt="">` : '<div class="cov"></div>';
   const unl = isUnl(r) ? '<span class="unlb" title="pas encore résolu sur Deezer">♪…</span>' : '';
   const _na = r.a.toLowerCase(), _fts = [...new Set((r.f||[]).filter(x=>x && !_na.includes(x.toLowerCase())))];   // feats à afficher (hors artiste principal, dédupliqués)
-  const _pa = (r.a.split(/\s*(?:feat\.?|ft\.?|featuring|avec|&|,| x )\s*/i)[0] || r.a).trim();   // artiste principal (clic → recherche)
+  const _pa = (r.a.split(/\s*(?:feat\.?|ft\.?|featuring|avec|&|,| x )\s*/i)[0] || r.a).trim();   // artiste principal (clic → recherche + top Spotify)
   const feat = _fts.length ? ` <span class="fx">feat. ${_fts.map(f=>`<span class="qlink" data-q="${esc(f)}">${esc(f)}</span>`).join(', ')}</span>` : '';
-  const mv = ['gp','co','rm','ex'].map(c=>`<button class="mb${col===c?' on':''}" data-t="${c}">${({gp:'GP',co:'Co',rm:'RM',ex:'✕'})[c]}</button>`).join('');
-  const sub = col==='rm' ? `<div class="sub"><button class="sb${t==='mid'?' on':''}" data-b="mid">Digger</button><button class="sb${t==='deep'?' on':''}" data-b="deep">Puriste</button></div>` : '';
-  return `<div class="card${changes[r.k]?' edited':''}${isUnl(r)?' unl':''}" data-k="${esc(r.k)}" data-b="${t}" draggable="true">`+
+  const rk = r.spRank ? `<span class="rk r${r.spRank<=3?'top':(r.spRank<=5?'mid':'low')}" title="#${r.spRank} des titres les plus streamés de ${_pa} sur Spotify">#${r.spRank}</span>` : '';
+  // plus de boutons de colonne sur la carte : on classe par glisser-déposer d'une colonne à l'autre
+  return `<div class="card${changes[r.k]?' edited':''}${isUnl(r)?' unl':''}${_sel.has(r.k)?' sel':''}" data-k="${esc(r.k)}" data-b="${t}" draggable="true">`+
     `<button class="play"${isUnl(r)?' disabled':''}>▶</button>${cov}`+
     `<div class="meta"><div class="ttl">${esc(r.t)}</div><div class="art"><span class="qlink" data-q="${esc(_pa)}">${esc(r.a)}</span>${feat}</div></div>`+
-    `${unl}<span class="yr">${r.y||''}</span><div class="mv">${mv}</div>${sub}</div>`;
+    `${unl}${rk}<span class="yr">${r.y||''}</span></div>`;
 }
 function render(){
   const buckets = { gp:[], co:[], rm:[], ex:[] };
   SUM = { gp:0, co:0, rm:0, ex:0 };
   let unlN=0, edN=0;
+  const _flt = (filt.q || filt.scene || filt.unl || filt.ed || filt.dec.size < 5);   // un filtre actif ? → compteurs de colonnes dynamiques (filtré / total)
   for(const r of ALL){
     const c = effCol(r); SUM[c]++;
     if(isUnl(r)) unlN++; if(changes[r.k]) edN++;
@@ -221,17 +258,11 @@ function render(){
   for(const c of ['gp','co','rm','ex']){
     const arr = buckets[c].sort(ord);
     const box = el('b-'+c); const shown = arr.slice(0, caps[c]);
-    // RobMaïzi : sous-groupes Digger / Puriste
-    let html='';
-    if(c==='rm'){
-      const dig = shown.filter(r=>effTarget(r)!=='deep'), pur = shown.filter(r=>effTarget(r)==='deep');
-      if(dig.length) html += `<div class="subh"><span class="dot" style="background:var(--mid)"></span>Digger · ${dig.length}</div>` + dig.map(cardHTML).join('');
-      if(pur.length) html += `<div class="subh"><span class="dot" style="background:var(--deep)"></span>Puriste · ${pur.length}</div>` + pur.map(cardHTML).join('');
-    } else html = shown.map(cardHTML).join('');
+    let html = shown.map(cardHTML).join('');
     if(!arr.length) html = '<div class="empty">— rien ici —</div>';
     else if(arr.length>caps[c]) html += `<div class="more" data-c="${c}">+ ${arr.length-caps[c]} autres — afficher</div>`;
     box.innerHTML = html;
-    el('n-'+c).textContent = c==='gp' ? `${SUM.gp} / ${TARGET_GP}` : SUM[c];
+    el('n-'+c).textContent = _flt ? (arr.length + ' / ' + (c==='gp' ? SUM.gp : SUM[c])) : (c==='gp' ? `${SUM.gp} / ${TARGET_GP}` : String(SUM[c]));
   }
   el('tUnlN').textContent = unlN ? '· '+unlN : '';
   el('tEdN').textContent = edN ? '· '+edN : '';
@@ -242,23 +273,23 @@ function setupBoard(){
   const board = el('board');
   board.addEventListener('click', e=>{
     const more = e.target.closest('.more'); if(more){ caps[more.dataset.c] = (caps[more.dataset.c]||CAP) + CAP; render(); return; }
-    const ql = e.target.closest('.qlink'); if(ql){ el('q').value = ql.dataset.q; filt.q = (ql.dataset.q||'').toLowerCase(); render(); return; }   // clic titre/artiste/feat → remplit la recherche
+    const ql = e.target.closest('.qlink'); if(ql){ const q = ql.dataset.q||''; el('q').value = q; filt.q = q.toLowerCase(); render(); showArtistPool(q); return; }   // clic artiste/feat → recherche + top Spotify de l'artiste
     const card = e.target.closest('.card'); if(!card) return;
     const r = ALL.find(x=>x.k===card.dataset.k); if(!r) return;
     if(e.target.closest('.play')){ playRec(r, card); return; }
-    const mb = e.target.closest('.mb'); if(mb){ assignCol(r, mb.dataset.t); return; }
-    const sb = e.target.closest('.sb'); if(sb){ setChange(r, sb.dataset.b); return; }
+    toggleSel(card);   // clic sur le corps de la carte = (dé)sélectionner → action groupée via la barre en bas
   });
   board.addEventListener('dragstart', e=>{ const card=e.target.closest('.card'); if(card) e.dataTransfer.setData('text/plain', card.dataset.k); });
 }
 setupBoard();
 // clic colonne : bascule vers la colonne c (revert si déjà dessus) ; RM → 'mid' par défaut (garde deep si déjà deep)
-function assignCol(r, c){
+function applyCol(r, c){                                  // mutation seule (pour l'action groupée : 1 seul render)
   const cur = effCol(r);
-  if(c===cur){ delete changes[r.k]; }                    // re-clic colonne active → annule la modif (retour à l'origine)
+  if(c===cur){ delete changes[r.k]; }                    // re-clic colonne active → annule la modif
   else { changes[r.k] = c==='rm' ? (r.b==='deep'?'deep':'mid') : COLS[c].band; }
-  save(); render();
 }
+function pushHist(){ _hist.push(JSON.stringify(changes)); if(_hist.length>60) _hist.shift(); }
+function assignCol(r, c){ pushHist(); applyCol(r, c); save(); render(); }
 function setChange(r, band){ changes[r.k]=band; save(); render(); }
 
 // ── drag & drop entre colonnes ─────────────────────────────────────────────────────────────────────────
@@ -279,32 +310,55 @@ async function dropSpotify(ids, band, colId){
   toast('Ajout du drop Spotify…');
   try{
     const res = await fetch('/api/curation/drop-spotify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids, band})}).then(r=>r.json());   // serveur résout via la page embed (sans token → plus de 403)
-    if(res&&res.ok){ toast('✓ '+((res.resolved||[]).join(', ')||(res.added+' titre(s)'))+' → '+({gp:'Grand public',co:'Connaisseur',rm:'RobMaïzi'})[colId]); await load(); }
+    if(res&&res.ok){
+      const col=({gp:'Mainstream',co:'Connaisseur',rm:'Puriste'})[colId];
+      const n=(res.resolved||[]).length;
+      let msg;
+      if(res.added){ msg='✓ +'+res.added+' nouveau'+(res.added>1?'x':'')+(res.spAdded?' · '+res.spAdded+' audio ajouté'+(res.spAdded>1?'s':''):'')+' → '+col; }
+      else if(res.spAdded){ msg='↻ déjà dans la base · audio Spotify ajouté ('+res.spAdded+') → '+col; }
+      else { msg='= déjà dans la base ('+n+' titre'+(n>1?'s':'')+', rien de neuf) → '+col; }
+      toast(msg); await load();
+    }
     else toast('Drop: '+((res&&res.error)||'échec'), true);
   }catch(e){ toast('Drop: '+e.message, true); }
 }
 
 // ── clavier : 1/2/3 = GP/Co/RM · 4 ou x = hors pool · espace = play/pause · n = suivant ────────────────
 document.addEventListener('keydown', e=>{
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); if(_hist.length){ changes=JSON.parse(_hist.pop()); save(); render(); toast('↶ Annulé'); } else toast('Rien à annuler'); return; }
   if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
   const r = activeKey && ALL.find(x=>x.k===activeKey);
   if(e.key===' '){ e.preventDefault(); if(au.paused){au.play().catch(()=>{});} else au.pause(); return; }
   if(!r) return;
   if(e.key==='1') assignCol(r,'gp'); else if(e.key==='2') assignCol(r,'co'); else if(e.key==='3') assignCol(r,'rm');
   else if(e.key==='4'||e.key.toLowerCase()==='x') assignCol(r,'ex');
-  else if(e.key.toLowerCase()==='n'||e.key==='ArrowDown'){ if(curCard){au.dispatchEvent(new Event('ended'));} }
 });
 
 // ── filtres ──────────────────────────────────────────────────────────────────────────────────────────
 const DECS = [['90','90s'],['00','00s'],['10','10s'],['20','20s'],['x','?']];
-el('dec').innerHTML = DECS.map(([k,l])=>`<span class="dch" data-d="${k}">${l}</span>`).join('');
-document.querySelectorAll('.dch').forEach(c=>c.addEventListener('click',()=>{ const d=c.dataset.d;
-  if(filt.dec.has(d)) filt.dec.delete(d); else filt.dec.add(d); c.classList.toggle('off', !filt.dec.has(d)); render(); }));
+el('dec').innerHTML = DECS.map(([k,l])=>`<span class="dch" data-d="${k}" title="${k==='x'?'Année inconnue (titre pas encore daté)':'Décennie '+l}">${l}</span>`).join('');
+const ALLDEC = ['90','00','10','20','x'];
+const syncDec = ()=>document.querySelectorAll('.dch').forEach(ch=>ch.classList.toggle('off', !filt.dec.has(ch.dataset.d)));
+document.querySelectorAll('.dch').forEach(c=>c.addEventListener('click',e=>{ const d=c.dataset.d;
+  if(e.shiftKey){ if(filt.dec.has(d)) filt.dec.delete(d); else filt.dec.add(d); if(!filt.dec.size) filt.dec=new Set(ALLDEC); }
+  else { filt.dec = (filt.dec.size===1 && filt.dec.has(d)) ? new Set(ALLDEC) : new Set([d]); }   // clic = isoler ; reclic = tout ; Maj+clic = multi
+  syncDec(); render(); }));
 let _qT; el('q').addEventListener('input', ()=>{ clearTimeout(_qT); _qT=setTimeout(()=>{ filt.q = el('q').value.trim().toLowerCase(); render(); }, 140); });  // anti-rebond : plus de re-rendu à chaque frappe
-el('scene').addEventListener('change', ()=>{ filt.scene = el('scene').value; render(); });
+// (filtre « scènes » retiré)
 el('tUnl').addEventListener('click', ()=>{ filt.unl=!filt.unl; el('tUnl').classList.toggle('on',filt.unl); render(); });
 el('tEd').addEventListener('click', ()=>{ filt.ed=!filt.ed; el('tEd').classList.toggle('on',filt.ed); render(); });
-el('tAuto').addEventListener('click', ()=>{ auto=!auto; el('tAuto').classList.toggle('on',auto); });
+// ── sélection multiple + action groupée ──────────────────────────────────────────────────────────────
+function toggleSel(card){ const k=card.dataset.k; if(_sel.has(k)){ _sel.delete(k); card.classList.remove('sel'); } else { _sel.add(k); card.classList.add('sel'); } updateSelBar(); }
+function updateSelBar(){ el('selN').textContent=_sel.size; el('selbar').classList.toggle('on', _sel.size>0); }
+function clearSel(){ document.querySelectorAll('.card.sel').forEach(c=>c.classList.remove('sel')); _sel.clear(); updateSelBar(); }
+el('selbar').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return;
+  if(b.id==='selclr'){ clearSel(); return; }
+  const c=b.dataset.c; if(!c || !_sel.size) return;
+  pushHist();
+  for(const k of _sel){ const r=ALL.find(x=>x.k===k); if(r) applyCol(r,c); }
+  const n=_sel.size; _sel.clear(); save(); render(); updateSelBar();
+  toast('✓ '+n+' déplacé'+(n>1?'s':'')+' → '+({gp:'Mainstream',co:'Connaisseur',rm:'Puriste',ex:'Hors pool'})[c]+' (Ctrl+Z pour annuler)', false, true);
+});
 
 // ── export / apply ─────────────────────────────────────────────────────────────────────────────────────
 function buildPayload(){
@@ -316,12 +370,10 @@ function buildPayload(){
   }
   return { labels, exclude, unexclude };
 }
-function toast(msg, err){ const t=el('toast'); t.textContent=msg; t.classList.toggle('err',!!err); t.classList.add('on'); setTimeout(()=>t.classList.remove('on'), 2600); }
-el('exp').addEventListener('click', ()=>{ el('expt').value = JSON.stringify(buildPayload(),null,2); el('ovl').classList.add('on'); });
-el('expcl').addEventListener('click', ()=>el('ovl').classList.remove('on'));
-el('expcp').addEventListener('click', ()=>{ el('expt').select(); try{document.execCommand('copy');}catch(e){} });
-el('expdl').addEventListener('click', ()=>{ const b=new Blob([el('expt').value],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='curation.json'; a.click(); });
-el('reload').addEventListener('click', load);
+let _toastT;
+function toast(msg, err, stick){ const t=el('toast'); t.textContent=msg; t.classList.toggle('err',!!err); t.classList.toggle('stick',!!stick); t.classList.add('on'); clearTimeout(_toastT); if(stick){ t.onclick=()=>{ t.classList.remove('on'); t.onclick=null; }; } else { t.onclick=null; _toastT=setTimeout(()=>t.classList.remove('on'), 3200); } }
+function busy(btn, on){ if(!btn) return; btn.classList.toggle('busy', !!on); btn.disabled=!!on; }
+// (barre allégée : Recharger / Exporter retirés — le glisser-déposer + Appliquer suffisent)
 // ── Import Spotify : réutilise le token de la session hôte (localStorage pl_spotify, même origine 127.0.0.1) ──
 const SP_CLIENT = '4b5842ddb3ef4a1f9f14b789a0a35706';
 const SP_CAT = [[/grand\s*public/i,'top'],[/connaisseur/i,'high'],[/rob\s*m|robma[iy]z/i,'mid']];
@@ -350,35 +402,75 @@ async function spGet(url, tok){
 async function importSpotify(){
   if(location.hostname!=='127.0.0.1'){ toast('Ouvre cette page sur http://127.0.0.1:5173/base-musicale.html — Spotify refuse les autres adresses', true); return; }
   const tok = await spToken();
-  if(!tok){ toast('Reconnecte Spotify sur l\'écran du jeu (/host → Connecter Spotify), puis reviens ici', true); return; }
-  el('spimp').textContent='…';
+  if(!tok){ toast('❌ Pas de token Spotify. Connecte-le sur /host → Connecter Spotify, puis Ctrl+Shift+R ici.', true, true); return; }
+  busy(el('spimp'),true); el('spimp').textContent='Lecture…';
   try{
     let pls=[], u='https://api.spotify.com/v1/me/playlists?limit=50';
     while(u){ const d=await spGet(u,tok); pls=pls.concat(d.items||[]); u=d.next; }
     const targets=pls.filter(p=>p&&spCat(p.name));
-    if(!targets.length){ el('spimp').textContent='🎧 Importer Spotify'; toast('Aucune playlist « grand public / connaisseurs / Rob MyZ » ('+pls.length+' playlists vues)', true); return; }
+    if(!targets.length){ busy(el('spimp'),false); el('spimp').textContent='🎧 Importer Spotify'; toast('Aucune playlist « grand public / connaisseurs / Rob MyZ » ('+pls.length+' playlists vues)', true); return; }
     const tracks=[], errs=[];
     for(const p of targets){ const band=spCat(p.name);
       let u2='https://api.spotify.com/v1/playlists/'+p.id+'/items?limit=100&additional_types=track';   // /items (le /tracks est déprécié → source du bug)
       try{ while(u2){ const d=await spGet(u2,tok); for(const it of (d.items||[])){ const tr=it&&(it.track||it.item); if(tr&&tr.name&&tr.artists&&tr.artists.length){ const yr=+((tr.album&&tr.album.release_date||'').slice(0,4))||0;
-        const art=tr.artists[0].name+(tr.artists.length>1?' feat. '+tr.artists.slice(1).map(a=>a.name).join(', '):''); tracks.push({artist:art, title:tr.name, band, year:yr}); } } u2=d.next; } }
+        const art=tr.artists[0].name+(tr.artists.length>1?' feat. '+tr.artists.slice(1).map(a=>a.name).join(', '):''); tracks.push({artist:art, title:tr.name, band, year:yr, cover:(tr.album&&tr.album.images&&tr.album.images[0]&&tr.album.images[0].url)||''}); } } u2=d.next; } }
       catch(e){ errs.push(p.name+': '+e.message); }
     }
-    if(!tracks.length){ el('spimp').textContent='🎧 Importer Spotify'; toast('0 titre lu'+(errs.length?' — '+errs[0]:''), true); return; }
+    if(!tracks.length){ busy(el('spimp'),false); el('spimp').textContent='🎧 Importer Spotify'; toast('0 titre lu'+(errs.length?' — '+errs[0]:''), true); return; }
     const res=await fetch('/api/curation/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tracks})}).then(r=>r.json());
-    el('spimp').textContent='🎧 Importer Spotify';
-    if(res&&res.ok){ toast(`✓ ${res.added} ajoutés, ${res.updated} reclassés · ${targets.map(p=>p.name).join(', ')}`+(errs.length?' · '+errs.length+' pl. KO':'')); await load(); }
-    else toast('Import échoué: '+((res&&res.error)||''), true);
-  }catch(e){ el('spimp').textContent='🎧 Importer Spotify'; toast('Spotify: '+e.message, true); }
+    busy(el('spimp'),false); el('spimp').textContent='🎧 Importer Spotify';
+    if(res&&res.ok){ const msg = res.added ? ('✓ '+res.added+' titres ajoutés'+(res.updated?' · '+res.updated+' reclassés':'')+(errs.length?' · '+errs.length+' pl. KO':'')) : ('Tes playlists sont déjà dans la base — rien de neuf ici. Pour les titres MUETS, clique plutôt « 🔊 Remplir l\'audio manquant » (l\'autre bouton).'); toast(msg, false, true); await load(); }
+    else toast('Import échoué: '+((res&&res.error)||''), true, true);
+  }catch(e){ busy(el('spimp'),false); el('spimp').textContent='🎧 Importer Spotify'; toast('Spotify: '+e.message, true, true); }
 }
-el('spimp').addEventListener('click', importSpotify);
+// (bouton « Importer Spotify » retiré — la sync des playlists se fait côté serveur)
+// ── Remplir l'audio + cover des titres MUETS via la recherche Spotify (ton token, dans TON navigateur) ──
+const _nrm = (s)=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\(.*?\)|\[.*?\]/g,'').replace(/[^a-z0-9]/g,'');
+async function fillSpotify(){
+  const btn=el('spfill');
+  if(location.hostname!=='127.0.0.1'){ toast('Ouvre cette page sur http://127.0.0.1:5173/base-musicale.html (Spotify refuse les autres adresses)', true, true); return; }
+  const tok = await spToken();
+  if(!tok){ toast('❌ Pas de token Spotify. Connecte-le sur /host → Connecter Spotify, puis Ctrl+Shift+R ici.', true, true); return; }
+  const res = await fetch('/api/curation?_='+Date.now(),{cache:'no-store'}).then(r=>r.json()).catch(()=>null);
+  if(!res){ toast('Serveur injoignable', true, true); return; }
+  const muets = res.rows.filter(r=>!r.preview && !r.sp && r.b!=='exc');
+  if(!muets.length){ toast('Aucun titre muet 🎉', false, true); return; }
+  busy(btn,true); btn.textContent='démarrage…';
+  let found=0, done=0, buf=[], firstStatus=null;
+  const flush=async()=>{ if(buf.length){ const b=buf.splice(0); await fetch('/api/curation/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tracks:b})}).catch(()=>{}); } };
+  const reset=()=>{ busy(btn,false); btn.textContent='🔊 Remplir l\'audio manquant'; };
+  const sp=async(q)=>{ const r=await fetch('https://api.spotify.com/v1/search?type=track&market=FR&limit=8&q='+encodeURIComponent(q),{headers:{Authorization:'Bearer '+tok}}); if(firstStatus===null) firstStatus=r.status; if(!r.ok){ const e=new Error('HTTP '+r.status); e.status=r.status; throw e; } return r.json(); };
+  for(const r of muets){
+    const prim = r.a.split(/\s*(?:feat\.?|ft\.?|featuring|avec|&|,| x )\s*/i)[0].trim();
+    const nt=_nrm(r.t), na=_nrm(prim);
+    try{
+      let it=[];
+      for(const q of ['artist:"'+prim+'" track:"'+r.t.replace(/"/g,'')+'"', prim+' '+r.t]){ const d=await sp(q); it=(d.tracks&&d.tracks.items)||[]; if(it.length) break; }
+      const hit = it.find(t=>{ const tn=_nrm(t.name); const an=(t.artists||[]).some(a=>{const x=_nrm(a.name); return x&&(x.includes(na)||na.includes(x));}); return an && (tn===nt || (tn.includes(nt)||nt.includes(tn)) && Math.min(tn.length,nt.length)>=5); });
+      if(hit){ buf.push({ artist:r.a, title:r.t, band:r.b, spId:hit.id, cover:(hit.album&&hit.album.images&&hit.album.images[0]&&hit.album.images[0].url)||'', year:+((hit.album&&hit.album.release_date||'').slice(0,4))||0 }); found++; }
+    }catch(e){
+      if(e.status===401){ await flush(); reset(); return toast('⚠ Token Spotify expiré (401). Reconnecte sur /host puis relance.', true, true); }
+      if(e.status===403){ await flush(); reset(); return toast('⚠ Spotify bloque l\'API (403) : ton compte n\'est pas autorisé sur l\'app (mode Développement). Vercel n\'y changerait rien — il faut t\'ajouter dans les réglages de l\'app Spotify.', true, true); }
+      if(e.status===429){ await new Promise(x=>setTimeout(x,3000)); } // throttle → pause
+    }
+    done++;
+    if(buf.length>=20) await flush();
+    if(done%5===0) btn.textContent=done+'/'+muets.length+' · '+found+' trouvés';
+    await new Promise(x=>setTimeout(x,110));
+  }
+  await flush(); reset();
+  if(found) toast('✓ '+found+' audios + covers récupérés sur '+muets.length+' titres muets ! (clic pour fermer)', false, true);
+  else toast('0 trouvé sur '+muets.length+'. Spotify a répondu « '+firstStatus+' » à la 1re requête → dis-moi ce numéro.', true, true);
+  await load();
+}
+el('spfill').addEventListener('click', fillSpotify);
 // ── Remplir l'audio des titres muets en les cherchant sur Spotify (token utilisateur, usage légitime de l'API) ──
 const _norm = (s)=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\(.*?\)/g,'').replace(/[^a-z0-9]/g,'');
 async function fillSpotify(){
   if(location.hostname!=='127.0.0.1'){ toast('Ouvre cette page sur http://127.0.0.1:5173/base-musicale.html', true); return; }
   const tok = await spToken();
   if(!tok){ toast('Connecte Spotify dans le jeu (/host → Connecter Spotify) d\'abord', true); return; }
-  const res = await fetch('/api/curation').then(r=>r.json()).catch(()=>null);
+  const res = await fetch('/api/curation?_='+Date.now(), {cache:'no-store'}).then(r=>r.json()).catch(()=>null);
   if(!res){ toast('serveur injoignable', true); return; }
   const muets = res.rows.filter(r=>!r.preview && !r.sp && r.b!=='exc');
   if(!muets.length){ toast('Aucun titre muet 🎉', false); return; }
@@ -402,17 +494,7 @@ async function fillSpotify(){
   el('spfill').textContent='🔊 Remplir audio';
   toast('✓ '+found+' audios Spotify récupérés sur '+muets.length+' muets'); await load();
 }
-el('spfill').addEventListener('click', fillSpotify);
-el('prompt').addEventListener('click', ()=>{ el('pvl').classList.add('on'); el('pnote').focus(); });
-el('pcl').addEventListener('click', ()=>el('pvl').classList.remove('on'));
-el('psend').addEventListener('click', async ()=>{
-  const note = el('pnote').value.trim(); if(!note){ toast('Écris quelque chose.'); return; }
-  el('psend').textContent='…';
-  const r = await fetch('/api/curation/note',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})}).then(r=>r.json()).catch(()=>null);
-  el('psend').textContent='Envoyer à Claude';
-  if(r&&r.ok){ el('pnote').value=''; el('pvl').classList.remove('on'); toast('✓ Retour envoyé — Claude le lira'); }
-  else toast('Échec de l\'envoi', true);
-});
+// (Remplir audio + Prompt retirés de la barre)
 el('apply').addEventListener('click', async ()=>{
   const p = buildPayload();
   const n = Object.keys(p.labels).length + p.exclude.length;
@@ -425,6 +507,36 @@ el('apply').addEventListener('click', async ()=>{
   else toast('Échec de l’application' + (res && res.error ? ' : '+res.error : ''), true);
 });
 
+// ── Pool artiste : au clic sur un nom d'artiste → son TOP Spotify (classé par popularité ≈ streams, via l'embed) ──
+const _dn = (s)=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\(.*?\)|\[.*?\]/g,'').replace(/\b(feat|ft|featuring|avec)\b\.?/g,'').replace(/,.*$/,'').replace(/[^a-z0-9]+/g,'');
+const _primary = (a)=> (String(a).split(/\s*(?:feat\.?|ft\.?|featuring|avec|&|,| x )\s*/i)[0]||a).trim();
+async function showArtistPool(name){
+  const panel = el('apool'), body = el('apool-b');
+  el('apool-t').textContent = 'Top Spotify — '+name;
+  body.innerHTML = '<div class="ap-msg">chargement…</div>'; panel.classList.add('on');
+  const dn = _dn(_primary(name));
+  const cand = ALL.find(r=> r.sp && _dn(_primary(r.a))===dn) || ALL.find(r=> r.sp && _dn(r.a).includes(dn));
+  if(!cand){ body.innerHTML = '<div class="ap-msg">Aucun titre de « '+esc(name)+' » n\'a d\'ID Spotify dans la base → impossible de retrouver l\'artiste. Glisse d\'abord un de ses titres depuis Spotify, puis reclique.</div>'; return; }
+  let res=null; try{ res = await fetch('/api/curation/artist-top?track='+encodeURIComponent(cand.sp)+'&name='+encodeURIComponent(name), {cache:'no-store'}).then(r=>r.json()); }catch(e){}
+  if(!res||!res.ok||!res.top||!res.top.length){ body.innerHTML = '<div class="ap-msg">Top indisponible'+((res&&res.error)?' ('+esc(res.error)+')':'')+'.</div>'; return; }
+  const COLN = {top:'Mainstream',high:'Connaisseur',mid:'Puriste',deep:'Puriste',exc:'Hors pool'};
+  const findRow = (t)=>{ let row = t.spId && ALL.find(r=> r.sp===t.spId); if(!row){ const tn=_dn(t.title); row = ALL.find(r=> _dn(r.t)===tn && _dn(r.a).includes(dn)); } return row; };
+  body.innerHTML = res.top.map((t,i)=>{
+    const row = findRow(t);
+    const meta = '<div class="ap-meta"><span class="ap-n">'+(i+1)+'</span><div style="min-width:0"><div class="ap-t">'+esc(t.title)+'</div><div class="ap-a">'+esc(t.subtitle||t.artist)+'</div></div></div>';
+    const right = row ? '<span class="ap-in">✓ '+(COLN[row.b]||'dans la base')+'</span>'
+      : (t.spId ? '<span class="ap-add"><button data-sp="'+t.spId+'" data-band="top">Main</button><button data-sp="'+t.spId+'" data-band="high">Conn</button><button data-sp="'+t.spId+'" data-band="mid">Puri</button></span>' : '<span class="ap-in" style="color:#888">—</span>');
+    return '<div class="ap-row'+(row?' has':'')+'">'+meta+right+'</div>';
+  }).join('');
+}
+el('apool-x').addEventListener('click', ()=>el('apool').classList.remove('on'));
+el('apool-b').addEventListener('click', async e=>{
+  const b = e.target.closest('button[data-sp]'); if(!b) return;
+  const band=b.dataset.band, sp=b.dataset.sp, span=b.closest('.ap-add'); if(span) span.textContent='…';
+  const res = await fetch('/api/curation/drop-spotify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[sp],band})}).then(r=>r.json()).catch(()=>null);
+  if(res&&res.ok){ toast('✓ ajouté → '+({top:'Mainstream',high:'Connaisseur',mid:'Puriste'})[band]); await load(); if(span){ const row=span.closest('.ap-row'); if(row) row.classList.add('has'); span.outerHTML='<span class="ap-in">✓ ajouté</span>'; } }
+  else { if(span) span.innerHTML='<button data-sp="'+sp+'" data-band="'+band+'">réessayer</button>'; toast('Échec'+((res&&res.error)?' : '+res.error:''), true); }
+});
 load();
 </script>
 <script src="https://open.spotify.com/embed/iframe-api/v1" async></script>

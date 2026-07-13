@@ -41,9 +41,9 @@ const THEMES_EXTRA = [
   { id: 'legendes', name: 'Légendes', sub: 'Le panthéon' }, { id: 'trap', name: 'Trap FR', sub: 'Hi-hats' },
 ];
 const DIFFS = [
-  { key: 'facile', name: 'Grand public', desc: 'Les gros hits — jouable même sans être calé en rap', signal: 1 },
+  { key: 'facile', name: 'Mainstream', desc: 'Les gros hits — jouable même sans être calé en rap', signal: 1 },
   { key: 'normal', name: 'Connaisseur', desc: 'Atteignable, mais pas donné', signal: 2 },
-  { key: 'puriste', name: 'RobMaïzi', desc: 'Digger + underground, pour les vrais', signal: 3 },
+  { key: 'puriste', name: 'Puriste', desc: 'Digger + underground, pour les vrais', signal: 3 },
 ];
 const FORMATS = [
   { rounds: 8, label: 'Petit set', desc: 'Une partie courte pour lancer la soirée.' },

@@ -18,3 +18,6 @@ quiz-review.md
 assets/
 
 # fonts.css est généré (getfonts.ps1) MAIS requis au build → on le versionne.
+
+# secret Spotify (Client Credentials, local only)
+server/.spotify-secret

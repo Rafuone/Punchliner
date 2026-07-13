@@ -87,16 +87,16 @@ const RUSH_TRACK_MAX_MS = FAST ? 3000 : 30000; // durée MAX d'un morceau : si n
 const RUSH_RAMP_SCALE = 58; // vers le morceau ~59, on atteint le fond du bac (montée PLUS DOUCE : on reste grand public longtemps au début)
 const RUSH_RAMP_EXP   = 1.9; // > 1 = facile longtemps puis ça grimpe (exposant relevé → début encore plus accessible)
 function rushDifficulty(n) { return Math.min(1, Math.pow(Math.max(0, (n || 1) - 1) / RUSH_RAMP_SCALE, RUSH_RAMP_EXP)); }
-function rushLabel(p) { return p < 0.30 ? 'Grand public' : p < 0.55 ? 'Connaisseur' : p < 0.80 ? 'Digger' : 'RobMaïzi'; } // libellé affiché, évolue avec p
+function rushLabel(p) { return p < 0.30 ? 'Mainstream' : p < 0.55 ? 'Connaisseur' : p < 0.80 ? 'Digger' : 'Puriste'; } // libellé affiché, évolue avec p
 
 // Difficulté = QUELS morceaux tombent (popularité via le rank Deezer), PAS la durée.
 // Le son joue toujours généreusement ; offset = on démarre en plein milieu sur les niveaux durs.
 const DIFFICULTY = {
   // 3 NIVEAUX (2026-07-11) : Grand public (facile, jouable avec des non-spécialistes) → Connaisseur (atteignable
   // mais pas donné) → RobMaïzi (vraiment dur, digger+underground fusionnés). `bands` = bandes de notoriété couvertes.
-  facile:    { label: 'Grand public', tier: 'top',  bands: ['top'],         windowMs: W(30000), mult: 1.0, offset: false },
+  facile:    { label: 'Mainstream',   tier: 'top',  bands: ['top'],         windowMs: W(30000), mult: 1.0, offset: false },
   normal:    { label: 'Connaisseur',  tier: 'high', bands: ['high'],        windowMs: W(26000), mult: 1.5, offset: false },
-  puriste:   { label: 'RobMaïzi',     tier: 'mid',  bands: ['mid', 'deep'], windowMs: W(21000), mult: 2.0, offset: true },
+  puriste:   { label: 'Puriste',      tier: 'mid',  bands: ['mid', 'deep'], windowMs: W(21000), mult: 2.0, offset: true },
 };
 const MODES = ['multi', 'buzzer', 'quiz', 'rush'];
 
@@ -1760,17 +1760,75 @@ function canonActive() { if (_canonActive) return _canonActive; try { _canonActi
 let _poolByKey = null, _pbkLen = -1;
 function poolByKey() { if (_poolByKey && _pbkLen === POOL.length) return _poolByKey; const m = new Map(); for (const t of POOL) { const k = dkey(t); if (!m.has(k)) m.set(k, t); } _poolByKey = m; _pbkLen = POOL.length; return m; }
 app.get('/api/curation', (_req, res) => {
+  res.set('Cache-Control', 'no-store');   // décompte toujours frais (jamais servi depuis le cache navigateur après un drop)
   const list = canonActive(), pk = poolByKey();
   const seen = new Set(), rows = [];
   for (const c of list) {
     if (seen.has(c.k)) continue; seen.add(c.k);
     const t = pk.get(c.k);
     const b = DIFF_EXCLUDE.has(c.k) ? 'exc' : (DIFF_LABELS[c.k] || c.band || 'mid');
-    rows.push({ id: t ? t.id : null, k: c.k, a: c.a, t: c.t, b, labeled: !!DIFF_LABELS[c.k], c: t ? (t.cover || '') : '', y: t ? (t.year || 0) : 0, dec: c.dec || 'x', g: t ? (t.tags || []) : [], f: t ? (t.feats2 || []) : [], sp: c.sp || '', rank: t ? (t.rank || 0) : 0, preview: t ? '/api/preview/' + t.id : '' });
+    rows.push({ id: t ? t.id : null, k: c.k, a: c.a, t: c.t, b, labeled: !!DIFF_LABELS[c.k], c: (t && t.cover) || c.cov || '', y: (t && t.year) || c.yr || 0, dec: c.dec || 'x', g: t ? (t.tags || []) : [], f: t ? (t.feats2 || []) : [], sp: c.sp || '', spRank: c.spRank || 0, rank: t ? (t.rank || 0) : 0, preview: t ? '/api/preview/' + t.id : '' });
   }
   const counts = { top: 0, high: 0, mid: 0, deep: 0, exc: 0, noaudio: 0 };
   for (const r of rows) { counts[r.b] = (counts[r.b] || 0) + 1; if (!r.preview && !r.sp) counts.noaudio++; }
   res.json({ counts: { ...counts, playable: rows.length, excluded: counts.exc }, rows, excluded: [] });
+});
+// Top morceaux d'un artiste, classés par POPULARITÉ (≈ streams) via l'embed artiste — sans token. On récupère l'id de
+// l'artiste depuis l'embed d'un de ses titres (entity.artists = [{name, uri:spotify:artist:ID}]).
+app.get('/api/curation/artist-top', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const name = String((req.query && req.query.name) || '');
+    const trackId = String((req.query && req.query.track) || '');
+    if (!/^[a-zA-Z0-9]{22}$/.test(trackId)) return res.status(400).json({ error: 'track invalide' });
+    const NEXT = (h) => { const m = h.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]+?)<\/script>/); if (!m) return null; try { return JSON.parse(m[1])?.props?.pageProps?.state?.data?.entity; } catch { return null; } };
+    const UA = { headers: { 'User-Agent': 'Mozilla/5.0' } };
+    // 1) id de l'artiste cliqué depuis l'embed du titre
+    const tEnt = NEXT(await (await fetch('https://open.spotify.com/embed/track/' + trackId, UA)).text());
+    const arts = (tEnt && tEnt.artists) || [];
+    const want = dnorm(name);
+    const a = arts.find((x) => dnorm(x.name) === want) || arts[0];
+    const aid = (((a && a.uri) || '').match(/spotify:artist:([a-zA-Z0-9]{22})/) || [])[1];
+    if (!aid) return res.json({ ok: false, error: 'artiste introuvable' });
+    // 2) top tracks depuis l'embed artiste (déjà classé par popularité)
+    const aEnt = NEXT(await (await fetch('https://open.spotify.com/embed/artist/' + aid, UA)).text()) || {};
+    const top = ((aEnt.trackList) || []).map((t) => {
+      const spId = ((t.uri || '').match(/spotify:track:([a-zA-Z0-9]{22})/) || [])[1] || '';
+      const parts = (t.subtitle || '').split(',').map((s) => s.trim()).filter(Boolean);
+      const artist = parts.length > 1 ? parts[0] + ' feat. ' + parts.slice(1).join(', ') : (t.subtitle || '');
+      return { title: t.title, artist, subtitle: t.subtitle || '', spId, k: dkey({ artist, title: t.title }) };
+    });
+    res.json({ ok: true, artist: aEnt.name || name, top });
+  } catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
+});
+// Applique un classement de popularité Spotify par titre (rang 1..N dans le top de l'artiste). { ranks: { clé: rang } }.
+// Source de vérité complète : tout spRank absent de la map est effacé (refresh total). Backup .bak + hot-reload.
+app.post('/api/curation/set-ranks', express.json({ limit: '4mb' }), (req, res) => {
+  try {
+    const ranks = (req.body && req.body.ranks) || {};
+    const list = canonActive();
+    let n = 0;
+    for (const c of list) { const r = ranks[c.k]; if (r) { c.spRank = r; n++; } else if (c.spRank) { delete c.spRank; } }
+    const lp = path.join(__dirname, 'canon-active.json');
+    try { fs.copyFileSync(lp, lp + '.bak'); } catch { /* best-effort */ }
+    fs.writeFileSync(lp, JSON.stringify(list));
+    _canonActive = list;
+    res.json({ ok: true, ranked: n, total: list.length });
+  } catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
+});
+// Pose une pochette (et l'année si dispo) par titre, récupérée depuis l'embed Spotify. { covers: { clé: { cov, yr } } }.
+app.post('/api/curation/set-covers', express.json({ limit: '12mb' }), (req, res) => {
+  try {
+    const covers = (req.body && req.body.covers) || {};
+    const list = canonActive();
+    let n = 0;
+    for (const c of list) { const v = covers[c.k]; if (v) { if (v.cov) { c.cov = v.cov; n++; } if (v.yr) c.yr = v.yr; } }
+    const lp = path.join(__dirname, 'canon-active.json');
+    try { fs.copyFileSync(lp, lp + '.bak'); } catch { /* best-effort */ }
+    fs.writeFileSync(lp, JSON.stringify(list));
+    _canonActive = list;
+    res.json({ ok: true, covered: n, total: list.length });
+  } catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
 });
 // ── Applique les reclassements du tool DIRECTEMENT sur disque + hot-reload (plus besoin de redémarrer le serveur).
 // body: { labels:{clé→'top'|'high'|'mid'|'deep'}, exclude:[clés], unexclude:[clés] }. Backup .bak avant écriture.
@@ -1797,13 +1855,13 @@ function mergeCanonTracks(tracks) {
   const list = canonActive();
   const byKey = new Map(list.map((c) => [c.k, c]));
   const decY = (y) => !y ? 'x' : y < 2000 ? '90' : y < 2010 ? '00' : y < 2020 ? '10' : '20';
-  let added = 0, updated = 0;
+  let added = 0, updated = 0, spAdded = 0;
   for (const t of tracks) {
     if (!t || !t.artist || !t.title || !VALID.has(t.band)) continue;
     const k = dkey({ artist: t.artist, title: t.title });
     if (!k || k === '|') continue;
-    if (byKey.has(k)) { const c = byKey.get(k); if (DIFF_LABELS[k] !== t.band) updated++; c.band = t.band; if (t.year) c.dec = decY(t.year); if (t.spId) c.sp = t.spId; }
-    else { const c = { k, a: t.artist, t: t.title, dec: decY(t.year || 0), band: t.band }; if (t.spId) c.sp = t.spId; list.push(c); byKey.set(k, c); added++; }
+    if (byKey.has(k)) { const c = byKey.get(k); if (DIFF_LABELS[k] !== t.band) updated++; if (t.spId && !c.sp) spAdded++; c.band = t.band; if (t.year) { c.dec = decY(t.year); c.yr = t.year; } if (t.spId) c.sp = t.spId; if (t.cover) c.cov = t.cover; }
+    else { const c = { k, a: t.artist, t: t.title, dec: decY(t.year || 0), band: t.band }; if (t.spId) c.sp = t.spId; if (t.cover) c.cov = t.cover; if (t.year) c.yr = t.year; list.push(c); byKey.set(k, c); added++; }
     DIFF_LABELS[k] = t.band;
   }
   const lp = path.join(__dirname, 'canon-active.json'), dp = path.join(__dirname, 'difficulty-labels.json');
@@ -1811,7 +1869,7 @@ function mergeCanonTracks(tracks) {
   fs.writeFileSync(lp, JSON.stringify(list));
   fs.writeFileSync(dp, JSON.stringify(DIFF_LABELS));
   _canonActive = list; _bandCache = null; _bandLen = -1;
-  return { added, updated, total: list.length };
+  return { added, updated, spAdded, total: list.length };
 }
 app.post('/api/curation/import', express.json({ limit: '4mb' }), (req, res) => {
   try { res.json({ ok: true, ...mergeCanonTracks((req.body && req.body.tracks) || []) }); }
@@ -1838,7 +1896,9 @@ app.post('/api/curation/drop-spotify', express.json({ limit: '32kb' }), async (r
         const arts = [];
         if (artArr) { const re = /"name":"((?:[^"\\]|\\.)*)"/g; let m; while ((m = re.exec(artArr[1]))) arts.push(unesc(m[1])); }
         const artist = arts.length ? (arts[0] + (arts.length > 1 ? ' feat. ' + arts.slice(1).join(', ') : '')) : '';
-        if (title && artist) tracks.push({ artist, title, band, spId: id });
+        const cm = html.match(/https:\/\/[a-z0-9-]*\.?(?:scdn\.co|spotifycdn\.com)\/image\/[a-zA-Z0-9]+/i);   // pochette depuis l'embed → posée direct au drop
+        const ym = html.match(/"releaseDate":\{"isoString":"(\d{4})/);
+        if (title && artist) tracks.push({ artist, title, band, spId: id, cover: cm ? cm[0] : '', year: ym ? +ym[1] : 0 });
       } catch { /* skip */ }
     }
     if (!tracks.length) return res.json({ ok: false, error: 'titre Spotify illisible' });

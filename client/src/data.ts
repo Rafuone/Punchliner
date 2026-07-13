@@ -116,7 +116,7 @@ export const avatarById = (id?: string | null): Avatar | undefined => AVATARS.fi
 // Le vrai déblocage (persistance + alerte « nouveau challenger » en fin de partie) viendra après.
 export type LockedSlot = { id: string; objective: string };
 export const LOCKED_SLOTS: LockedSlot[] = [
-  { id: 'lock1', objective: 'Décroche le Disque de Diamant sur une seule manche, en difficulté RobMaïzi.' },
+  { id: 'lock1', objective: 'Décroche le Disque de Diamant sur une seule manche, en difficulté Puriste.' },
   { id: 'lock2', objective: 'Termine une partie avec moins de 1 000 auditeurs. Le vrai fond du sac.' },
   { id: 'lock3', objective: 'Gagne 3 parties d’affilée dans la même série.' },
   { id: 'lock4', objective: 'Sois le premier à trouver sur 5 manches d’une même partie.' },
@@ -138,8 +138,8 @@ export const UNLOCKS: { id: string; objective: string; check: (c: UnlockCtx) => 
   { id: 'diams', objective: 'Termine une partie de Blind Test.', check: (c) => c.mode === 'multi' },
   { id: 'caballerojeanjass', objective: 'Termine une partie de Quiz.', check: (c) => c.mode === 'quiz' },
   { id: 'lino', objective: 'Termine une partie en mode Buzzer.', check: (c) => c.mode === 'buzzer' },
-  { id: 'freezecorleone', objective: 'Termine une partie en difficulté RobMaïzi.', check: (c) => c.difficulty === 'puriste' },
-  { id: 'disiz', objective: 'Termine une partie en Grand public (facile).', check: (c) => c.difficulty === 'facile' },
+  { id: 'freezecorleone', objective: 'Termine une partie en difficulté Puriste.', check: (c) => c.difficulty === 'puriste' },
+  { id: 'disiz', objective: 'Termine une partie en Mainstream (facile).', check: (c) => c.difficulty === 'facile' },
 ];
 export const unlockObjective = (id: string) => UNLOCKS.find((u) => u.id === id)?.objective || 'À débloquer.';
 
@@ -221,9 +221,9 @@ export const THEME_ARTISTS: Record<string, string[]> = {
 };
 
 export const DIFFICULTIES = [
-  { key: 'facile', label: 'Grand public', desc: 'Les gros hits — jouable même sans être calé en rap' },
+  { key: 'facile', label: 'Mainstream', desc: 'Les gros hits — jouable même sans être calé en rap' },
   { key: 'normal', label: 'Connaisseur', desc: 'Atteignable, mais pas donné' },
-  { key: 'puriste', label: 'RobMaïzi', desc: 'Digger + underground — pour les vrais' },
+  { key: 'puriste', label: 'Puriste', desc: 'Digger + underground — pour les vrais' },
 ];
 
 export const MODES = [
