@@ -24,3 +24,9 @@ server/.spotify-secret
 
 # backups auto de la curation (créés par mergeCanonTracks/mergeAttach) — runtime, pas versionnés
 server/*.json.bak
+
+# gimmicks (feature parkée) : sources + clips = données locales, PAS versionnées ; les OUTILS (clip.html,
+# gimmicks.html, endpoints) sont versionnés eux.
+client/public/_g/
+client/public/sfx/gimmicks/
+server/gimmick-clips.json

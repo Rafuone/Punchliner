@@ -1,0 +1,103 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PUNCHLINR — Gimmicks : contrôle</title>
+<style>
+  :root{--bg:#0d0e10;--panel:#15171b;--panel2:#191c21;--line:#262a31;--ink:#f2f3ef;--muted:#8b9299;--lime:#a6ff00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:22px clamp(12px,4vw,36px) 60px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:22px;margin:0}h1 b{color:var(--lime)}
+  .sub{color:var(--muted);font-size:13px;margin:2px 0 16px}
+  .top{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:6px}
+  .prog{display:flex;align-items:center;gap:10px;flex:1;min-width:220px}
+  .bar{flex:1;height:8px;border-radius:99px;background:var(--panel);border:1px solid var(--line);overflow:hidden}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#7bbd00,var(--lime));transition:width .35s}
+  .pc{font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted)}.pc b{color:var(--lime)}
+  .btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 13px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+  .btn:hover{border-color:#5a616b}.btn.go{background:var(--lime);color:#0b0b0b;border-color:var(--lime)}
+  .cat{margin:22px 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:800;border-bottom:1px solid var(--line);padding-bottom:6px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+  .card{display:flex;align-items:center;gap:11px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:10px 12px}
+  .card.done{cursor:pointer}
+  .card.done:hover{border-color:#3a4553;background:var(--panel2)}
+  .card.playing{border-color:var(--lime);background:#1a2010}
+  .play{width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:13px;border:1px solid #46561d;background:#1a2010;color:var(--lime);padding-left:2px}
+  .card.playing .play{background:var(--lime);color:#0b0b0b;border-color:var(--lime);animation:pulse 1s ease-in-out infinite}
+  .card.todo .play{border-color:var(--line);background:var(--panel2);color:#4a4f57}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(166,255,0,.5)}50%{box-shadow:0 0 0 7px rgba(166,255,0,0)}}
+  .meta{min-width:0;flex:1}
+  .nm{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .st{font-size:11px;color:var(--muted)}.card.done .st{color:var(--lime)}
+  .st.ok{color:var(--lime)} .st.mid{color:#ffb02e} .st.low{color:#ff5470}
+  .card.weak{border-color:#5a2230;background:#1c1113}
+  .card.weak .play{border-color:#5a2230;background:#1c1113;color:#ff5470}
+  .redo{font-size:11px;color:var(--muted);text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:3px 7px;flex:none}
+  .redo:hover{border-color:var(--lime);color:var(--lime)}
+  .hint{font-size:12px;color:var(--muted)}
+  .hint code{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+</style></head><body>
+<div class="wrap">
+  <h1><b>🎤</b> Gimmicks — contrôle</h1>
+  <div class="sub">Écoute tous les gimmicks exportés, repère ce qui reste. Clique une carte « faite » pour l'entendre.</div>
+  <div class="top">
+    <div class="prog"><div class="bar"><i id="fill"></i></div><div class="pc"><b id="doneN">0</b>/<span id="totN">0</span></div></div>
+    <button class="btn go" id="playAll">▶ Tout écouter</button>
+    <button class="btn" id="refresh">↻ Rafraîchir</button>
+    <a class="btn" href="/clip.html">✂ Découpeur</a>
+  </div>
+  <div id="body"></div>
+  <p class="hint" style="margin-top:22px">Astuce : après avoir exporté un son dans le <a href="/clip.html" style="color:var(--lime)">découpeur</a>, reviens ici et <b>↻ Rafraîchir</b>. Fichiers dans <code>client/public/sfx/gimmicks/&lt;id&gt;.mp3</code>.</p>
+</div>
+<audio id="au"></audio>
+<script>
+const ROSTER=[
+ {id:"booba",name:"Booba",cat:"Légende"},{id:"iam",name:"IAM",cat:"Légende"},{id:"ntm",name:"Suprême NTM",cat:"Légende"},
+ {id:"jul",name:"Jul",cat:"Mainstream"},{id:"gims",name:"Gims",cat:"Mainstream"},{id:"rohff",name:"Rohff",cat:"Mainstream"},{id:"lafouine",name:"La Fouine",cat:"Mainstream"},{id:"diams",name:"Diam's",cat:"Mainstream"},
+ {id:"pnl",name:"PNL",cat:"Rap game"},{id:"vald",name:"Vald",cat:"Rap game"},{id:"ninho",name:"Ninho",cat:"Rap game"},{id:"sch",name:"SCH",cat:"Rap game"},{id:"plk",name:"PLK",cat:"Rap game"},{id:"damso",name:"Damso",cat:"Rap game"},
+ {id:"alphawann",name:"Alpha Wann",cat:"Plume"},{id:"nekfeu",name:"Nekfeu",cat:"Plume"},{id:"oxmo",name:"Oxmo Puccino",cat:"Plume"},{id:"orelsan",name:"Orelsan",cat:"Plume"},{id:"fabe",name:"Fabe",cat:"Plume"},{id:"solaar",name:"MC Solaar",cat:"Plume"},{id:"lino",name:"Lino",cat:"Plume"},
+ {id:"kery",name:"Kery James",cat:"Conscient"},{id:"medine",name:"Médine",cat:"Conscient"},{id:"youssoupha",name:"Youssoupha",cat:"Conscient"},{id:"disiz",name:"Disiz",cat:"Conscient"},
+ {id:"gazo",name:"Gazo",cat:"Drill"},{id:"kaaris",name:"Kaaris",cat:"Drill"},{id:"freezecorleone",name:"Freeze Corleone",cat:"Drill"},
+ {id:"laylow",name:"Laylow",cat:"Alternative"},{id:"jewelusain",name:"Jewel Usain",cat:"Alternative"},{id:"robinkevin",name:"Robin & Kevin",cat:"Alternative"},{id:"caballerojeanjass",name:"Caballero & JeanJass",cat:"Alternative"},
+ {id:"bouss",name:"Bouss",cat:"Rookies"},{id:"huntrill",name:"Huntrill",cat:"Rookies"},{id:"jolagreen23",name:"Jolagreen23",cat:"Rookies"},{id:"junglejack",name:"Jungle Jack",cat:"Rookies"},{id:"lafeve",name:"La Fève",cat:"Rookies"},{id:"okis",name:"Okis",cat:"Rookies"},
+ {id:"bishok",name:"Bishok",cat:"Génies incompris"},{id:"bilaldu92",name:"Bilal du 92",cat:"Génies incompris"},{id:"alexdu76",name:"Alex du 76",cat:"Génies incompris"},{id:"kortex",name:"Cortex",cat:"Génies incompris"}
+];
+const CATS=["Légende","Mainstream","Rap game","Plume","Conscient","Drill","Alternative","Rookies","Génies incompris"];
+const $=id=>document.getElementById(id), au=$('au');
+let doneMap=new Map(), curCard=null;
+function stop(){ try{au.pause()}catch(e){} if(curCard){curCard.classList.remove('playing');curCard=null;} }
+au.addEventListener('ended',stop);
+function playCard(card,id){ if(curCard===card){stop();return;} stop(); au.src='/sfx/gimmicks/'+id+'.mp3?t='+Date.now(); au.play().catch(()=>{}); card.classList.add('playing'); curCard=card; }
+function lvlInfo(mean){ if(mean==null) return {cls:'',txt:'✓ fait — clic pour écouter'};
+  if(mean>-30) return {cls:'ok',txt:'✓ '+mean.toFixed(0)+' dB · clic pour écouter'};
+  if(mean>-37) return {cls:'mid',txt:'⚠ '+mean.toFixed(0)+' dB · un peu faible'};
+  return {cls:'low',txt:'⚠ '+mean.toFixed(0)+' dB · TROP FAIBLE, à refaire'}; }
+function render(){
+  $('totN').textContent=ROSTER.length; $('doneN').textContent=doneMap.size;
+  $('fill').style.width=Math.round(doneMap.size/ROSTER.length*100)+'%';
+  let html='';
+  for(const c of CATS){
+    const list=ROSTER.filter(r=>r.cat===c); if(!list.length) continue;
+    const n=list.filter(r=>doneMap.has(r.id)).length;
+    html+='<div class="cat">'+c+' · '+n+'/'+list.length+'</div><div class="grid">';
+    for(const r of list){ const done=doneMap.has(r.id); const li=done?lvlInfo(doneMap.get(r.id)):{cls:'',txt:'à faire'};
+      html+='<div class="card '+(done?'done':'todo')+(li.cls==='low'?' weak':'')+'" data-id="'+r.id+'">'+
+        '<div class="play">'+(done?'▶':'♪')+'</div>'+
+        '<div class="meta"><div class="nm">'+r.name+'</div><div class="st '+li.cls+'">'+li.txt+'</div></div>'+
+        '<a class="redo" href="/clip.html?id='+r.id+'" title="Éditer ce gimmick (source + sélection rechargées)">'+(done?'✏ éditer':'＋ créer')+'</a></div>';
+    }
+    html+='</div>';
+  }
+  $('body').innerHTML=html;
+  $('body').querySelectorAll('.card.done').forEach(card=>card.addEventListener('click',e=>{ if(e.target.closest('.redo'))return; playCard(card,card.dataset.id); }));
+}
+async function load(){ try{ const r=await fetch('/api/clip/gimmicks',{cache:'no-store'}).then(r=>r.json()); const g=(r&&r.gimmicks)||[]; doneMap=new Map(g.map(x=>[x.id,x.mean])); }catch(e){} render(); }
+$('refresh').addEventListener('click',load);
+window.addEventListener('focus',load);
+$('playAll').addEventListener('click',()=>{
+  const cards=[...$('body').querySelectorAll('.card.done')]; if(!cards.length)return; let i=0;
+  stop();
+  function next(){ if(i>=cards.length){au.removeEventListener('ended',next);au.addEventListener('ended',stop);stop();return;} const c=cards[i++]; playCard(c,c.dataset.id); }
+  au.removeEventListener('ended',stop); au.addEventListener('ended',next); next();
+});
+load();
+</script>
+</body></html>

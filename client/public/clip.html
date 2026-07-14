@@ -1,0 +1,232 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PUNCHLINR — Découpeur de gimmicks</title>
+<style>
+  :root{--bg:#0d0e10;--panel:#15171b;--panel2:#191c21;--line:#262a31;--ink:#f2f3ef;--muted:#8b9299;--lime:#a6ff00;--wave:#3a4550;--sel:rgba(166,255,0,.16)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:22px clamp(12px,4vw,36px) 60px}
+  .wrap{max-width:980px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 2px}h1 b{color:var(--lime)}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+  select,input,button{font:inherit}
+  select,.txt{background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 11px;font-size:13px}
+  .btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer}
+  .btn:hover{border-color:#5a616b}
+  .btn.go{background:var(--lime);color:#0b0b0b;border-color:var(--lime)}
+  .btn.go:hover{filter:brightness(1.08)} .btn.go:disabled{opacity:.4;cursor:default;filter:none}
+  .btn.play{min-width:120px}
+  .stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .wavebox{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:8px;overflow:hidden;touch-action:none}
+  canvas{display:block;width:100%;height:180px;cursor:crosshair}
+  .zoombar{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .zoombar .sp{margin-left:auto}
+  .hint{font-size:11.5px;color:var(--muted)}
+  .hint kbd{background:#22252b;border:1px solid #3a3f47;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font:600 11px ui-monospace;color:#cfd3d8}
+  .ctrls{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-top:14px}
+  .fld{display:flex;flex-direction:column;gap:4px}
+  .fld label{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700}
+  .num{display:flex;align-items:center;gap:4px}
+  .num input{width:82px;text-align:center;font-variant-numeric:tabular-nums}
+  .nudge{background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--ink);width:26px;height:30px;cursor:pointer;font-size:12px;font-weight:700}
+  .nudge:hover{border-color:var(--lime);color:var(--lime)}
+  .durbadge{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;padding:6px 10px;border-radius:7px;background:var(--panel2);border:1px solid var(--line)}
+  .durbadge.long{color:#ffb02e;border-color:#5a4a1e}
+  .out{display:flex;gap:10px;align-items:flex-end;margin-top:16px;flex-wrap:wrap}
+  .out .txt{width:150px}
+  .voicetg{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);cursor:pointer;user-select:none;padding-bottom:4px}
+  .voicetg input{width:17px;height:17px;accent-color:var(--lime);cursor:pointer;margin:0}
+  .voicetg .hint{color:var(--muted)}
+  #result{margin-top:14px;display:none;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--lime);border-radius:9px;padding:12px 14px}
+  #result.on{display:block}
+  #result audio{width:100%;margin-top:8px}
+  #result .path{font-family:ui-monospace,monospace;font-size:12px;color:var(--lime)}
+  .empty{color:var(--muted);text-align:center;padding:40px 10px;font-size:14px}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(160%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:9px;font-weight:700;font-size:13px;transition:transform .2s;z-index:9}
+  .toast.on{transform:translateX(-50%) translateY(0)}
+</style></head><body>
+<div class="wrap">
+  <h1><b>✂</b> Découpeur de gimmicks</h1>
+  <div class="sub">Dépose un morceau dans <b>client/public/_g/</b>, choisis-le, cale la sélection au centième, écoute en boucle, exporte en mp3.</div>
+
+  <div class="bar">
+    <select id="file"></select>
+    <button class="btn" id="reload" title="Rafraîchir la liste">↻</button>
+    <span class="hint">déposer les morceaux dans <code>client/public/_g/</code></span>
+  </div>
+
+  <div class="stage" id="stage" style="display:none">
+    <div class="wavebox"><canvas id="wave"></canvas></div>
+    <div class="zoombar">
+      <button class="btn" id="zsel">Zoom sur la sélection</button>
+      <button class="btn" id="zall">Tout voir</button>
+      <button class="btn" id="zin">＋</button>
+      <button class="btn" id="zout">－</button>
+      <span class="hint sp"><kbd>Espace</kbd> écouter la sélection · <kbd>[</kbd> début ici · <kbd>]</kbd> fin ici · molette = zoom</span>
+    </div>
+
+    <div class="ctrls">
+      <button class="btn go play" id="play">▶ Écouter (brut)</button>
+      <button class="btn play" id="prevVoice" title="Sépare la voix sur ta sélection (Demucs) et te la joue — ~10 s">🎙 Aperçu voix seule</button>
+      <div class="fld"><label>Début (s)</label><div class="num"><button class="nudge" data-t="s" data-d="-0.05">◄</button><input class="txt" id="ins" type="number" step="0.01" min="0"><button class="nudge" data-t="s" data-d="0.05">►</button></div></div>
+      <div class="fld"><label>Fin (s)</label><div class="num"><button class="nudge" data-t="e" data-d="-0.05">◄</button><input class="txt" id="ine" type="number" step="0.01" min="0"><button class="nudge" data-t="e" data-d="0.05">►</button></div></div>
+      <div class="fld"><label>Durée</label><span class="durbadge" id="dur">—</span></div>
+    </div>
+
+    <div class="out">
+      <div class="fld"><label>Nom du fichier (id perso)</label><input class="txt" id="out" placeholder="ex. booba" value="booba"></div>
+      <label class="voicetg"><input type="checkbox" id="voice" checked> <span>🎙 Voix seule</span> <span class="hint">(Demucs — retire l'instru, ~15 s)</span></label>
+      <button class="btn go" id="exp">Exporter → sfx/gimmicks/</button>
+    </div>
+
+    <div id="result">
+      <div class="path" id="rpath"></div>
+      <audio id="raudio" controls></audio>
+    </div>
+  </div>
+
+  <div class="empty" id="empty">Choisis un morceau ci-dessus pour commencer.</div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+let ctx, buffer, ch, SR, DUR=0;
+let view={s:0,e:0}, sel={s:0,e:0};
+let peaks=null, playing=false, srcNode=null, ctxStart=0, posStart=0, raf=0;
+const cv=$('wave'), g=cv.getContext('2d');
+let toastT; function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),2400)}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmt=v=>v.toFixed(2);
+
+async function listFiles(){
+  const r=await fetch('/api/clip/files',{cache:'no-store'}).then(r=>r.json()).catch(()=>null);
+  const sel=$('file'); sel.innerHTML='<option value="">— choisir un morceau —</option>'+((r&&r.files)||[]).filter(f=>!/^_preview|^booba-(izi|context|abra-30s)/.test(f)).map(f=>`<option>${f}</option>`).join('');
+}
+$('reload').addEventListener('click',listFiles);
+$('file').addEventListener('change',e=>{ if(e.target.value) loadFile(e.target.value); });
+
+async function loadFile(name, presel){
+  $('empty').textContent='chargement…'; $('empty').style.display='block'; $('stage').style.display='none';
+  try{
+    if(!ctx) ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const ab=await fetch('/_g/'+encodeURIComponent(name),{cache:'no-store'}).then(r=>r.arrayBuffer());
+    buffer=await ctx.decodeAudioData(ab);
+    ch=buffer.getChannelData(0); SR=buffer.sampleRate; DUR=buffer.duration;
+    const hasSel = presel && typeof presel.s==='number' && typeof presel.e==='number' && presel.e>presel.s;
+    if(hasSel){ sel={s:presel.s, e:presel.e}; setView(Math.max(0,sel.s-0.7), Math.min(DUR,sel.e+0.7)); }      // sélection restaurée → on zoome dessus
+    else { sel={s:Math.min(1,DUR*0.02), e:Math.min(2.2,DUR*0.02+1.2)}; setView(0, Math.min(DUR,20)); }         // nouveau : vue sur le début (pas la piste entière, sinon sélection ric-rac)
+    if(presel && presel.out) $('out').value=presel.out; else $('out').value=(name.split(' - ')[0]||'clip').toLowerCase().replace(/[^a-z0-9_-]/g,'');
+    if(presel && typeof presel.voice==='boolean') $('voice').checked=presel.voice;
+    $('empty').style.display='none'; $('stage').style.display='block';
+    syncInputs(); resize();
+  }catch(err){ $('empty').textContent='échec du chargement : '+err.message; }
+}
+
+function resize(){ const w=cv.clientWidth, dpr=Math.min(2,window.devicePixelRatio||1); cv.width=Math.round(w*dpr); cv.height=Math.round(180*dpr); g.setTransform(dpr,0,0,dpr,0,0); computePeaks(); draw(); }
+window.addEventListener('resize',()=>{ if(buffer) resize(); });
+
+function setView(s,e){ e=clamp(e,0.05,DUR); s=clamp(s,0,e-0.05); view={s,e}; computePeaks(); draw(); }
+function computePeaks(){
+  if(!buffer) return; const W=cv.clientWidth; const mn=new Float32Array(W), mx=new Float32Array(W);
+  const s0=Math.floor(view.s*SR), s1=Math.floor(view.e*SR), span=Math.max(1,s1-s0);
+  for(let x=0;x<W;x++){ let a=s0+Math.floor(x/W*span), b=s0+Math.floor((x+1)/W*span); if(b<=a)b=a+1; let lo=1,hi=-1;
+    const step=Math.max(1,Math.floor((b-a)/512)); for(let i=a;i<b;i+=step){const v=ch[i]||0; if(v<lo)lo=v; if(v>hi)hi=v;} if(hi<lo){lo=0;hi=0} mn[x]=lo;mx[x]=hi; }
+  peaks={mn,mx,W};
+}
+const t2x=t=>(t-view.s)/(view.e-view.s)*cv.clientWidth;
+const x2t=x=>view.s + x/cv.clientWidth*(view.e-view.s);
+function draw(){
+  if(!peaks) return; const W=cv.clientWidth,H=180,mid=H/2;
+  g.clearRect(0,0,W,H);
+  const sx=t2x(sel.s),ex=t2x(sel.e);
+  g.fillStyle='var(--sel)'; g.fillStyle='rgba(166,255,0,.14)'; g.fillRect(sx,0,ex-sx,H);
+  g.fillStyle='#3a4550';
+  for(let x=0;x<W;x++){ const inSel=x>=sx&&x<=ex; g.fillStyle=inSel?'#9fce3a':'#3a4550'; const y1=mid-peaks.mx[x]*mid*0.94, y2=mid-peaks.mn[x]*mid*0.94; g.fillRect(x,y1,1,Math.max(1,y2-y1)); }
+  g.strokeStyle='#a6ff00'; g.lineWidth=2; g.beginPath(); g.moveTo(sx+.5,0);g.lineTo(sx+.5,H); g.moveTo(ex+.5,0);g.lineTo(ex+.5,H); g.stroke();
+  g.fillStyle='#a6ff00'; g.fillRect(sx-2,0,4,7); g.fillRect(sx-2,H-7,4,7); g.fillRect(ex-2,0,4,7); g.fillRect(ex-2,H-7,4,7);
+  if(playing){ const px=t2x(playPos()); g.strokeStyle='#fff'; g.lineWidth=1; g.beginPath();g.moveTo(px+.5,0);g.lineTo(px+.5,H);g.stroke(); }
+}
+
+// ── lecture en boucle de la sélection ──
+function playPos(){ if(!playing) return sel.s; const t=posStart+(ctx.currentTime-ctxStart); const len=Math.max(0.01,sel.e-sel.s); return sel.s+(((t-sel.s)%len)+len)%len; }
+function stopPlay(){ if(srcNode){try{srcNode.stop()}catch(e){} try{srcNode.disconnect()}catch(e){} srcNode=null;} playing=false; cancelAnimationFrame(raf); $('play').textContent='▶ Écouter'; draw(); }
+function startPlay(){ if(!buffer) return; stopPlay(); if(ctx.state==='suspended')ctx.resume(); srcNode=ctx.createBufferSource(); srcNode.buffer=buffer; srcNode.loop=true; srcNode.loopStart=sel.s; srcNode.loopEnd=sel.e; srcNode.connect(ctx.destination); ctxStart=ctx.currentTime; posStart=sel.s; srcNode.start(0,sel.s); playing=true; $('play').textContent='■ Stop'; loop(); }
+function loop(){ draw(); raf=requestAnimationFrame(loop); }
+$('play').addEventListener('click',()=>playing?stopPlay():startPlay());
+const prevAu=new Audio();
+$('prevVoice').addEventListener('click',async()=>{
+  const file=$('file').value; if(!file){toast('Choisis un morceau');return;}
+  stopPlay(); $('prevVoice').disabled=true; $('prevVoice').textContent='🎙 séparation…';
+  const r=await fetch('/api/clip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file,start:sel.s,end:sel.e,voice:true,preview:true})}).then(r=>r.json()).catch(()=>null);
+  $('prevVoice').disabled=false; $('prevVoice').textContent='🎙 Aperçu voix seule';
+  if(r&&r.ok){ prevAu.src=r.url; prevAu.play().catch(()=>{}); toast(r.silent?'⚠ quasi silencieux — décale la sélection':'aperçu voix'+(r.level&&r.level.inLufs!=null?' (source '+r.level.inLufs+' LUFS)':'')); }
+  else toast('Aperçu: '+((r&&r.error)||'échec'));
+});
+function refreshLoop(){ if(playing&&srcNode){ srcNode.loopStart=sel.s; srcNode.loopEnd=sel.e; } }
+
+function syncInputs(){ $('ins').value=fmt(sel.s); $('ine').value=fmt(sel.e); const d=sel.e-sel.s; const b=$('dur'); b.textContent=d.toFixed(2)+' s'; b.classList.toggle('long',d>1.05); }
+function setSel(s,e,keepView){ sel.s=clamp(s,0,DUR); sel.e=clamp(e,sel.s+0.02,DUR); syncInputs(); refreshLoop(); if(!keepView) draw(); else draw(); }
+$('ins').addEventListener('input',()=>setSel(parseFloat($('ins').value)||0, sel.e));
+$('ine').addEventListener('input',()=>setSel(sel.s, parseFloat($('ine').value)||0));
+document.querySelectorAll('.nudge').forEach(b=>b.addEventListener('click',()=>{ const d=parseFloat(b.dataset.d); if(b.dataset.t==='s')setSel(sel.s+d,sel.e); else setSel(sel.s,sel.e+d); }));
+
+// ── zoom ──
+$('zsel').addEventListener('click',()=>setView(sel.s-0.4,sel.e+0.4));
+$('zall').addEventListener('click',()=>setView(0,DUR));
+$('zin').addEventListener('click',()=>zoomAt((view.s+view.e)/2,0.6));
+$('zout').addEventListener('click',()=>zoomAt((view.s+view.e)/2,1.7));
+function zoomAt(t,f){ const span=(view.e-view.s)*f; const ns=clamp(t-(t-view.s)*f,0,DUR), ne=ns+Math.min(span,DUR); setView(ns,Math.min(ne,DUR)); }
+cv.addEventListener('wheel',e=>{ e.preventDefault(); zoomAt(x2t(e.offsetX), e.deltaY>0?1.18:0.85); },{passive:false});
+
+// ── souris : sélection + poignées ──
+let drag=null, dragOff=0;
+cv.addEventListener('pointerdown',e=>{ cv.setPointerCapture(e.pointerId); const x=e.offsetX, t=x2t(x), hx=8;
+  if(Math.abs(x-t2x(sel.s))<hx) drag='s'; else if(Math.abs(x-t2x(sel.e))<hx) drag='e';
+  else if(t>sel.s&&t<sel.e){ drag='move'; dragOff=t-sel.s; } else { drag='new'; setSel(t,t+0.02); }
+});
+cv.addEventListener('pointermove',e=>{ if(!drag) return; const t=x2t(e.offsetX);
+  if(drag==='s') setSel(Math.min(t,sel.e-0.02),sel.e,true);
+  else if(drag==='e') setSel(sel.s,Math.max(t,sel.s+0.02),true);
+  else if(drag==='new') setSel(Math.min(sel.s,t),Math.max(sel.s,t),true);
+  else if(drag==='move'){ const len=sel.e-sel.s; let ns=clamp(t-dragOff,0,DUR-len); setSel(ns,ns+len,true); }
+});
+cv.addEventListener('pointerup',()=>drag=null);
+
+// ── clavier ──
+document.addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT') return;
+  if(e.code==='Space'){ e.preventDefault(); playing?stopPlay():startPlay(); }
+  else if(e.key==='['){ setSel(playPos(),sel.e); }
+  else if(e.key===']'){ setSel(sel.s,playPos()); }
+  else if(e.key==='ArrowLeft'){ setSel(sel.s-(e.shiftKey?0.01:0.05),sel.e); }
+  else if(e.key==='ArrowRight'){ setSel(sel.s,sel.e+(e.shiftKey?0.01:0.05)); }
+});
+
+// ── export ──
+$('exp').addEventListener('click',async()=>{
+  const file=$('file').value; if(!file){ toast('Choisis un morceau'); return; }
+  const out=($('out').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,''))||'clip';
+  const voice=$('voice').checked;
+  $('exp').disabled=true; $('exp').textContent=voice?'🎙 séparation de la voix…':'…';
+  const r=await fetch('/api/clip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file,start:sel.s,end:sel.e,out,voice})}).then(r=>r.json()).catch(()=>null);
+  $('exp').disabled=false; $('exp').textContent='Exporter → sfx/gimmicks/';
+  if(r&&r.ok){
+    $('result').classList.add('on');
+    const lv=r.level?('  ·  normalisé à '+r.level.target+' LUFS'+(r.level.inLufs!=null?' (source '+r.level.inLufs+')':'')):'';
+    $('rpath').innerHTML=(r.silent?'<span style="color:#ff5470">⚠ QUASI SILENCIEUX — décale ta sélection sur le son</span><br>':'')+'✓ '+r.saved+(r.voice?'  ·  voix isolée':'  ·  clip brut')+lv;
+    $('raudio').src=r.url; $('raudio').play().catch(()=>{});
+    toast(r.silent?'⚠ Sélection quasi silencieuse !':('✓ exporté'+(r.voice?' (voix seule)':'')+' — '+r.dur.toFixed(2)+' s'));
+  } else toast('Échec : '+((r&&r.error)||'ffmpeg'));
+});
+
+// init : si ?id=<rappeur>, recharge sa source + sa sélection pour corriger
+async function init(){
+  await listFiles();
+  const id=new URLSearchParams(location.search).get('id');
+  if(!id) return;
+  $('out').value=id;
+  let params=null;
+  try{ const g=await fetch('/api/clip/gimmicks',{cache:'no-store'}).then(r=>r.json()); const e=(g.gimmicks||[]).find(x=>x.id===id); params=e&&e.params; }catch(e){}
+  if(params && params.file){ $('file').value=params.file; await loadFile(params.file, {s:params.start, e:params.end, out:id, voice:params.voice}); }
+}
+init();
+</script>
+</body></html>

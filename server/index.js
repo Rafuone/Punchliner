@@ -5,6 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { execFile, spawnSync } from 'node:child_process';
 import { Server } from 'socket.io';
 import { SEED_TRACKS, SEED_ARTISTS, ARTIST_TAGS } from './tracks.js';
 import { gradeAnswer, speedMult, normalize, extractFeats } from './match.js';
@@ -1958,6 +1959,101 @@ app.get('/api/curation/suggestions', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   try { let list = []; try { list = JSON.parse(fs.readFileSync(path.join(__dirname, 'fr-rap-artists.json'), 'utf8')); } catch { /* pas encore générée */ } res.json({ ok: true, artists: list }); }
   catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
+});
+// ── Découpeur de gimmicks (outil clip.html) : liste les morceaux déposés dans client/public/_g/ et
+// en clippe un extrait précis via ffmpeg → mp3 dans client/public/sfx/gimmicks/<id>.mp3 (ou aperçu dans _g).
+const GDIR = path.join(__dirname, '..', 'client', 'public', '_g');
+const SFXDIR = path.join(__dirname, '..', 'client', 'public', 'sfx', 'gimmicks');
+const GIM_LUFS = -16, GIM_TP = -1.5;   // cible de loudness commune des gimmicks (EBU R128) → volume perçu identique sur la TV
+// Mémorise les paramètres de découpe de chaque gimmick (source + début/fin + voix) → l'éditeur les recharge pour corriger.
+const CLIPS_FILE = path.join(__dirname, 'gimmick-clips.json');
+let _clips = null;
+function clipsStore() { if (_clips) return _clips; try { _clips = JSON.parse(fs.readFileSync(CLIPS_FILE, 'utf8')); } catch { _clips = {}; } return _clips; }
+function saveClipParams(id, p) { const c = clipsStore(); c[id] = p; try { fs.writeFileSync(CLIPS_FILE, JSON.stringify(c)); } catch { /* disque RO */ } }
+app.get('/api/clip/files', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  let files = []; try { files = fs.readdirSync(GDIR).filter((f) => /\.(mp3|wav|m4a|flac|opus|ogg)$/i.test(f)); } catch { /* dossier absent */ }
+  res.json({ ok: true, files });
+});
+// Gimmicks déjà exportés + leur niveau moyen mesuré (page de contrôle). Cache par mtime → mesure only les nouveaux.
+const _lvlCache = new Map();
+app.get('/api/clip/gimmicks', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const out = [];
+  try {
+    for (const f of fs.readdirSync(SFXDIR).filter((f) => /\.mp3$/i.test(f))) {
+      const id = f.replace(/\.mp3$/i, ''), p = path.join(SFXDIR, f);
+      let mean = null;
+      try {
+        const st = fs.statSync(p), key = f + ':' + st.mtimeMs;
+        if (_lvlCache.has(key)) mean = _lvlCache.get(key);
+        else { const r = spawnSync('ffmpeg', ['-hide_banner', '-i', p, '-af', 'volumedetect', '-f', 'null', '-'], { encoding: 'utf8' }); const m = ((r.stderr || '') + (r.stdout || '')).match(/mean_volume:\s*(-?\d+\.?\d*) dB/); mean = m ? +m[1] : null; _lvlCache.set(key, mean); }
+      } catch { /* mesure KO */ }
+      out.push({ id, mean, params: clipsStore()[id] || null });
+    }
+  } catch { /* dossier absent */ }
+  res.json({ ok: true, gimmicks: out, ids: out.map((o) => o.id) });
+});
+app.post('/api/clip', express.json({ limit: '8kb' }), (req, res) => {
+  const b = req.body || {};
+  const file = String(b.file || '').replace(/[\/\\]/g, '');                 // pas de traversée de dossier
+  const start = Math.max(0, +b.start || 0);
+  const dur = Math.max(0.03, Math.min(30, (+b.end || 0) - start));
+  const preview = !!b.preview, voice = !!b.voice;                           // voice = isole la voix (Demucs)
+  const out = (String(b.out || 'clip').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'clip');
+  const src = path.join(GDIR, file);
+  if (!file || !fs.existsSync(src)) return res.json({ ok: false, error: 'fichier source introuvable dans client/public/_g/' });
+  const outDir = preview ? GDIR : SFXDIR;
+  try { fs.mkdirSync(outDir, { recursive: true }); } catch { /* rien */ }
+  const outName = preview ? '_preview.mp3' : out + '.mp3';
+  const outPath = path.join(outDir, outName);
+  const fadeIn = Math.min(0.01, dur / 3), fadeMs = Math.min(0.12, dur / 3), fadeOut = Math.max(0, dur - fadeMs);
+  // Découpe finale : (1) clip, (2) loudnorm 2 passes vers une CIBLE DE LOUDNESS COMMUNE (EBU R128) → tous les
+  // gimmicks au même volume PERÇU (pas de surprise sur la TV), (3) fondu + mp3. Renvoie la loudness + flag `silent`.
+  const render = (input, off) => {
+    const tmpc = path.join(os.tmpdir(), 'pl_clip_' + Date.now() + '.wav');
+    execFile('ffmpeg', ['-y', '-loglevel', 'error', '-i', input, '-ss', String(off), '-t', String(dur), '-ac', '2', '-ar', '44100', tmpc], { timeout: 20000 }, (e0) => {
+      if (e0) return res.json({ ok: false, error: 'ffmpeg clip: ' + String((e0.message || e0)).slice(0, 160) });
+      // passe 1 : mesure de loudness (JSON)
+      execFile('ffmpeg', ['-hide_banner', '-i', tmpc, '-af', `loudnorm=I=${GIM_LUFS}:TP=${GIM_TP}:LRA=11:print_format=json`, '-f', 'null', '-'], { timeout: 20000 }, (_e1, so, se) => {
+        const log = String(se || so || '');
+        const jm = log.match(/\{[^{}]*"input_i"[^{}]*\}/);
+        let M = null; try { M = jm ? JSON.parse(jm[0]) : null; } catch { M = null; }
+        const inI = M ? parseFloat(M.input_i) : NaN;
+        const silent = !isFinite(inI) || inI < -45;                                 // rien à isoler / sélection vide
+        const ln = M
+          ? `loudnorm=I=${GIM_LUFS}:TP=${GIM_TP}:LRA=11:measured_I=${M.input_i}:measured_TP=${M.input_tp}:measured_LRA=${M.input_lra}:measured_thresh=${M.input_thresh}:offset=${M.target_offset}:linear=true`
+          : `loudnorm=I=${GIM_LUFS}:TP=${GIM_TP}:LRA=11`;
+        const args = ['-y', '-loglevel', 'error', '-i', tmpc,
+          '-af', `${ln},afade=t=in:st=0:d=${fadeIn.toFixed(3)},afade=t=out:st=${fadeOut.toFixed(3)}:d=${fadeMs.toFixed(3)}`,
+          '-ac', '2', '-ar', '44100', '-b:a', '192k', outPath];
+        execFile('ffmpeg', args, { timeout: 25000 }, (e2) => {
+          try { fs.rmSync(tmpc, { force: true }); } catch { /* rien */ }
+          if (e2) return res.json({ ok: false, error: 'ffmpeg loudnorm: ' + String((e2.message || e2)).slice(0, 160) });
+          if (!preview) saveClipParams(out, { file, start: +start.toFixed(3), end: +(start + dur).toFixed(3), voice });   // mémorise la découpe pour pouvoir la recharger/corriger
+          const rel = (preview ? '/_g/' + outName : '/sfx/gimmicks/' + outName) + '?t=' + Date.now();
+          res.json({ ok: true, url: rel, dur, voice, saved: preview ? null : 'client/public/sfx/gimmicks/' + outName,
+            level: { inLufs: isFinite(inI) ? +inI.toFixed(1) : null, target: GIM_LUFS }, silent });
+        });
+      });
+    });
+  };
+  if (!voice) return render(src, start);   // clip brut (instru comprise)
+  // ── VOIX SEULE : pré-clip avec marge → Demucs (2 stems: vocals) → recadre pile la sélection ──
+  const margin = 0.35, wStart = Math.max(0, start - margin), off = start - wStart, wDur = dur + off + margin;
+  const work = path.join(os.tmpdir(), 'pl_demucs_' + Date.now());
+  try { fs.mkdirSync(work, { recursive: true }); } catch { /* rien */ }
+  const tmp = path.join(work, 'in.wav');
+  execFile('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-ss', String(wStart), '-t', String(wDur), '-ac', '2', '-ar', '44100', tmp], { timeout: 20000 }, (e1) => {
+    if (e1) return res.json({ ok: false, error: 'ffmpeg pré-clip: ' + String((e1.message || e1)).slice(0, 160) });
+    execFile('python', ['-m', 'demucs', '--two-stems=vocals', '-n', 'htdemucs', '-o', work, tmp], { timeout: 300000 }, (e2, _so, se) => {
+      if (e2) return res.json({ ok: false, error: 'demucs: ' + String((se || e2.message || e2)).slice(-220) });
+      const voc = path.join(work, 'htdemucs', 'in', 'vocals.wav');
+      if (!fs.existsSync(voc)) return res.json({ ok: false, error: 'stem « vocals » introuvable après Demucs' });
+      render(voc, off);
+      setTimeout(() => { try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* nettoyage best-effort */ } }, 8000);
+    });
+  });
 });
 // Rattache un id Deezer (audio) + cover/année à des titres DÉJÀ dans la base, par clé, SANS toucher au tier.
 // Sert au backfill des titres « sans audio » qui existent pourtant sur Deezer (résolus par un script offline).
