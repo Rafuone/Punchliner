@@ -696,8 +696,12 @@ async function renderGaps(){
     try{ const r = await fetch('/api/curation/suggestions',{cache:'no-store'}).then(r=>r.json()); _sugg = (r&&r.artists)||[]; }catch(e){ _sugg = []; }
   }
   if(!_sugg.length){ box.innerHTML = '<div class="ad-gaps-msg">Liste de référence pas encore générée.<br>(le recensement des artistes rap FR arrive)</div>'; el('ad-sub').textContent=''; return; }
-  const baseKeys = new Set(adAggregate().map(o=>_dn(o.name)));
-  let miss = _sugg.filter(a=> a && a.name && !baseKeys.has(_dn(a.name)));
+  // croisement tolérant aux variantes de nom (ex. « Gims » dans la base = « Maître Gims » de la liste ; « Disiz » = « Disiz la Peste »)
+  const baseArr = adAggregate().map(o=>_dn(o.name)).filter(Boolean);
+  const baseSet = new Set(baseArr);
+  const inBase = (nm)=>{ const k=_dn(nm); if(!k) return false; if(baseSet.has(k)) return true;
+    return baseArr.some(bk=> bk.length>=4 && (k.includes(bk) || (k.length>=4 && bk.includes(k)))); };
+  let miss = _sugg.filter(a=> a && a.name && !inBase(a.name));
   const q = _adSt.q; if(q) miss = miss.filter(a=> _dn(a.name).includes(q));
   miss.sort((a,b)=> (b.nb_fan||0)-(a.nb_fan||0) || a.name.localeCompare(b.name,'fr'));
   el('ad-sub').textContent = miss.length+' artiste'+(miss.length>1?'s':'')+' rap FR absent'+(miss.length>1?'s':'')+' de ta base';
