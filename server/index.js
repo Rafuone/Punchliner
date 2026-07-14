@@ -1961,24 +1961,59 @@ app.get('/api/curation/suggestions', (_req, res) => {
 });
 // Rattache un id Deezer (audio) + cover/année à des titres DÉJÀ dans la base, par clé, SANS toucher au tier.
 // Sert au backfill des titres « sans audio » qui existent pourtant sur Deezer (résolus par un script offline).
+// mergeAttach : rattache dz/cover/année à des entrées existantes (backfill audio + coller un lien Deezer).
+function mergeAttach(items) {
+  const list = canonActive();
+  const byKey = new Map(list.map((c) => [c.k, c]));
+  const decY = (y) => !y ? 'x' : y < 2000 ? '90' : y < 2010 ? '00' : y < 2020 ? '10' : '20';
+  let n = 0;
+  for (const it of items) {
+    const c = byKey.get(String(it.k || '')); if (!c) continue;
+    if (it.dz) { c.dz = String(it.dz); n++; }
+    if (it.cover && !c.cov) c.cov = String(it.cover);
+    if (it.year && !c.yr) { c.yr = +it.year; c.dec = decY(+it.year); }
+  }
+  const lp = path.join(__dirname, 'canon-active.json');
+  try { fs.copyFileSync(lp, lp + '.bak'); } catch { /* best-effort */ }
+  fs.writeFileSync(lp, JSON.stringify(list));
+  _canonActive = list; _bandCache = null; _bandLen = -1;
+  return { attached: n, total: list.length };
+}
 app.post('/api/curation/attach-deezer', express.json({ limit: '512kb' }), (req, res) => {
+  try { res.json({ ok: true, ...mergeAttach(((req.body && req.body.items) || []).slice(0, 3000)) }); }
+  catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
+});
+// Coller/glisser un LIEN Deezer (deezer.com/track/{id} OU lien de partage link.deezer.com/s/…) → résout le titre,
+// et si le canon a déjà ce titre (souvent « sans audio ») on lui RATTACHE l'audio (tier inchangé) ; sinon on l'ajoute
+// dans la colonne visée. C'est la voie fiable pour les titres absents de la recherche Deezer (deep cuts).
+async function deezerIdFromUrl(url) {
+  let m = String(url).match(/deezer\.com\/(?:[a-z]{2}\/)?track\/(\d+)/i);
+  if (m) return m[1];
+  if (/link\.deezer\.com\/s\//i.test(url)) {                                    // lien de partage → suit la redirection
+    try { const r = await fetch(url, { headers: UA.headers, redirect: 'follow' }); m = String(r.url).match(/track\/(\d+)/); if (m) return m[1]; } catch { /* KO */ }
+  }
+  return '';
+}
+app.post('/api/curation/deezer-link', express.json({ limit: '8kb' }), async (req, res) => {
   try {
-    const items = ((req.body && req.body.items) || []).slice(0, 3000);
-    const list = canonActive();
-    const byKey = new Map(list.map((c) => [c.k, c]));
-    const decY = (y) => !y ? 'x' : y < 2000 ? '90' : y < 2010 ? '00' : y < 2020 ? '10' : '20';
-    let n = 0;
-    for (const it of items) {
-      const c = byKey.get(String(it.k || '')); if (!c) continue;
-      if (it.dz) { c.dz = String(it.dz); n++; }
-      if (it.cover && !c.cov) c.cov = String(it.cover);
-      if (it.year && !c.yr) { c.yr = +it.year; c.dec = decY(+it.year); }
+    const url = String((req.body && req.body.url) || '').trim();
+    const band = String((req.body && req.body.band) || 'top');
+    const id = await deezerIdFromUrl(url);
+    if (!id) return res.json({ ok: false, error: 'lien Deezer non reconnu' });
+    const t = await fetch(`${DZ}/track/${id}`, UA).then((r) => r.json()).catch(() => null);
+    if (!t || !t.title || t.error) return res.json({ ok: false, error: 'titre Deezer introuvable' });
+    const artist = (t.artist && t.artist.name) || '';
+    const title = t.title;
+    const cover = (t.album && (t.album.cover_medium || t.album.cover)) || '';
+    const year = +((t.album && t.album.release_date || '').slice(0, 4)) || 0;
+    const k = dkey({ artist, title });
+    const c = canonActive().find((x) => x.k === k);
+    if (c) {                                                                     // déjà dans le canon → on rattache l'audio, tier inchangé
+      const r = mergeAttach([{ k, dz: id, cover, year }]);
+      return res.json({ ok: true, mode: 'attached', artist, title, band: c.band });
     }
-    const lp = path.join(__dirname, 'canon-active.json');
-    try { fs.copyFileSync(lp, lp + '.bak'); } catch { /* best-effort */ }
-    fs.writeFileSync(lp, JSON.stringify(list));
-    _canonActive = list; _bandCache = null; _bandLen = -1;
-    res.json({ ok: true, attached: n, total: list.length });
+    const out = mergeCanonTracks([{ artist, title, band, dz: id, cover, year }]);  // sinon on l'ajoute
+    res.json({ ok: true, mode: 'added', artist, title, band, ...out });
   } catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
 });
 // Ajout d'un ou plusieurs titres Deezer à la base (stocke l'id Deezer → audio jouable via /api/preview/{id}).

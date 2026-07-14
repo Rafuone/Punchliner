@@ -406,7 +406,10 @@ document.querySelectorAll('.col').forEach(col=>{
     }
     const r = ALL.find(x=>x.k===k);
     if(r){ assignCol(r, col.dataset.c); return; }                       // déplacement interne d'une carte
-    const ids = spotifyTrackIds(allDropText(e.dataTransfer));            // sinon : glisser-déposer depuis Spotify (appli ou web)
+    const txt = allDropText(e.dataTransfer);
+    const dzUrls = deezerUrls(txt);                                     // lien Deezer glissé (deezer.com/track ou lien de partage)
+    if(dzUrls.length && col.dataset.c!=='ex'){ for(const u of dzUrls) await dropDeezerLink(u, COLS[col.dataset.c].band); return; }
+    const ids = spotifyTrackIds(txt);                                   // sinon : glisser-déposer depuis Spotify (appli ou web)
     if(ids.length && col.dataset.c!=='ex') await dropSpotify(ids, COLS[col.dataset.c].band, col.dataset.c);
   });
 });
@@ -429,6 +432,22 @@ async function dropSpotify(ids, band, colId){
     else toast('Drop: '+((res&&res.error)||'échec'), true);
   }catch(e){ toast('Drop: '+e.message, true); }
 }
+// ── Lien Deezer (glissé OU collé) : résout le titre et RATTACHE l'audio au titre muet existant (tier conservé),
+//    sinon l'ajoute dans la colonne. C'est la voie fiable pour les deep cuts que la recherche Deezer ne remonte pas.
+function deezerUrls(txt){ return (String(txt).match(/https?:\/\/(?:www\.)?(?:deezer\.com\/(?:[a-z]{2}\/)?track\/\d+|link\.deezer\.com\/s\/[A-Za-z0-9]+)/gi))||[]; }
+async function dropDeezerLink(url, band){
+  toast('Résolution du lien Deezer…');
+  const res = await fetch('/api/curation/deezer-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,band})}).then(r=>r.json()).catch(()=>null);
+  if(res&&res.ok){ toast((res.mode==='attached'?'♪ audio rattaché — ':'✓ ajouté — ')+res.artist+' — '+res.title); await load(); return true; }
+  toast('Lien Deezer : '+((res&&res.error)||'échec'), true); return false;
+}
+document.addEventListener('paste', async e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+  const txt = (e.clipboardData||window.clipboardData).getData('text')||'';
+  const urls = deezerUrls(txt); if(!urls.length) return;
+  e.preventDefault();
+  for(const u of urls) await dropDeezerLink(u, 'top');   // titre déjà présent → tier conservé côté serveur
+});
 
 // ── clavier : 1/2/3 = GP/Co/RM · 4 ou x = hors pool · espace = play/pause · n = suivant ────────────────
 document.addEventListener('keydown', e=>{
