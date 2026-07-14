@@ -21,3 +21,6 @@ assets/
 
 # secret Spotify (Client Credentials, local only)
 server/.spotify-secret
+
+# backups auto de la curation (créés par mergeCanonTracks/mergeAttach) — runtime, pas versionnés
+server/*.json.bak
