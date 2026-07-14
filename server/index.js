@@ -1721,6 +1721,7 @@ app.get('/api/preview/:id', async (req, res) => {
   let buf = previewCache.get(id);
   if (!buf && onDisk(id)) { try { buf = fs.readFileSync(previewPath(id)); rememberBuf(id, buf); } catch { /* lecture KO */ } } // cache disque persistant
   if (!buf) { const t = poolIndex.get(id); if (t) { await cacheTrack(t); buf = previewCache.get(id) || (onDisk(id) ? fs.readFileSync(previewPath(id)) : null); } } // pas encore rapatrié → maintenant
+  if (!buf && /^\d+$/.test(id)) { await cacheTrack({ id }); buf = previewCache.get(id) || (onDisk(id) ? fs.readFileSync(previewPath(id)) : null); } // id Deezer hors pool (ajout via l'explorateur d'artiste) → rapatrié à la demande depuis /track/{id}
   if (!buf) return res.status(404).end();
   res.set('Content-Type', 'audio/mpeg');
   res.set('Accept-Ranges', 'bytes');
@@ -1767,7 +1768,7 @@ app.get('/api/curation', (_req, res) => {
     if (seen.has(c.k)) continue; seen.add(c.k);
     const t = pk.get(c.k);
     const b = DIFF_EXCLUDE.has(c.k) ? 'exc' : (DIFF_LABELS[c.k] || c.band || 'mid');
-    rows.push({ id: t ? t.id : null, k: c.k, a: c.a, t: c.t, b, labeled: !!DIFF_LABELS[c.k], c: (t && t.cover) || c.cov || '', y: (t && t.year) || c.yr || 0, dec: c.dec || 'x', g: t ? (t.tags || []) : [], f: t ? (t.feats2 || []) : [], sp: c.sp || '', spRank: c.spRank || 0, rank: t ? (t.rank || 0) : 0, preview: t ? '/api/preview/' + t.id : '' });
+    rows.push({ id: t ? t.id : null, k: c.k, a: c.a, t: c.t, b, labeled: !!DIFF_LABELS[c.k], c: (t && t.cover) || c.cov || '', y: (t && t.year) || c.yr || 0, dec: c.dec || 'x', g: t ? (t.tags || []) : [], f: t ? (t.feats2 || []) : [], sp: c.sp || '', dz: c.dz || '', spRank: c.spRank || 0, rank: t ? (t.rank || 0) : 0, preview: t ? '/api/preview/' + t.id : (c.dz ? '/api/preview/' + c.dz : '') });
   }
   const counts = { top: 0, high: 0, mid: 0, deep: 0, exc: 0, noaudio: 0 };
   for (const r of rows) { counts[r.b] = (counts[r.b] || 0) + 1; if (!r.preview && !r.sp) counts.noaudio++; }
@@ -1893,8 +1894,8 @@ function mergeCanonTracks(tracks) {
     if (!t || !t.artist || !t.title || !VALID.has(t.band)) continue;
     const k = dkey({ artist: t.artist, title: t.title });
     if (!k || k === '|') continue;
-    if (byKey.has(k)) { const c = byKey.get(k); if (DIFF_LABELS[k] !== t.band) updated++; if (t.spId && !c.sp) spAdded++; c.band = t.band; if (t.year) { c.dec = decY(t.year); c.yr = t.year; } if (t.spId) c.sp = t.spId; if (t.cover) c.cov = t.cover; }
-    else { const c = { k, a: t.artist, t: t.title, dec: decY(t.year || 0), band: t.band }; if (t.spId) c.sp = t.spId; if (t.cover) c.cov = t.cover; if (t.year) c.yr = t.year; list.push(c); byKey.set(k, c); added++; }
+    if (byKey.has(k)) { const c = byKey.get(k); if (DIFF_LABELS[k] !== t.band) updated++; if (t.spId && !c.sp) spAdded++; c.band = t.band; if (t.year) { c.dec = decY(t.year); c.yr = t.year; } if (t.spId) c.sp = t.spId; if (t.dz) c.dz = String(t.dz); if (t.cover) c.cov = t.cover; }
+    else { const c = { k, a: t.artist, t: t.title, dec: decY(t.year || 0), band: t.band }; if (t.spId) c.sp = t.spId; if (t.dz) c.dz = String(t.dz); if (t.cover) c.cov = t.cover; if (t.year) c.yr = t.year; list.push(c); byKey.set(k, c); added++; }
     DIFF_LABELS[k] = t.band;
   }
   const lp = path.join(__dirname, 'canon-active.json'), dp = path.join(__dirname, 'difficulty-labels.json');
@@ -1907,6 +1908,43 @@ function mergeCanonTracks(tracks) {
 app.post('/api/curation/import', express.json({ limit: '4mb' }), (req, res) => {
   try { res.json({ ok: true, ...mergeCanonTracks((req.body && req.body.tracks) || []) }); }
   catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
+});
+// ── Explorateur d'artiste via l'API DEEZER (100 % ouverte, sans token) : marche pour N'IMPORTE QUEL artiste,
+// même absent de la base (pas besoin de graine Spotify). Renvoie le nb de fans (popularité réelle) + le top
+// classé par `rank` Deezer + les pochettes. → permet d'ajouter vite les artistes oubliés.
+app.get('/api/curation/deezer-artist', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const q = String((req.query && req.query.q) || '').trim();
+    if (!q) return res.status(400).json({ ok: false, error: 'nom manquant' });
+    const sr = await fetch(`${DZ}/search/artist?limit=1&q=` + encodeURIComponent(q), UA).then((r) => r.json()).catch(() => null);
+    const a = sr && sr.data && sr.data[0];
+    if (!a) return res.json({ ok: false, error: 'artiste introuvable sur Deezer' });
+    const tr = await fetch(`${DZ}/artist/${a.id}/top?limit=30`, UA).then((r) => r.json()).catch(() => null);
+    const items = (tr && tr.data) || [];
+    const tracks = items.map((t) => {
+      const artist = (t.artist && t.artist.name) || a.name;
+      return { title: t.title, dz: t.id, rank: t.rank || 0, cover: (t.album && (t.album.cover_medium || t.album.cover)) || '', artist, k: dkey({ artist, title: t.title }) };
+    });
+    res.json({ ok: true, artist: { id: a.id, name: a.name, nb_fan: a.nb_fan || 0, picture: a.picture_medium || a.picture || '' }, tracks });
+  } catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
+});
+// Liste de référence des artistes rap FR (générée hors-ligne : recensement multi-agents + résolution Deezer pour
+// le nb de fans). Le client la croise avec la base pour proposer les artistes OUBLIÉS (absents), triés par popularité.
+app.get('/api/curation/suggestions', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try { let list = []; try { list = JSON.parse(fs.readFileSync(path.join(__dirname, 'fr-rap-artists.json'), 'utf8')); } catch { /* pas encore générée */ } res.json({ ok: true, artists: list }); }
+  catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
+});
+// Ajout d'un ou plusieurs titres Deezer à la base (stocke l'id Deezer → audio jouable via /api/preview/{id}).
+app.post('/api/curation/add-deezer', express.json({ limit: '64kb' }), (req, res) => {
+  try {
+    const tracks = ((req.body && req.body.tracks) || []).slice(0, 60).map((t) => ({
+      artist: String(t.artist || ''), title: String(t.title || ''), band: String(t.band || ''),
+      dz: t.dz, cover: String(t.cover || ''), year: +t.year || 0,
+    }));
+    res.json({ ok: true, ...mergeCanonTracks(tracks) });
+  } catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
 });
 // Glisser-déposer d'un morceau depuis Spotify : on ne connaît que l'id → on résout titre+artiste via la PAGE EMBED
 // publique (open.spotify.com/embed/track/{id} → champs "name"/"subtitle"), SANS token → plus de 403.

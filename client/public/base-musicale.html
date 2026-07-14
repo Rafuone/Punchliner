@@ -8,6 +8,7 @@
   :root{ --bg:#0e0f11; --card:#16181c; --card2:#1b1e23; --line:#2a2e35; --txt:#f1f2ef; --muted:#9aa0a6;
     --top:#a6ff00; --high:#49a9ff; --mid:#ff9a3e; --deep:#ff5db1; --exc:#7a828c; }
   *{box-sizing:border-box}
+  button,input,select,optgroup,textarea{font-family:inherit}   /* les contrôles n'héritent pas la police par défaut → on force Satoshi partout */
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 'Satoshi',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden}
   header{flex:0 0 auto;background:linear-gradient(180deg,#0e0f11 70%,rgba(14,15,17,.92));border-bottom:1px solid var(--line);padding:12px 16px 10px}
@@ -137,6 +138,12 @@
 .ap-add button{font-size:10px;padding:3px 5px;background:#222;border:1px solid #3a3a3a;color:#ddd;border-radius:5px;cursor:pointer}
 .ap-add button:hover{background:#2e2e2e}
 .ap-msg{padding:16px;color:#999;font-size:13px;line-height:1.5}
+.ap-artist{display:flex;align-items:center;gap:11px;padding:11px 10px 12px;border-bottom:1px solid #262626;position:sticky;top:0;background:#141414;z-index:2}
+.ap-artist img{width:46px;height:46px;border-radius:50%;object-fit:cover;flex:none}
+.ap-an{font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ap-af{font-size:11.5px;color:var(--top);font-weight:700}
+.ap-cv{width:36px;height:36px;border-radius:5px;object-fit:cover;flex:none;background:#222}
+.ap-meta2{flex:1;min-width:0}
 .ap-grp{margin:2px 0 12px}
 .ap-gh{display:flex;align-items:center;gap:8px;padding:8px 6px 6px;position:sticky;top:0;background:#141414;z-index:1;border-bottom:1px solid #262626}
 .ap-gh img,.ap-gc{width:34px;height:34px;border-radius:5px;object-fit:cover;flex:none;background:#222}
@@ -190,19 +197,39 @@
 #ad-tab tbody tr{cursor:pointer}
 #ad-tab tbody tr:hover{background:#1b1b1b}
 #ad-tab td.l{font-weight:600;color:#eaeaea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
-#ad-tab td.c{color:#4a4a4a}
+#ad-tab td.rank{color:#6a6a6a;text-align:right;width:40px;padding-right:2px;font-size:12px}
+#ad-tab td.c{color:#454545}
 #ad-tab td.c.v{font-weight:800}
-td.cg.v{color:var(--top)} td.cc.v{color:var(--high)} td.cr.v{color:var(--mid)} td.ce.v{color:var(--exc)} td.cu.v{color:#ff6b9d}
-td.ct{color:#cfd3d8;font-weight:800}
+#ad-tab td.cg.v{color:var(--top)} #ad-tab td.cc.v{color:var(--high)} #ad-tab td.cr.v{color:var(--mid)} #ad-tab td.ce.v{color:var(--exc)} #ad-tab td.cu.v{color:#ff6b9d}
+#ad-tab td.ct{color:#e6e8ea;font-weight:800}
 #ad-tab tr.thin td.ct{color:#ffcf5a}
-.ad-empty{padding:24px;text-align:center;color:#888}
-th.c{cursor:pointer;user-select:none}
-th.c.act{color:#eaeaea}
+#ad-tab thead th.cg{color:var(--top)} #ad-tab thead th.cc{color:var(--high)} #ad-tab thead th.cr{color:var(--mid)} #ad-tab thead th.ce{color:var(--exc)}
+.ad-empty{padding:24px;text-align:center;color:#888;line-height:1.7}
+.ad-explore{margin-top:10px;background:var(--top);color:#0b0b0b;border:0;border-radius:7px;padding:8px 14px;font-weight:800;cursor:pointer;font-size:13px}
+.ad-explore:hover{filter:brightness(1.08)}
+.ad-seg{display:flex;border:1px solid #333;border-radius:8px;overflow:hidden;flex:none}
+.ad-seg button{background:#161616;border:0;color:#9aa0a6;padding:7px 12px;font-size:12.5px;font-weight:700;cursor:pointer}
+.ad-seg button+button{border-left:1px solid #333}
+.ad-seg button.on{background:#242a16;color:var(--top)}
+#ad-gaps{padding:2px}
+.gap-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #1e1e1e;cursor:pointer}
+.gap-row:hover{background:#1b1b1b}
+.gap-rk{color:#6a6a6a;font-size:12px;width:34px;text-align:right;flex:none;font-variant-numeric:tabular-nums}
+.gap-n{font-weight:700;color:#eaeaea;font-size:14px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gap-era{font-size:10px;font-weight:800;color:#9aa0a6;background:#20242b;border-radius:5px;padding:2px 6px;flex:none}
+.gap-tier{font-size:10.5px;font-weight:800;border-radius:5px;padding:2px 7px;flex:none;white-space:nowrap}
+.gap-tier.t-main{color:var(--top);background:#1c2410} .gap-tier.t-conn{color:var(--high);background:#0f2030} .gap-tier.t-puri{color:var(--mid);background:#2a1c0c}
+.gap-fan{font-size:12px;color:#ff6b9d;font-weight:700;flex:none;font-variant-numeric:tabular-nums;min-width:92px;text-align:right}
+.gap-go{flex:none;background:var(--top);color:#0b0b0b;border:0;border-radius:6px;padding:6px 11px;font-weight:800;cursor:pointer;font-size:12px}
+.gap-go:hover{filter:brightness(1.08)}
+.ad-gaps-msg{padding:30px 20px;text-align:center;color:#8a8a8a;line-height:1.6}
+#ad-tab thead th.c{cursor:pointer;user-select:none}
+#ad-tab thead th.c:hover{color:#eaeaea}
 </style>
 <div id="adash"><div class="ad-panel">
   <div class="ad-head">
-    <b>📊 Artistes de la base</b>
-    <input type="search" id="ad-q" placeholder="filtrer un artiste…">
+    <div class="ad-seg" id="ad-seg"><button data-m="base" class="on">📊 Ma base</button><button data-m="gaps" title="Artistes rap FR connus ABSENTS de ta base (triés par popularité) — clique pour les ajouter">💡 Oubliés</button></div>
+    <input type="search" id="ad-q" placeholder="filtrer / explorer un artiste…">
     <span class="ad-sub" id="ad-sub"></span>
     <span class="ad-sortl">Tri :</span>
     <select id="ad-sort">
@@ -217,8 +244,8 @@ th.c.act{color:#eaeaea}
     <button id="ad-x" title="Fermer (Échap)">✕</button>
   </div>
   <div class="ad-scroll"><table id="ad-tab"><thead><tr>
-    <th class="l">Artiste</th><th class="c cg" title="Mainstream">Main</th><th class="c cc" title="Connaisseur">Conn</th><th class="c cr" title="Puriste">Puri</th><th class="c ce" title="Hors pool">Hors</th><th class="c ct" title="Total dans le pool (Main+Conn+Puri)">Pool</th><th class="c cu" title="Titres sans audio (à résoudre)">♪…</th>
-  </tr></thead><tbody id="ad-body"></tbody></table></div>
+    <th class="rank" title="Rang dans le tri courant">#</th><th class="l">Artiste</th><th class="c cg" title="Titres classés Mainstream (grand public)">Main</th><th class="c cc" title="Titres classés Connaisseur">Conn</th><th class="c cr" title="Titres classés Puriste">Puri</th><th class="c ce" title="Hors pool (retirés du jeu)">Hors</th><th class="c ct" title="Total jouable = Main + Conn + Puri">Pool</th><th class="c cu" title="Titres sans audio (à résoudre)">♪…</th>
+  </tr></thead><tbody id="ad-body"></tbody></table><div id="ad-gaps" style="display:none"></div></div>
 </div></div>
 <div class="toast" id="toast"></div>
 <div id="selbar"><b><span id="selN">0</span> sélectionné(s)</b><span style="opacity:.65">→ déplacer :</span><button data-c="gp">Mainstream</button><button data-c="co">Connaisseur</button><button data-c="rm">Puriste</button><button data-c="ex">✕ Hors pool</button><button id="selclr" class="clr">Désélectionner</button></div>
@@ -569,32 +596,43 @@ el('apply').addEventListener('click', async ()=>{
 // ── Pool artiste : au clic sur un nom d'artiste → son TOP Spotify (classé par popularité ≈ streams, via l'embed) ──
 const _dn = (s)=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\(.*?\)|\[.*?\]/g,'').replace(/\b(feat|ft|featuring|avec)\b\.?/g,'').replace(/,.*$/,'').replace(/[^a-z0-9]+/g,'');
 const _primary = (a)=> (String(a).split(/\s*(?:feat\.?|ft\.?|featuring|avec|&|,| x )\s*/i)[0]||a).trim();
+let _apTracks = new Map();   // dz-id → titre Deezer (pour l'ajout au clic, sans encombrer le DOM)
+const fmtFan = (n)=> (n||0).toLocaleString('fr-FR');
 async function showArtistPool(name){
   const panel = el('apool'), body = el('apool-b');
   el('apool-t').textContent = 'Explorer — '+name;
   body.innerHTML = '<div class="ap-msg">chargement…</div>'; panel.classList.add('on');
-  const dn = _dn(_primary(name));
-  const cand = ALL.find(r=> r.sp && _dn(_primary(r.a))===dn) || ALL.find(r=> r.sp && _dn(r.a).includes(dn));
-  if(!cand){ body.innerHTML = '<div class="ap-msg">Aucun titre de « '+esc(name)+' » n\'a d\'ID Spotify dans la base → impossible de retrouver l\'artiste. Glisse d\'abord un de ses titres depuis Spotify, puis reclique.</div>'; return; }
-  let res=null; try{ res = await fetch('/api/curation/artist-top?track='+encodeURIComponent(cand.sp)+'&name='+encodeURIComponent(name), {cache:'no-store'}).then(r=>r.json()); }catch(e){}
-  if(!res||!res.ok||!res.top||!res.top.length){ body.innerHTML = '<div class="ap-msg">Top indisponible'+((res&&res.error)?' ('+esc(res.error)+')':'')+'.</div>'; return; }
+  _apTracks = new Map();
+  let res=null; try{ res = await fetch('/api/curation/deezer-artist?q='+encodeURIComponent(name), {cache:'no-store'}).then(r=>r.json()); }catch(e){}
+  if(!res||!res.ok||!res.tracks||!res.tracks.length){ body.innerHTML = '<div class="ap-msg">Rien trouvé pour « '+esc(name)+' » sur Deezer'+((res&&res.error)?' — '+esc(res.error):'')+'.</div>'; return; }
   const COLN = {top:'Mainstream',high:'Connaisseur',mid:'Puriste',deep:'Puriste',exc:'Hors pool'};
-  const findRow = (t)=>{ let row = t.spId && ALL.find(r=> r.sp===t.spId); if(!row){ const tn=_dn(t.title); row = ALL.find(r=> _dn(r.t)===tn && _dn(r.a).includes(dn)); } return row; };
-  body.innerHTML = res.top.map((t,i)=>{
+  const want = _dn(_primary(name));
+  const findRow = (t)=>{ let row = t.dz && ALL.find(r=> r.dz===String(t.dz)); if(!row){ const tn=_dn(t.title); row = ALL.find(r=> _dn(r.t)===tn && _dn(_primary(r.a)).includes(want)); } return row; };
+  const a = res.artist;
+  const head = '<div class="ap-artist">'+(a.picture?'<img src="'+esc(a.picture)+'" alt="">':'<span class="ap-cv" style="width:46px;height:46px;border-radius:50%"></span>')+
+    '<div style="min-width:0"><div class="ap-an">'+esc(a.name)+'</div><div class="ap-af">'+(a.nb_fan?'♥ '+fmtFan(a.nb_fan)+' fans':'artiste Deezer')+'</div></div></div>';
+  const maxRank = Math.max(1, ...res.tracks.map(t=>t.rank||0));
+  const rowsHtml = res.tracks.map(t=>{
+    _apTracks.set(String(t.dz), t);
     const row = findRow(t);
-    const meta = '<div class="ap-meta"><span class="ap-n">'+(i+1)+'</span><div style="min-width:0"><div class="ap-t">'+esc(t.title)+'</div><div class="ap-a">'+esc(t.subtitle||t.artist)+'</div></div></div>';
-    const right = row ? '<span class="ap-in">✓ '+(COLN[row.b]||'dans la base')+'</span>'
-      : (t.spId ? '<span class="ap-add"><button data-sp="'+t.spId+'" data-band="top">Main</button><button data-sp="'+t.spId+'" data-band="high">Conn</button><button data-sp="'+t.spId+'" data-band="mid">Puri</button></span>' : '<span class="ap-in" style="color:#888">—</span>');
-    return '<div class="ap-row'+(row?' has':'')+'">'+meta+right+'</div>';
+    const cov = t.cover?'<img class="ap-cv" loading="lazy" src="'+esc(t.cover)+'" alt="">':'<span class="ap-cv"></span>';
+    const pct = Math.round((t.rank||0)/maxRank*100);
+    const info = '<div class="ap-t">'+esc(t.title)+'</div><div class="ap-a"><span class="ap-pop" title="Popularité Deezer (rank '+fmtFan(t.rank)+')"><i style="width:'+pct+'%"></i></span></div>';
+    const right = row ? '<span class="ap-in">✓ '+(COLN[row.b]||'')+'</span>'
+      : '<span class="ap-add"><button data-dz="'+esc(String(t.dz))+'" data-band="top">Main</button><button data-dz="'+esc(String(t.dz))+'" data-band="high">Conn</button><button data-dz="'+esc(String(t.dz))+'" data-band="mid">Puri</button></span>';
+    return '<div class="ap-row'+(row?' has':'')+'">'+cov+'<div class="ap-meta2">'+info+'</div>'+right+'</div>';
   }).join('');
+  body.innerHTML = head + rowsHtml;
 }
 el('apool-x').addEventListener('click', ()=>el('apool').classList.remove('on'));
 el('apool-b').addEventListener('click', async e=>{
-  const b = e.target.closest('button[data-sp]'); if(!b) return;
-  const band=b.dataset.band, sp=b.dataset.sp, span=b.closest('.ap-add'); if(span) span.textContent='…';
-  const res = await fetch('/api/curation/drop-spotify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[sp],band})}).then(r=>r.json()).catch(()=>null);
-  if(res&&res.ok){ toast('✓ ajouté → '+({top:'Mainstream',high:'Connaisseur',mid:'Puriste'})[band]); await load(); if(span){ const row=span.closest('.ap-row'); if(row) row.classList.add('has'); span.outerHTML='<span class="ap-in">✓ ajouté</span>'; } }
-  else { if(span) span.innerHTML='<button data-sp="'+sp+'" data-band="'+band+'">réessayer</button>'; toast('Échec'+((res&&res.error)?' : '+res.error:''), true); }
+  const b = e.target.closest('button[data-dz]'); if(!b) return;
+  const band=b.dataset.band, dz=b.dataset.dz, t=_apTracks.get(dz); if(!t) return;
+  const span=b.closest('.ap-add'); if(span) span.textContent='…';
+  const res = await fetch('/api/curation/add-deezer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tracks:[{artist:t.artist,title:t.title,band,dz:t.dz,cover:t.cover}]})}).then(r=>r.json()).catch(()=>null);
+  if(res&&res.ok&&(res.added||res.updated)){ toast('✓ ajouté → '+({top:'Mainstream',high:'Connaisseur',mid:'Puriste'})[band]); await load(); if(span){ const row=span.closest('.ap-row'); if(row) row.classList.add('has'); span.outerHTML='<span class="ap-in">✓ ajouté</span>'; } }
+  else if(res&&res.ok){ toast('= déjà dans la base'); if(span){ const row=span.closest('.ap-row'); if(row) row.classList.add('has'); span.outerHTML='<span class="ap-in">✓ déjà là</span>'; } }
+  else { if(span) span.innerHTML='<button data-dz="'+esc(dz)+'" data-band="'+band+'">réessayer</button>'; toast('Échec'+((res&&res.error)?' : '+res.error:''), true); }
 });
 // ── Tableau de bord Artistes : agrège la base par artiste principal + compte par tier ──
 const _adSt = { sort:'tot', q:'' };
@@ -626,23 +664,70 @@ function renderDash(){
   const totPool = arr.reduce((s,o)=> s+o.pool, 0);
   el('ad-sub').textContent = arr.length+' artiste'+(arr.length>1?'s':'')+' · '+totPool+' titre'+(totPool>1?'s':'')+' dans le pool';
   const cell = (v,cls)=> '<td class="c '+cls+(v?' v':'')+'">'+(v||'·')+'</td>';
-  el('ad-body').innerHTML = arr.length ? arr.map(o=>
+  el('ad-body').innerHTML = arr.length ? arr.map((o,i)=>
     '<tr data-a="'+esc(o.name)+'"'+(o.thin?' class="thin"':'')+'>'+
-    '<td class="l" title="'+esc(o.name)+' — clic : voir son top Spotify + le filtrer">'+esc(o.name)+'</td>'+
+    '<td class="rank">'+(i+1)+'</td>'+
+    '<td class="l" title="'+esc(o.name)+' — clic : voir son top + l\'ajouter">'+esc(o.name)+'</td>'+
     cell(o.gp,'cg')+cell(o.co,'cc')+cell(o.rm,'cr')+cell(o.ex,'ce')+
     '<td class="c ct">'+(o.pool||'·')+'</td>'+cell(o.unl,'cu')+
-    '</tr>').join('') : '<tr><td colspan="7" class="ad-empty">Aucun artiste ne correspond.</td></tr>';
+    '</tr>').join('') : ('<tr><td colspan="8" class="ad-empty">'+(el('ad-q').value.trim()
+      ? '« '+esc(el('ad-q').value.trim())+' » n\'est pas dans ta base.<br><button class="ad-explore" data-x="'+esc(el('ad-q').value.trim())+'">🔎 Explorer sur Deezer pour l\'ajouter</button>'
+      : 'Aucun artiste.')+'</td></tr>');
 }
-function openDash(){ _adSt.q=''; el('ad-q').value=''; renderDash(); el('adash').classList.add('on'); setTimeout(()=>el('ad-q').focus(),30); }
+function openDash(){ _adSt.q=''; el('ad-q').value=''; el('adash').classList.add('on'); setMode('base'); setTimeout(()=>el('ad-q').focus(),30); }
 function closeDash(){ el('adash').classList.remove('on'); }
 el('artdash').addEventListener('click', openDash);
 el('ad-x').addEventListener('click', closeDash);
 el('adash').addEventListener('click', e=>{ if(e.target.id==='adash') closeDash(); });
 el('ad-sort').addEventListener('change', ()=>{ _adSt.sort = el('ad-sort').value; renderDash(); });
-let _adT; el('ad-q').addEventListener('input', ()=>{ clearTimeout(_adT); _adT=setTimeout(()=>{ _adSt.q=_dn(el('ad-q').value.trim()); renderDash(); }, 110); });
-el('ad-body').addEventListener('click', e=>{ const tr=e.target.closest('tr[data-a]'); if(!tr) return; const a=tr.dataset.a; closeDash(); el('q').value=a; filt.q=a.toLowerCase(); render(); showArtistPool(a); });
+let _adT; el('ad-q').addEventListener('input', ()=>{ clearTimeout(_adT); _adT=setTimeout(()=>{ _adSt.q=_dn(el('ad-q').value.trim()); if(_adSt.mode==='gaps') renderGaps(); else renderDash(); }, 110); });
+el('ad-body').addEventListener('click', e=>{
+  const ex=e.target.closest('.ad-explore'); if(ex){ closeDash(); showArtistPool(ex.dataset.x); return; }
+  const tr=e.target.closest('tr[data-a]'); if(!tr) return; const a=tr.dataset.a; closeDash(); el('q').value=a; filt.q=a.toLowerCase(); render(); showArtistPool(a); });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && el('adash').classList.contains('on')) closeDash(); });
 document.querySelectorAll('#ad-tab thead th.c').forEach(th=>{ const map={Main:'gp',Conn:'co',Puri:'rm',Pool:'tot','♪…':'unl'}; th.addEventListener('click',()=>{ const key=map[(th.textContent||'').trim()]; if(!key) return; _adSt.sort=key; el('ad-sort').value=key; renderDash(); }); });
+
+// ── mode « Oubliés » : artistes rap FR connus ABSENTS de la base (liste de référence croisée avec la base) ──
+let _sugg = null;
+async function renderGaps(){
+  const box = el('ad-gaps');
+  if(_sugg === null){
+    box.innerHTML = '<div class="ad-gaps-msg">chargement…</div>';
+    try{ const r = await fetch('/api/curation/suggestions',{cache:'no-store'}).then(r=>r.json()); _sugg = (r&&r.artists)||[]; }catch(e){ _sugg = []; }
+  }
+  if(!_sugg.length){ box.innerHTML = '<div class="ad-gaps-msg">Liste de référence pas encore générée.<br>(le recensement des artistes rap FR arrive)</div>'; el('ad-sub').textContent=''; return; }
+  const baseKeys = new Set(adAggregate().map(o=>_dn(o.name)));
+  let miss = _sugg.filter(a=> a && a.name && !baseKeys.has(_dn(a.name)));
+  const q = _adSt.q; if(q) miss = miss.filter(a=> _dn(a.name).includes(q));
+  miss.sort((a,b)=> (b.nb_fan||0)-(a.nb_fan||0) || a.name.localeCompare(b.name,'fr'));
+  el('ad-sub').textContent = miss.length+' artiste'+(miss.length>1?'s':'')+' rap FR absent'+(miss.length>1?'s':'')+' de ta base';
+  const TL = {mainstream:['Mainstream','t-main'], connaisseur:['Connaisseur','t-conn'], puriste:['Puriste','t-puri']};
+  const ERA = {'90':'90s','00':'00s','10':'10s','20':'20s'};
+  box.innerHTML = miss.length ? miss.map((a,i)=>{
+    const tl = TL[String(a.tier||'').toLowerCase()] || ['—','t-conn'];
+    const era = ERA[String(a.era)] || '';
+    return '<div class="gap-row" data-x="'+esc(a.name)+'">'+
+      '<span class="gap-rk">'+(i+1)+'</span>'+
+      '<span class="gap-n" title="'+esc(a.signature?('ex. '+a.signature):a.name)+'">'+esc(a.name)+'</span>'+
+      (era?'<span class="gap-era">'+era+'</span>':'')+
+      '<span class="gap-tier '+tl[1]+'">'+tl[0]+'</span>'+
+      '<span class="gap-fan">'+(a.nb_fan?'♥ '+(a.nb_fan).toLocaleString('fr-FR'):'')+'</span>'+
+      '<button class="gap-go" data-x="'+esc(a.name)+'">Explorer →</button>'+
+    '</div>';
+  }).join('') : '<div class="ad-gaps-msg">Aucun manquant pour ce filtre. 🎉</div>';
+}
+function setMode(m){
+  _adSt.mode = m;
+  document.querySelectorAll('#ad-seg button').forEach(b=> b.classList.toggle('on', b.dataset.m===m));
+  const gaps = m==='gaps';
+  el('ad-tab').style.display = gaps?'none':'';
+  el('ad-gaps').style.display = gaps?'':'none';
+  el('ad-sort').style.display = gaps?'none':'';
+  const sl=document.querySelector('.ad-sortl'); if(sl) sl.style.display = gaps?'none':'';
+  if(gaps) renderGaps(); else renderDash();
+}
+el('ad-seg').addEventListener('click', e=>{ const b=e.target.closest('button[data-m]'); if(b) setMode(b.dataset.m); });
+el('ad-gaps').addEventListener('click', e=>{ const g=e.target.closest('[data-x]'); if(!g) return; closeDash(); showArtistPool(g.dataset.x); });
 
 load();
 </script>
