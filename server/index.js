@@ -1830,6 +1830,39 @@ app.post('/api/curation/set-covers', express.json({ limit: '12mb' }), (req, res)
     res.json({ ok: true, covered: n, total: list.length });
   } catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
 });
+// Token app Spotify (Client Credentials, mémorisé ~50 min) — lit server/.spotify-secret (gitignored). Accès catalogue PUBLIC (pop, albums).
+let _spTok = { v: '', exp: 0 };
+async function spAppToken() {
+  if (_spTok.v && Date.now() < _spTok.exp) return _spTok.v;
+  let secret = ''; try { secret = fs.readFileSync(path.join(__dirname, '.spotify-secret'), 'utf8').trim(); } catch { /* absent */ }
+  if (!secret || secret.startsWith('COLLE')) return '';
+  try {
+    const r = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'client_credentials', client_id: '4b5842ddb3ef4a1f9f14b789a0a35706', client_secret: secret }) });
+    const j = await r.json(); if (!j.access_token) return '';
+    _spTok = { v: j.access_token, exp: Date.now() + ((j.expires_in || 3600) - 120) * 1000 };
+    return _spTok.v;
+  } catch { return ''; }
+}
+// Explorer un artiste : ses titres avec POPULARITÉ Spotify (0-100 ≈ proxy des streams), avec album + cover + type (album/single).
+app.get('/api/curation/artist-explore', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const q = String((req.query && req.query.q) || '').trim();
+    if (!q) return res.status(400).json({ error: 'nom manquant' });
+    const tok = await spAppToken();
+    if (!tok) return res.json({ ok: false, error: 'secret Spotify absent (server/.spotify-secret)' });
+    const r = await fetch('https://api.spotify.com/v1/search?type=track&market=FR&limit=50&q=' + encodeURIComponent('artist:"' + q + '"'), { headers: { Authorization: 'Bearer ' + tok } });
+    if (r.status === 429) return res.json({ ok: false, error: 'quota Spotify (429) — réessaie plus tard' });
+    if (!r.ok) return res.json({ ok: false, error: 'Spotify ' + r.status + " — ce nom pose souci (ex. purement numérique). Réessaie ou vérifie l'orthographe." });
+    const items = (await r.json()).tracks?.items || [];
+    const want = dnorm(q);
+    const tracks = items.filter((t) => (t.artists || []).some((a) => { const x = dnorm(a.name); return x && (x.includes(want) || want.includes(x)); })).map((t) => {
+      const artist = (t.artists?.[0]?.name || '') + (t.artists?.length > 1 ? ' feat. ' + t.artists.slice(1).map((x) => x.name).join(', ') : '');
+      return { title: t.name, spId: t.id, pop: t.popularity || 0, album: t.album?.name || '', cover: t.album?.images?.slice(-1)[0]?.url || '', type: t.album?.album_type || 'album', year: +((t.album?.release_date || '').slice(0, 4)) || 0, artist, k: dkey({ artist, title: t.name }) };
+    });
+    res.json({ ok: true, artist: q, tracks });
+  } catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
+});
 // ── Applique les reclassements du tool DIRECTEMENT sur disque + hot-reload (plus besoin de redémarrer le serveur).
 // body: { labels:{clé→'top'|'high'|'mid'|'deep'}, exclude:[clés], unexclude:[clés] }. Backup .bak avant écriture.
 app.post('/api/curation/apply', express.json({ limit: '4mb' }), (req, res) => {

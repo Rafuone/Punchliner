@@ -47,7 +47,8 @@
   .card.playing{background:var(--card2);box-shadow:0 0 0 1px var(--top) inset}
   .card.edited{outline:1px dashed var(--top);outline-offset:-1px}
   .card.unl{border-left-style:dashed}
-  .play{flex:0 0 auto;width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:#0c0d0f;color:var(--top);font-size:12px;cursor:pointer;display:grid;place-items:center}
+  .play{flex:0 0 auto;width:30px;height:30px;border-radius:50%;border:1px solid #46561d;background:#1a2010;color:var(--top);font-size:11px;cursor:pointer;display:grid;place-items:center;padding-left:2px}
+  .play:disabled{opacity:.35;cursor:default;border-color:var(--line);background:#0c0d0f}
   .play:hover{border-color:var(--top)}
   .cov{flex:0 0 auto;width:34px;height:34px;border-radius:5px;object-fit:cover;background:#222}
   .meta{flex:1 1 auto;min-width:0}
@@ -103,6 +104,7 @@
     <span class="tgl" id="tEd" title="N'afficher que TES reclassements pas encore envoyés au serveur (bouton ⚡ Appliquer)">Modifiés <b id="tEdN" style="color:var(--top)"></b></span>
     <span style="font-size:11px;color:#7a7a7a;line-height:1.3">⌨ 1·2·3 classer · Espace = écouter · Ctrl+Z annuler · clic carte = sélectionner</span>
     <div class="act">
+      <button class="btn" id="artdash" title="Tableau de bord : tous les artistes de la base + nombre de titres par tier (repérer les couvertures trop fines / artistes manquants)">📊 Artistes</button>
       <button class="btn" id="spfill" title="Cherche sur Spotify (ton compte) l'audio + la cover des titres muets. À lancer sur http://127.0.0.1:5173">🔊 Remplir l'audio manquant</button>
       <button class="btn apply" id="apply">⚡ Appliquer au serveur</button>
     </div>
@@ -135,6 +137,14 @@
 .ap-add button{font-size:10px;padding:3px 5px;background:#222;border:1px solid #3a3a3a;color:#ddd;border-radius:5px;cursor:pointer}
 .ap-add button:hover{background:#2e2e2e}
 .ap-msg{padding:16px;color:#999;font-size:13px;line-height:1.5}
+.ap-grp{margin:2px 0 12px}
+.ap-gh{display:flex;align-items:center;gap:8px;padding:8px 6px 6px;position:sticky;top:0;background:#141414;z-index:1;border-bottom:1px solid #262626}
+.ap-gh img,.ap-gc{width:34px;height:34px;border-radius:5px;object-fit:cover;flex:none;background:#222}
+.ap-gh b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ap-gt{margin-left:auto;font-size:9.5px;color:#777;text-transform:uppercase;letter-spacing:.07em;flex:none}
+.ap-pop{display:inline-block;width:66px;height:5px;border-radius:3px;background:#2a2a2a;overflow:hidden;vertical-align:middle;margin-top:3px}
+.ap-pop i{display:block;height:100%;background:linear-gradient(90deg,#ff9a3e,#a6ff00)}
+.ap-popn{font-size:10px;color:#9aa;margin-left:6px;font-weight:700;font-variant-numeric:tabular-nums}
 .rk{font-size:10px;font-weight:800;border-radius:5px;padding:1px 5px;margin-right:5px;flex:none}
 .rk.rtop{color:#0b0b0b;background:#ffcf5a}
 .rk.rmid{color:#ffcf5a;background:#2a2410;border:1px solid #5a4a1e}
@@ -160,7 +170,56 @@
 #nowplaying .npd{width:8px;height:8px;border-radius:50%;background:var(--top);flex:none;animation:playpulse 1.1s ease-in-out infinite}
 #nowplaying #np-txt{font-size:12px;color:#dfe3d8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #nowplaying #np-stop{background:none;border:0;color:#aaa;cursor:pointer;font-size:14px;flex:none;line-height:1}
+/* ── Tableau de bord Artistes ─────────────────────────────────────── */
+#adash{position:fixed;inset:0;background:#000a;backdrop-filter:blur(3px);z-index:70;display:none;align-items:center;justify-content:center;padding:24px}
+#adash.on{display:flex}
+#adash .ad-panel{width:min(880px,96vw);max-height:92vh;background:#111;border:1px solid #2a2a2a;border-radius:12px;box-shadow:0 20px 70px #000c;display:flex;flex-direction:column;overflow:hidden}
+.ad-head{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid #262626;flex-wrap:wrap}
+.ad-head>b{font-size:15px}
+#ad-q{flex:1;min-width:140px;background:#1a1a1a;border:1px solid #333;border-radius:7px;padding:6px 10px;color:#eee;font-size:13px}
+.ad-sub{font-size:11.5px;color:#8a8a8a;white-space:nowrap}
+.ad-sortl{font-size:11px;color:#777}
+#ad-sort{background:#1a1a1a;border:1px solid #333;border-radius:7px;padding:5px 7px;color:#ddd;font-size:12px}
+#ad-x{background:none;border:0;color:#ccc;font-size:17px;cursor:pointer;line-height:1;padding:2px 4px}
+.ad-scroll{overflow:auto}
+#ad-tab{width:100%;border-collapse:collapse;font-size:13px}
+#ad-tab thead th{position:sticky;top:0;background:#161616;z-index:1;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8a8a8a;border-bottom:1px solid #2a2a2a;font-weight:700}
+#ad-tab th.l,#ad-tab td.l{text-align:left}
+#ad-tab th.c,#ad-tab td.c{text-align:center;width:56px}
+#ad-tab td{padding:7px 10px;border-bottom:1px solid #1e1e1e;font-variant-numeric:tabular-nums}
+#ad-tab tbody tr{cursor:pointer}
+#ad-tab tbody tr:hover{background:#1b1b1b}
+#ad-tab td.l{font-weight:600;color:#eaeaea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+#ad-tab td.c{color:#4a4a4a}
+#ad-tab td.c.v{font-weight:800}
+td.cg.v{color:var(--top)} td.cc.v{color:var(--high)} td.cr.v{color:var(--mid)} td.ce.v{color:var(--exc)} td.cu.v{color:#ff6b9d}
+td.ct{color:#cfd3d8;font-weight:800}
+#ad-tab tr.thin td.ct{color:#ffcf5a}
+.ad-empty{padding:24px;text-align:center;color:#888}
+th.c{cursor:pointer;user-select:none}
+th.c.act{color:#eaeaea}
 </style>
+<div id="adash"><div class="ad-panel">
+  <div class="ad-head">
+    <b>📊 Artistes de la base</b>
+    <input type="search" id="ad-q" placeholder="filtrer un artiste…">
+    <span class="ad-sub" id="ad-sub"></span>
+    <span class="ad-sortl">Tri :</span>
+    <select id="ad-sort">
+      <option value="tot">Total titres ↓</option>
+      <option value="thin">Couverture fine ↑ (à compléter)</option>
+      <option value="gp">Mainstream ↓</option>
+      <option value="co">Connaisseur ↓</option>
+      <option value="rm">Puriste ↓</option>
+      <option value="unl">Sans audio ↓</option>
+      <option value="name">Nom A→Z</option>
+    </select>
+    <button id="ad-x" title="Fermer (Échap)">✕</button>
+  </div>
+  <div class="ad-scroll"><table id="ad-tab"><thead><tr>
+    <th class="l">Artiste</th><th class="c cg" title="Mainstream">Main</th><th class="c cc" title="Connaisseur">Conn</th><th class="c cr" title="Puriste">Puri</th><th class="c ce" title="Hors pool">Hors</th><th class="c ct" title="Total dans le pool (Main+Conn+Puri)">Pool</th><th class="c cu" title="Titres sans audio (à résoudre)">♪…</th>
+  </tr></thead><tbody id="ad-body"></tbody></table></div>
+</div></div>
 <div class="toast" id="toast"></div>
 <div id="selbar"><b><span id="selN">0</span> sélectionné(s)</b><span style="opacity:.65">→ déplacer :</span><button data-c="gp">Mainstream</button><button data-c="co">Connaisseur</button><button data-c="rm">Puriste</button><button data-c="ex">✕ Hors pool</button><button id="selclr" class="clr">Désélectionner</button></div>
 <div id="nowplaying"><span class="npd"></span><span id="np-txt"></span><button id="np-stop" title="Arrêter la lecture">✕</button></div>
@@ -512,7 +571,7 @@ const _dn = (s)=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').r
 const _primary = (a)=> (String(a).split(/\s*(?:feat\.?|ft\.?|featuring|avec|&|,| x )\s*/i)[0]||a).trim();
 async function showArtistPool(name){
   const panel = el('apool'), body = el('apool-b');
-  el('apool-t').textContent = 'Top Spotify — '+name;
+  el('apool-t').textContent = 'Explorer — '+name;
   body.innerHTML = '<div class="ap-msg">chargement…</div>'; panel.classList.add('on');
   const dn = _dn(_primary(name));
   const cand = ALL.find(r=> r.sp && _dn(_primary(r.a))===dn) || ALL.find(r=> r.sp && _dn(r.a).includes(dn));
@@ -537,6 +596,54 @@ el('apool-b').addEventListener('click', async e=>{
   if(res&&res.ok){ toast('✓ ajouté → '+({top:'Mainstream',high:'Connaisseur',mid:'Puriste'})[band]); await load(); if(span){ const row=span.closest('.ap-row'); if(row) row.classList.add('has'); span.outerHTML='<span class="ap-in">✓ ajouté</span>'; } }
   else { if(span) span.innerHTML='<button data-sp="'+sp+'" data-band="'+band+'">réessayer</button>'; toast('Échec'+((res&&res.error)?' : '+res.error:''), true); }
 });
+// ── Tableau de bord Artistes : agrège la base par artiste principal + compte par tier ──
+const _adSt = { sort:'tot', q:'' };
+function adAggregate(){
+  const m = new Map();
+  for(const r of ALL){
+    const pa = _primary(r.a);
+    const key = _dn(pa) || pa.toLowerCase();
+    let o = m.get(key);
+    if(!o){ o = { name:pa, gp:0, co:0, rm:0, ex:0, unl:0 }; m.set(key, o); }
+    const c = effCol(r); o[c]++;
+    if(isUnl(r) && c!=='ex') o.unl++;
+  }
+  const arr = [...m.values()];
+  for(const o of arr){ o.pool = o.gp + o.co + o.rm; o.thin = o.pool > 0 && o.pool <= 2; }
+  return arr;
+}
+function renderDash(){
+  let arr = adAggregate();
+  const q = _adSt.q;
+  if(q) arr = arr.filter(o=> _dn(o.name).includes(q));
+  const cmp = {
+    tot:(a,b)=> b.pool-a.pool || b.gp-a.gp,
+    thin:(a,b)=> (a.pool||99)-(b.pool||99) || b.gp-a.gp,   // couvertures fines d'abord (mais garde ceux qui ont des titres)
+    gp:(a,b)=> b.gp-a.gp, co:(a,b)=> b.co-a.co, rm:(a,b)=> b.rm-a.rm, unl:(a,b)=> b.unl-a.unl,
+    name:(a,b)=> a.name.localeCompare(b.name,'fr'),
+  }[_adSt.sort] || ((a,b)=> b.pool-a.pool);
+  arr.sort(cmp);
+  const totPool = arr.reduce((s,o)=> s+o.pool, 0);
+  el('ad-sub').textContent = arr.length+' artiste'+(arr.length>1?'s':'')+' · '+totPool+' titre'+(totPool>1?'s':'')+' dans le pool';
+  const cell = (v,cls)=> '<td class="c '+cls+(v?' v':'')+'">'+(v||'·')+'</td>';
+  el('ad-body').innerHTML = arr.length ? arr.map(o=>
+    '<tr data-a="'+esc(o.name)+'"'+(o.thin?' class="thin"':'')+'>'+
+    '<td class="l" title="'+esc(o.name)+' — clic : voir son top Spotify + le filtrer">'+esc(o.name)+'</td>'+
+    cell(o.gp,'cg')+cell(o.co,'cc')+cell(o.rm,'cr')+cell(o.ex,'ce')+
+    '<td class="c ct">'+(o.pool||'·')+'</td>'+cell(o.unl,'cu')+
+    '</tr>').join('') : '<tr><td colspan="7" class="ad-empty">Aucun artiste ne correspond.</td></tr>';
+}
+function openDash(){ _adSt.q=''; el('ad-q').value=''; renderDash(); el('adash').classList.add('on'); setTimeout(()=>el('ad-q').focus(),30); }
+function closeDash(){ el('adash').classList.remove('on'); }
+el('artdash').addEventListener('click', openDash);
+el('ad-x').addEventListener('click', closeDash);
+el('adash').addEventListener('click', e=>{ if(e.target.id==='adash') closeDash(); });
+el('ad-sort').addEventListener('change', ()=>{ _adSt.sort = el('ad-sort').value; renderDash(); });
+let _adT; el('ad-q').addEventListener('input', ()=>{ clearTimeout(_adT); _adT=setTimeout(()=>{ _adSt.q=_dn(el('ad-q').value.trim()); renderDash(); }, 110); });
+el('ad-body').addEventListener('click', e=>{ const tr=e.target.closest('tr[data-a]'); if(!tr) return; const a=tr.dataset.a; closeDash(); el('q').value=a; filt.q=a.toLowerCase(); render(); showArtistPool(a); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && el('adash').classList.contains('on')) closeDash(); });
+document.querySelectorAll('#ad-tab thead th.c').forEach(th=>{ const map={Main:'gp',Conn:'co',Puri:'rm',Pool:'tot','♪…':'unl'}; th.addEventListener('click',()=>{ const key=map[(th.textContent||'').trim()]; if(!key) return; _adSt.sort=key; el('ad-sort').value=key; renderDash(); }); });
+
 load();
 </script>
 <script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
