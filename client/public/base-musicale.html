@@ -1,10 +1,12 @@
 <!doctype html><html lang="fr"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PUNCHLINR — Base musicale · Curation</title>
+<title>PUNCHLINR — Base musicale</title>
 <style>
   @font-face{font-family:'Satoshi';src:url('/fonts/satoshi-400.woff2') format('woff2');font-weight:400;font-display:swap}
   @font-face{font-family:'Satoshi';src:url('/fonts/satoshi-500.woff2') format('woff2');font-weight:500;font-display:swap}
   @font-face{font-family:'Satoshi';src:url('/fonts/satoshi-700.woff2') format('woff2');font-weight:700;font-display:swap}
+  @font-face{font-family:'Clash Display';src:url('/fonts/clash-600.woff2') format('woff2');font-weight:600;font-display:swap}
+  @font-face{font-family:'Clash Display';src:url('/fonts/clash-700.woff2') format('woff2');font-weight:700;font-display:swap}
   :root{ --bg:#0e0f11; --card:#16181c; --card2:#1b1e23; --line:#2a2e35; --txt:#f1f2ef; --muted:#9aa0a6;
     --top:#a6ff00; --high:#49a9ff; --mid:#ff9a3e; --deep:#ff5db1; --exc:#7a828c; }
   *{box-sizing:border-box}
@@ -13,10 +15,12 @@
   body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 'Satoshi',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden}
   header{flex:0 0 auto;background:linear-gradient(180deg,#0e0f11 70%,rgba(14,15,17,.92));border-bottom:1px solid var(--line);padding:12px 16px 10px}
   h1{margin:0;font-size:18px;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
-  h1 b{color:var(--top)}
+  h1 b{font-family:'Clash Display','Arial Narrow',var(--txt);color:#fff;font-weight:700;letter-spacing:.01em;font-size:22px}
+  h1 .h1sub{color:#fff;font-weight:600;opacity:.92}
+  h1 .h1sub::before{content:'—';opacity:.4;margin-right:9px;font-weight:400}
   h1 .st{font-size:12px;color:var(--muted);font-weight:400;margin-left:auto}
   .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:9px}
-  input[type=search]{flex:1 1 220px;min-width:160px;background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 11px;font-size:13px}
+  input[type=search]{flex:0 1 260px;min-width:170px;background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 11px;font-size:13px}
   select,.tgl{background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px;cursor:pointer}
   .tgl{user-select:none;display:inline-flex;align-items:center;gap:6px;font-weight:600}
   .tgl.on{border-color:var(--top);color:var(--top);background:#171b10}
@@ -97,7 +101,7 @@
   kbd{background:#22252b;border:1px solid #3a3f47;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font:600 11px ui-monospace;color:#cfd3d8}
 </style></head><body>
 <header>
-  <h1><b>PUNCHLINR</b> — Base musicale · Curation <span class="st" id="st">chargement…</span></h1>
+  <h1><b>PUNCHLINR</b> <span class="h1sub">Base musicale</span> <span class="st" id="st">chargement…</span></h1>
   <div class="bar">
     <input type="search" id="q" placeholder="Rechercher artiste / titre…">
     <div class="chips" id="dec"></div>
@@ -121,7 +125,7 @@
 <div id="spbar"><div id="sp-embed"></div><button id="spclose" title="Fermer le lecteur Spotify">✕</button></div>
 <div id="apool"><div class="ah"><b id="apool-t">Top Spotify</b><button id="apool-x" title="Fermer">✕</button></div><div id="apool-b"></div></div>
 <style>
-#apool{position:fixed;top:0;right:0;width:360px;max-width:92vw;height:100%;background:#141414;border-left:1px solid #2a2a2a;box-shadow:-8px 0 30px #000a;transform:translateX(102%);transition:transform .18s;z-index:60;display:flex;flex-direction:column}
+#apool{position:fixed;top:0;right:0;width:440px;max-width:94vw;height:100%;background:#141414;border-left:1px solid #2a2a2a;box-shadow:-8px 0 30px #000a;transform:translateX(102%);transition:transform .18s;z-index:60;display:flex;flex-direction:column}
 #apool.on{transform:none}
 #apool .ah{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #2a2a2a;font-size:15px}
 #apool .ah button{margin-left:auto;background:none;border:0;color:#ccc;font-size:16px;cursor:pointer;line-height:1}
@@ -138,12 +142,22 @@
 .ap-add button{font-size:10px;padding:3px 5px;background:#222;border:1px solid #3a3a3a;color:#ddd;border-radius:5px;cursor:pointer}
 .ap-add button:hover{background:#2e2e2e}
 .ap-msg{padding:16px;color:#999;font-size:13px;line-height:1.5}
-.ap-artist{display:flex;align-items:center;gap:11px;padding:11px 10px 12px;border-bottom:1px solid #262626;position:sticky;top:0;background:#141414;z-index:2}
-.ap-artist img{width:46px;height:46px;border-radius:50%;object-fit:cover;flex:none}
+.ap-artist{display:flex;align-items:center;gap:11px;padding:11px 12px 12px;border-bottom:1px solid #262626;background:#141414}
+.ap-artist img{width:48px;height:48px;border-radius:50%;object-fit:cover;flex:none}
 .ap-an{font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ap-af{font-size:11.5px;color:var(--top);font-weight:700}
+.ap-af{font-size:11.5px;color:#ff6b9d;font-weight:700}
+.ap-hint{margin-left:auto;width:20px;height:20px;border-radius:50%;border:1px solid #3a3a3a;color:#888;font-size:11px;font-weight:800;display:grid;place-items:center;cursor:help;flex:none}
 .ap-cv{width:36px;height:36px;border-radius:5px;object-fit:cover;flex:none;background:#222}
 .ap-meta2{flex:1;min-width:0}
+.ap-row{cursor:grab}
+.ap-row[draggable]:active{cursor:grabbing}
+.ap-play{width:26px;height:26px;border-radius:50%;border:1px solid #46561d;background:#1a2010;color:var(--top);font-size:9px;display:grid;place-items:center;cursor:pointer;flex:none;padding-left:1px}
+.ap-play:hover{border-color:var(--top)}
+.ap-play.pl{background:var(--top);color:#0b0b0b;border-color:var(--top);animation:playpulse 1.1s ease-in-out infinite}
+.ap-pos{font-size:11px;font-weight:800;color:#7f8790;width:28px;text-align:right;flex:none;font-variant-numeric:tabular-nums}
+.ap-gy{font-size:10px;color:#888;margin-left:7px;flex:none;font-variant-numeric:tabular-nums}
+.ap-add button[data-band=top]{color:var(--top);border-color:#3d5200} .ap-add button[data-band=high]{color:var(--high);border-color:#1d4a70} .ap-add button[data-band=mid]{color:var(--mid);border-color:#6b4213}
+.ap-add button[data-band=top]:hover{background:var(--top);color:#0b0b0b;border-color:var(--top)} .ap-add button[data-band=high]:hover{background:var(--high);color:#0b0b0b;border-color:var(--high)} .ap-add button[data-band=mid]:hover{background:var(--mid);color:#0b0b0b;border-color:var(--mid)}
 .ap-grp{margin:2px 0 12px}
 .ap-gh{display:flex;align-items:center;gap:8px;padding:8px 6px 6px;position:sticky;top:0;background:#141414;z-index:1;border-bottom:1px solid #262626}
 .ap-gh img,.ap-gc{width:34px;height:34px;border-radius:5px;object-fit:cover;flex:none;background:#222}
@@ -183,7 +197,8 @@
 #adash .ad-panel{width:min(880px,96vw);max-height:92vh;background:#111;border:1px solid #2a2a2a;border-radius:12px;box-shadow:0 20px 70px #000c;display:flex;flex-direction:column;overflow:hidden}
 .ad-head{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid #262626;flex-wrap:wrap}
 .ad-head>b{font-size:15px}
-#ad-q{flex:1;min-width:140px;background:#1a1a1a;border:1px solid #333;border-radius:7px;padding:6px 10px;color:#eee;font-size:13px}
+#ad-q{flex:0 1 230px;min-width:150px;background:#1a1a1a;border:1px solid #333;border-radius:7px;padding:6px 10px;color:#eee;font-size:13px}
+.ad-head .ad-sub{margin-left:auto}
 .ad-sub{font-size:11.5px;color:#8a8a8a;white-space:nowrap}
 .ad-sortl{font-size:11px;color:#777}
 #ad-sort{background:#1a1a1a;border:1px solid #333;border-radius:7px;padding:5px 7px;color:#ddd;font-size:12px}
@@ -219,6 +234,7 @@
 .gap-era{font-size:10px;font-weight:800;color:#9aa0a6;background:#20242b;border-radius:5px;padding:2px 6px;flex:none}
 .gap-tier{font-size:10.5px;font-weight:800;border-radius:5px;padding:2px 7px;flex:none;white-space:nowrap}
 .gap-tier.t-main{color:var(--top);background:#1c2410} .gap-tier.t-conn{color:var(--high);background:#0f2030} .gap-tier.t-puri{color:var(--mid);background:#2a1c0c}
+.gap-est{font-size:11px;color:#cdd3c3;font-weight:700;flex:none;background:#1c2016;border:1px solid #333c26;border-radius:5px;padding:2px 7px;min-width:74px;text-align:center}
 .gap-fan{font-size:12px;color:#ff6b9d;font-weight:700;flex:none;font-variant-numeric:tabular-nums;min-width:92px;text-align:right}
 .gap-go{flex:none;background:var(--top);color:#0b0b0b;border:0;border-radius:6px;padding:6px 11px;font-weight:800;cursor:pointer;font-size:12px}
 .gap-go:hover{filter:brightness(1.08)}
@@ -274,7 +290,7 @@ const effCol = (r)=> BAND2COL[effTarget(r)] || 'rm';
 const isUnl = (r)=> !r.preview && !r.sp;   // « sans audio » = ni Deezer ni Spotify
 
 // ── audio ────────────────────────────────────────────────────────────────────────────────────────────
-const au = el('au'); let curCard = null;
+const au = el('au'); let curCard = null; let _apPlaying = null;   // bouton play actif dans l'explorer
 // ── Lecteur Spotify (iFrame API) : audio des titres importés (complet si connecté Premium dans ce navigateur, sinon extrait) ──
 let spCtrl = null;
 window.onSpotifyIframeApiReady = (API) => { try{ API.createController(el('sp-embed'), { width:'100%', height:80, uri:'spotify:track:4cOdK2wGLETKBW3PvgPWqT' }, (c)=>{ spCtrl = c; }); }catch(e){} };
@@ -283,7 +299,7 @@ el('spclose') && el('spclose').addEventListener('click', ()=>{ try{ spCtrl && sp
 el('np-stop') && el('np-stop').addEventListener('click', stop);
 function showNow(r){ const n=el('nowplaying'); if(!n) return; el('np-txt').textContent=r.t+' — '+r.a; n.classList.add('on'); }
 function hideNow(){ const n=el('nowplaying'); if(n) n.classList.remove('on'); }
-function stop(){ try{au.pause();}catch(e){} try{ if(spCtrl) spCtrl.pause(); }catch(e){} if(curCard){curCard.classList.remove('playing');curCard=null;} hideNow(); }
+function stop(){ try{au.pause();}catch(e){} try{ if(spCtrl) spCtrl.pause(); }catch(e){} if(curCard){curCard.classList.remove('playing');curCard=null;} if(_apPlaying){_apPlaying.classList.remove('pl');_apPlaying=null;} hideNow(); }
 function playRec(r, card){
   if(curCard===card){ stop(); return; }
   stop(); activeKey = r.k;
@@ -383,7 +399,12 @@ document.querySelectorAll('.col').forEach(col=>{
   col.addEventListener('dragover', e=>{ e.preventDefault(); col.classList.add('drop'); });
   col.addEventListener('dragleave', ()=>col.classList.remove('drop'));
   col.addEventListener('drop', async e=>{ e.preventDefault(); col.classList.remove('drop');
-    const k = e.dataTransfer.getData('text/plain'); const r = ALL.find(x=>x.k===k);
+    const k = e.dataTransfer.getData('text/plain');
+    if(k && k.indexOf('dzadd:')===0){                                    // titre glissé depuis l'explorateur d'artiste
+      if(col.dataset.c==='ex'){ toast('Pour « Hors pool » : ajoute d\'abord dans un tier.', true); return; }
+      const t=_apTracks.get(k.slice(6)); if(t) await addDeezerTrack(t, COLS[col.dataset.c].band); return;
+    }
+    const r = ALL.find(x=>x.k===k);
     if(r){ assignCol(r, col.dataset.c); return; }                       // déplacement interne d'une carte
     const ids = spotifyTrackIds(allDropText(e.dataTransfer));            // sinon : glisser-déposer depuis Spotify (appli ou web)
     if(ids.length && col.dataset.c!=='ex') await dropSpotify(ids, COLS[col.dataset.c].band, col.dataset.c);
@@ -610,30 +631,49 @@ async function showArtistPool(name){
   const findRow = (t)=>{ let row = t.dz && ALL.find(r=> r.dz===String(t.dz)); if(!row){ const tn=_dn(t.title); row = ALL.find(r=> _dn(r.t)===tn && _dn(_primary(r.a)).includes(want)); } return row; };
   const a = res.artist;
   const head = '<div class="ap-artist">'+(a.picture?'<img src="'+esc(a.picture)+'" alt="">':'<span class="ap-cv" style="width:46px;height:46px;border-radius:50%"></span>')+
-    '<div style="min-width:0"><div class="ap-an">'+esc(a.name)+'</div><div class="ap-af">'+(a.nb_fan?'♥ '+fmtFan(a.nb_fan)+' fans':'artiste Deezer')+'</div></div></div>';
-  const maxRank = Math.max(1, ...res.tracks.map(t=>t.rank||0));
-  const rowsHtml = res.tracks.map(t=>{
-    _apTracks.set(String(t.dz), t);
-    const row = findRow(t);
-    const cov = t.cover?'<img class="ap-cv" loading="lazy" src="'+esc(t.cover)+'" alt="">':'<span class="ap-cv"></span>';
-    const pct = Math.round((t.rank||0)/maxRank*100);
-    const info = '<div class="ap-t">'+esc(t.title)+'</div><div class="ap-a"><span class="ap-pop" title="Popularité Deezer (rank '+fmtFan(t.rank)+')"><i style="width:'+pct+'%"></i></span></div>';
-    const right = row ? '<span class="ap-in">✓ '+(COLN[row.b]||'')+'</span>'
-      : '<span class="ap-add"><button data-dz="'+esc(String(t.dz))+'" data-band="top">Main</button><button data-dz="'+esc(String(t.dz))+'" data-band="high">Conn</button><button data-dz="'+esc(String(t.dz))+'" data-band="mid">Puri</button></span>';
-    return '<div class="ap-row'+(row?' has':'')+'">'+cov+'<div class="ap-meta2">'+info+'</div>'+right+'</div>';
+    '<div style="min-width:0"><div class="ap-an">'+esc(a.name)+'</div><div class="ap-af">'+(a.nb_fan?'♥ '+fmtFan(a.nb_fan)+' fans':'artiste Deezer')+'</div></div>'+
+    '<span class="ap-hint" title="▶ écouter · glisser dans une colonne · #N = classement de popularité chez l\'artiste">?</span></div>';
+  const groupHtml = res.groups.map(g=>{
+    const cap = g.kind==='album' ? 8 : (g.kind==='single' ? 14 : 8);
+    const rows = g.tracks.slice(0, cap).map(t=>{
+      _apTracks.set(String(t.dz), t);
+      const row = findRow(t);
+      const play = '<button class="ap-play" data-dz="'+esc(String(t.dz))+'" title="Écouter (extrait Deezer)">▶</button>';
+      const pos = '<span class="ap-pos" title="#'+t.pos+' des titres les plus streamés de l\'artiste">#'+t.pos+'</span>';
+      const sub = t.feat ? '<div class="ap-a">'+esc(t.artist)+'</div>' : '';
+      const right = row ? '<span class="ap-in">✓ '+(COLN[row.b]||'')+'</span>'
+        : '<span class="ap-add"><button data-dz="'+esc(String(t.dz))+'" data-band="top">Main</button><button data-dz="'+esc(String(t.dz))+'" data-band="high">Conn</button><button data-dz="'+esc(String(t.dz))+'" data-band="mid">Puri</button></span>';
+      return '<div class="ap-row'+(row?' has':'')+'" draggable="true" data-dz="'+esc(String(t.dz))+'">'+play+pos+'<div class="ap-meta2"><div class="ap-t">'+esc(t.title)+'</div>'+sub+'</div>'+right+'</div>';
+    }).join('');
+    const gh = '<div class="ap-gh">'+(g.cover?'<img src="'+esc(g.cover)+'" alt="">':'<span class="ap-gc"></span>')+'<b>'+esc(g.album)+'</b>'+(g.year?'<span class="ap-gy">'+g.year+'</span>':'')+'<span class="ap-gt">'+(g.kind==='album'?'album':g.kind==='single'?'singles/EP':'feats')+'</span></div>';
+    return '<div class="ap-grp">'+gh+rows+'</div>';
   }).join('');
-  body.innerHTML = head + rowsHtml;
+  body.innerHTML = head + groupHtml;
 }
 el('apool-x').addEventListener('click', ()=>el('apool').classList.remove('on'));
+async function addDeezerTrack(t, band){
+  const res = await fetch('/api/curation/add-deezer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tracks:[{artist:t.artist,title:t.title,band,dz:t.dz,cover:t.cover}]})}).then(r=>r.json()).catch(()=>null);
+  const col = ({top:'Mainstream',high:'Connaisseur',mid:'Puriste'})[band]||band;
+  if(res&&res.ok&&(res.added||res.updated)){ toast('✓ ajouté → '+col); await load(); return true; }
+  if(res&&res.ok){ toast('= déjà dans la base → '+col); await load(); return true; }
+  toast('Échec'+((res&&res.error)?' : '+res.error:''), true); return false;
+}
+function playExplorer(dz, btn){
+  if(_apPlaying===btn){ try{au.pause();}catch(e){} btn.classList.remove('pl'); _apPlaying=null; return; }
+  stop();                                   // coupe l'audio du board / autre extrait
+  au.src = '/api/preview/'+dz; au.play().catch(()=>{});
+  btn.classList.add('pl'); _apPlaying=btn;
+}
 el('apool-b').addEventListener('click', async e=>{
-  const b = e.target.closest('button[data-dz]'); if(!b) return;
+  const play = e.target.closest('.ap-play'); if(play){ playExplorer(play.dataset.dz, play); return; }
+  const b = e.target.closest('.ap-add button[data-dz]'); if(!b) return;
   const band=b.dataset.band, dz=b.dataset.dz, t=_apTracks.get(dz); if(!t) return;
   const span=b.closest('.ap-add'); if(span) span.textContent='…';
-  const res = await fetch('/api/curation/add-deezer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tracks:[{artist:t.artist,title:t.title,band,dz:t.dz,cover:t.cover}]})}).then(r=>r.json()).catch(()=>null);
-  if(res&&res.ok&&(res.added||res.updated)){ toast('✓ ajouté → '+({top:'Mainstream',high:'Connaisseur',mid:'Puriste'})[band]); await load(); if(span){ const row=span.closest('.ap-row'); if(row) row.classList.add('has'); span.outerHTML='<span class="ap-in">✓ ajouté</span>'; } }
-  else if(res&&res.ok){ toast('= déjà dans la base'); if(span){ const row=span.closest('.ap-row'); if(row) row.classList.add('has'); span.outerHTML='<span class="ap-in">✓ déjà là</span>'; } }
-  else { if(span) span.innerHTML='<button data-dz="'+esc(dz)+'" data-band="'+band+'">réessayer</button>'; toast('Échec'+((res&&res.error)?' : '+res.error:''), true); }
+  const ok = await addDeezerTrack(t, band);
+  if(ok){ if(span){ const row=span.closest('.ap-row'); if(row) row.classList.add('has'); span.outerHTML='<span class="ap-in">✓ ajouté</span>'; } }
+  else if(span){ span.innerHTML='<button data-dz="'+esc(dz)+'" data-band="'+band+'">réessayer</button>'; }
 });
+el('apool-b').addEventListener('dragstart', e=>{ const row=e.target.closest('.ap-row[data-dz]'); if(row) e.dataTransfer.setData('text/plain','dzadd:'+row.dataset.dz); });
 // ── Tableau de bord Artistes : agrège la base par artiste principal + compte par tier ──
 const _adSt = { sort:'tot', q:'' };
 function adAggregate(){
@@ -697,10 +737,18 @@ async function renderGaps(){
   }
   if(!_sugg.length){ box.innerHTML = '<div class="ad-gaps-msg">Liste de référence pas encore générée.<br>(le recensement des artistes rap FR arrive)</div>'; el('ad-sub').textContent=''; return; }
   // croisement tolérant aux variantes de nom (ex. « Gims » dans la base = « Maître Gims » de la liste ; « Disiz » = « Disiz la Peste »)
-  const baseArr = adAggregate().map(o=>_dn(o.name)).filter(Boolean);
+  const agg = adAggregate();
+  const baseArr = agg.map(o=>_dn(o.name)).filter(Boolean);
   const baseSet = new Set(baseArr);
   const inBase = (nm)=>{ const k=_dn(nm); if(!k) return false; if(baseSet.has(k)) return true;
     return baseArr.some(bk=> bk.length>=4 && (k.includes(bk) || (k.length>=4 && bk.includes(k)))); };
+  // densité TYPE de la base par tier (médiane des titres/artiste) → sert d'estimation de ce qu'on mettrait
+  const byTier = {mainstream:[], connaisseur:[], puriste:[]};
+  for(const o of agg){ if(o.pool<=0) continue; const dom = (o.gp>=o.co && o.gp>=o.rm)?'mainstream':(o.co>=o.rm?'connaisseur':'puriste'); byTier[dom].push(o.pool); }
+  const med = v=>{ if(!v.length) return 0; const s=[...v].sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; };
+  const typ = {mainstream: med(byTier.mainstream)||6, connaisseur: med(byTier.connaisseur)||4, puriste: med(byTier.puriste)||2};
+  const estimate = (a)=>{ const t=String(a.tier||'').toLowerCase(); const base=typ[t]||typ.connaisseur; const f=a.nb_fan||0;
+    const pop = f>=3e6?2 : f>=8e5?1 : f>=1.5e5?0 : -1; return Math.max(1, Math.min(14, Math.round(base)+pop)); };
   let miss = _sugg.filter(a=> a && a.name && !inBase(a.name));
   const q = _adSt.q; if(q) miss = miss.filter(a=> _dn(a.name).includes(q));
   miss.sort((a,b)=> (b.nb_fan||0)-(a.nb_fan||0) || a.name.localeCompare(b.name,'fr'));
@@ -710,11 +758,13 @@ async function renderGaps(){
   box.innerHTML = miss.length ? miss.map((a,i)=>{
     const tl = TL[String(a.tier||'').toLowerCase()] || ['—','t-conn'];
     const era = ERA[String(a.era)] || '';
+    const est = estimate(a);
     return '<div class="gap-row" data-x="'+esc(a.name)+'">'+
       '<span class="gap-rk">'+(i+1)+'</span>'+
       '<span class="gap-n" title="'+esc(a.signature?('ex. '+a.signature):a.name)+'">'+esc(a.name)+'</span>'+
       (era?'<span class="gap-era">'+era+'</span>':'')+
       '<span class="gap-tier '+tl[1]+'">'+tl[0]+'</span>'+
+      '<span class="gap-est" title="estimation de titres à ajouter (calibrée sur ta densité '+tl[0]+')">~'+est+' titres</span>'+
       '<span class="gap-fan">'+(a.nb_fan?'♥ '+(a.nb_fan).toLocaleString('fr-FR'):'')+'</span>'+
       '<button class="gap-go" data-x="'+esc(a.name)+'">Explorer →</button>'+
     '</div>';

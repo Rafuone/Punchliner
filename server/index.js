@@ -1920,13 +1920,36 @@ app.get('/api/curation/deezer-artist', async (req, res) => {
     const sr = await fetch(`${DZ}/search/artist?limit=1&q=` + encodeURIComponent(q), UA).then((r) => r.json()).catch(() => null);
     const a = sr && sr.data && sr.data[0];
     if (!a) return res.json({ ok: false, error: 'artiste introuvable sur Deezer' });
-    const tr = await fetch(`${DZ}/artist/${a.id}/top?limit=30`, UA).then((r) => r.json()).catch(() => null);
-    const items = (tr && tr.data) || [];
-    const tracks = items.map((t) => {
+    const [topR, albR] = await Promise.all([
+      fetch(`${DZ}/artist/${a.id}/top?limit=50`, UA).then((r) => r.json()).catch(() => null),
+      fetch(`${DZ}/artist/${a.id}/albums?limit=100`, UA).then((r) => r.json()).catch(() => null),
+    ]);
+    const albMeta = new Map();
+    for (const al of ((albR && albR.data) || [])) albMeta.set(al.id, { type: al.record_type || 'album', year: +((al.release_date || '').slice(0, 4)) || 0, cover: al.cover_medium || al.cover || '' });
+    // position de popularité globale (1 = titre le plus streamé de l'artiste)
+    let items = ((topR && topR.data) || []).sort((x, y) => (y.rank || 0) - (x.rank || 0)).map((t, i) => ({ t, pos: i + 1 }));
+    const groups = new Map();
+    for (const { t, pos } of items) {
+      const isFeat = t.artist && t.artist.id && t.artist.id !== a.id;               // titre où l'artiste n'est pas le principal → apparition
+      const alId = t.album && t.album.id;
+      const meta = albMeta.get(alId) || {};
+      const kind = isFeat ? 'feat' : ((meta.type === 'single' || meta.type === 'ep') ? 'single' : 'album');
+      const key = isFeat ? 'feat' : (kind === 'single' ? 'singles' : 'al' + alId);   // singles regroupés, feats regroupés
+      if (!groups.has(key)) groups.set(key, {
+        kind, bestPos: pos,
+        album: isFeat ? 'Apparitions (feats)' : (kind === 'single' ? 'Singles & EP' : ((t.album && t.album.title) || '?')),
+        cover: (t.album && (t.album.cover_medium || t.album.cover)) || meta.cover || '',
+        year: meta.year || 0, tracks: [],
+      });
+      const g = groups.get(key);
       const artist = (t.artist && t.artist.name) || a.name;
-      return { title: t.title, dz: t.id, rank: t.rank || 0, cover: (t.album && (t.album.cover_medium || t.album.cover)) || '', artist, k: dkey({ artist, title: t.title }) };
-    });
-    res.json({ ok: true, artist: { id: a.id, name: a.name, nb_fan: a.nb_fan || 0, picture: a.picture_medium || a.picture || '' }, tracks });
+      g.tracks.push({ title: t.title, dz: t.id, pos, artist, feat: !!isFeat, cover: (t.album && (t.album.cover_medium || t.album.cover)) || '', k: dkey({ artist, title: t.title }) });
+      g.bestPos = Math.min(g.bestPos, pos);
+    }
+    const kindRank = (k) => k === 'album' ? 0 : k === 'single' ? 1 : 2;
+    const out = [...groups.values()].sort((x, y) => kindRank(x.kind) - kindRank(y.kind) || x.bestPos - y.bestPos);
+    for (const g of out) g.tracks.sort((x, y) => x.pos - y.pos);
+    res.json({ ok: true, artist: { id: a.id, name: a.name, nb_fan: a.nb_fan || 0, picture: a.picture_medium || a.picture || '' }, groups: out });
   } catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
 });
 // Liste de référence des artistes rap FR (générée hors-ligne : recensement multi-agents + résolution Deezer pour
@@ -1935,6 +1958,28 @@ app.get('/api/curation/suggestions', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   try { let list = []; try { list = JSON.parse(fs.readFileSync(path.join(__dirname, 'fr-rap-artists.json'), 'utf8')); } catch { /* pas encore générée */ } res.json({ ok: true, artists: list }); }
   catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
+});
+// Rattache un id Deezer (audio) + cover/année à des titres DÉJÀ dans la base, par clé, SANS toucher au tier.
+// Sert au backfill des titres « sans audio » qui existent pourtant sur Deezer (résolus par un script offline).
+app.post('/api/curation/attach-deezer', express.json({ limit: '512kb' }), (req, res) => {
+  try {
+    const items = ((req.body && req.body.items) || []).slice(0, 3000);
+    const list = canonActive();
+    const byKey = new Map(list.map((c) => [c.k, c]));
+    const decY = (y) => !y ? 'x' : y < 2000 ? '90' : y < 2010 ? '00' : y < 2020 ? '10' : '20';
+    let n = 0;
+    for (const it of items) {
+      const c = byKey.get(String(it.k || '')); if (!c) continue;
+      if (it.dz) { c.dz = String(it.dz); n++; }
+      if (it.cover && !c.cov) c.cov = String(it.cover);
+      if (it.year && !c.yr) { c.yr = +it.year; c.dec = decY(+it.year); }
+    }
+    const lp = path.join(__dirname, 'canon-active.json');
+    try { fs.copyFileSync(lp, lp + '.bak'); } catch { /* best-effort */ }
+    fs.writeFileSync(lp, JSON.stringify(list));
+    _canonActive = list; _bandCache = null; _bandLen = -1;
+    res.json({ ok: true, attached: n, total: list.length });
+  } catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
 });
 // Ajout d'un ou plusieurs titres Deezer à la base (stocke l'id Deezer → audio jouable via /api/preview/{id}).
 app.post('/api/curation/add-deezer', express.json({ limit: '64kb' }), (req, res) => {
