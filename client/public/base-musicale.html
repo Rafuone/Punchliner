@@ -20,7 +20,13 @@
   h1 .h1sub::before{content:'—';opacity:.4;margin-right:9px;font-weight:400}
   h1 .st{font-size:12px;color:var(--muted);font-weight:400;margin-left:auto}
   .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:9px}
-  input[type=search]{flex:0 1 260px;min-width:170px;background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 11px;font-size:13px}
+  input[type=search]{width:100%;background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 32px 8px 11px;font-size:13px}
+  input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;display:none}
+  .qwrap{position:relative;display:inline-flex;align-items:center;flex:0 1 260px;min-width:170px}
+  .qwrap.ad-qwrap{flex:0 1 230px;min-width:150px}
+  .qclr{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:20px;height:20px;border:0;background:#2f333a;color:#cfd3d8;border-radius:50%;cursor:pointer;display:none;place-items:center;font-size:10px;line-height:1;padding:0}
+  .qwrap.has .qclr{display:grid}
+  .qclr:hover{background:#474d57;color:#fff}
   select,.tgl{background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px;cursor:pointer}
   .tgl{user-select:none;display:inline-flex;align-items:center;gap:6px;font-weight:600}
   .tgl.on{border-color:var(--top);color:var(--top);background:#171b10}
@@ -103,7 +109,7 @@
 <header>
   <h1><b>PUNCHLINR</b> <span class="h1sub">Base musicale</span> <span class="st" id="st">chargement…</span></h1>
   <div class="bar">
-    <input type="search" id="q" placeholder="Rechercher artiste / titre…">
+    <span class="qwrap"><input type="search" id="q" placeholder="Rechercher artiste / titre…"><button type="button" class="qclr" data-for="q" title="Effacer (revenir à tout)">✕</button></span>
     <div class="chips" id="dec"></div>
     <span class="tgl" id="tUnl" title="N'afficher que les titres sans extrait jouable (à résoudre)">Sans audio <b id="tUnlN" style="color:var(--mid)"></b></span>
     <span class="tgl" id="tEd" title="N'afficher que TES reclassements pas encore envoyés au serveur (bouton ⚡ Appliquer)">Modifiés <b id="tEdN" style="color:var(--top)"></b></span>
@@ -197,7 +203,7 @@
 #adash .ad-panel{width:min(880px,96vw);max-height:92vh;background:#111;border:1px solid #2a2a2a;border-radius:12px;box-shadow:0 20px 70px #000c;display:flex;flex-direction:column;overflow:hidden}
 .ad-head{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid #262626;flex-wrap:wrap}
 .ad-head>b{font-size:15px}
-#ad-q{flex:0 1 230px;min-width:150px;background:#1a1a1a;border:1px solid #333;border-radius:7px;padding:6px 10px;color:#eee;font-size:13px}
+#ad-q{width:100%;background:#1a1a1a;border:1px solid #333;border-radius:7px;padding:6px 30px 6px 10px;color:#eee;font-size:13px}
 .ad-head .ad-sub{margin-left:auto}
 .ad-sub{font-size:11.5px;color:#8a8a8a;white-space:nowrap}
 .ad-sortl{font-size:11px;color:#777}
@@ -245,7 +251,7 @@
 <div id="adash"><div class="ad-panel">
   <div class="ad-head">
     <div class="ad-seg" id="ad-seg"><button data-m="base" class="on">📊 Ma base</button><button data-m="gaps" title="Artistes rap FR connus ABSENTS de ta base (triés par popularité) — clique pour les ajouter">💡 Oubliés</button></div>
-    <input type="search" id="ad-q" placeholder="filtrer / explorer un artiste…">
+    <span class="qwrap ad-qwrap"><input type="search" id="ad-q" placeholder="filtrer / explorer un artiste…"><button type="button" class="qclr" data-for="ad-q" title="Effacer (revenir à tout)">✕</button></span>
     <span class="ad-sub" id="ad-sub"></span>
     <span class="ad-sortl">Tri :</span>
     <select id="ad-sort">
@@ -644,7 +650,7 @@ async function showArtistPool(name){
   body.innerHTML = '<div class="ap-msg">chargement…</div>'; panel.classList.add('on');
   _apTracks = new Map();
   let res=null; try{ res = await fetch('/api/curation/deezer-artist?q='+encodeURIComponent(name), {cache:'no-store'}).then(r=>r.json()); }catch(e){}
-  if(!res||!res.ok||!res.tracks||!res.tracks.length){ body.innerHTML = '<div class="ap-msg">Rien trouvé pour « '+esc(name)+' » sur Deezer'+((res&&res.error)?' — '+esc(res.error):'')+'.</div>'; return; }
+  if(!res||!res.ok||!res.groups||!res.groups.length){ body.innerHTML = '<div class="ap-msg">Rien trouvé pour « '+esc(name)+' » sur Deezer'+((res&&res.error)?' — '+esc(res.error):'')+'.</div>'; return; }
   const COLN = {top:'Mainstream',high:'Connaisseur',mid:'Puriste',deep:'Puriste',exc:'Hors pool'};
   const want = _dn(_primary(name));
   const findRow = (t)=>{ let row = t.dz && ALL.find(r=> r.dz===String(t.dz)); if(!row){ const tn=_dn(t.title); row = ALL.find(r=> _dn(r.t)===tn && _dn(_primary(r.a)).includes(want)); } return row; };
@@ -801,6 +807,15 @@ function setMode(m){
 }
 el('ad-seg').addEventListener('click', e=>{ const b=e.target.closest('button[data-m]'); if(b) setMode(b.dataset.m); });
 el('ad-gaps').addEventListener('click', e=>{ const g=e.target.closest('[data-x]'); if(!g) return; closeDash(); showArtistPool(g.dataset.x); });
+
+// ✕ au bout des champs de recherche : vide + revient à tout (redéclenche le filtre) + refocus
+function wireClear(id){ const inp=el(id); if(!inp) return; const wrap=inp.closest('.qwrap'); if(!wrap) return; const btn=wrap.querySelector('.qclr');
+  const sync=()=> wrap.classList.toggle('has', !!inp.value);
+  inp.addEventListener('input', sync);
+  btn.addEventListener('click', ()=>{ inp.value=''; sync(); inp.dispatchEvent(new Event('input',{bubbles:true})); inp.focus(); });
+  sync();
+}
+wireClear('q'); wireClear('ad-q');
 
 load();
 </script>
