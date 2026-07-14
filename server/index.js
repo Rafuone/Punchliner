@@ -2106,10 +2106,10 @@ app.post('/api/curation/deezer-link', express.json({ limit: '8kb' }), async (req
     const c = canonActive().find((x) => x.k === k);
     if (c) {                                                                     // déjà dans le canon → on rattache l'audio, tier inchangé
       const r = mergeAttach([{ k, dz: id, cover, year }]);
-      return res.json({ ok: true, mode: 'attached', artist, title, band: c.band });
+      return res.json({ ok: true, mode: 'attached', artist, title, band: c.band, key: k });
     }
     const out = mergeCanonTracks([{ artist, title, band, dz: id, cover, year }]);  // sinon on l'ajoute
-    res.json({ ok: true, mode: 'added', artist, title, band, ...out });
+    res.json({ ok: true, mode: 'added', artist, title, band, key: k, ...out });
   } catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
 });
 // Ajout d'un ou plusieurs titres Deezer à la base (stocke l'id Deezer → audio jouable via /api/preview/{id}).
@@ -2119,11 +2119,33 @@ app.post('/api/curation/add-deezer', express.json({ limit: '64kb' }), (req, res)
       artist: String(t.artist || ''), title: String(t.title || ''), band: String(t.band || ''),
       dz: t.dz, cover: String(t.cover || ''), year: +t.year || 0,
     }));
-    res.json({ ok: true, ...mergeCanonTracks(tracks) });
+    const keys = tracks.map((t) => dkey({ artist: t.artist, title: t.title }));
+    res.json({ ok: true, keys, ...mergeCanonTracks(tracks) });
   } catch (e) { res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
 });
+// Cherche l'AUDIO Deezer d'un titre (artiste + titre) → {dz, cover, year} ou null. Matching artiste ET titre (strict)
+// pour ne pas rattacher le mauvais son. C'est ce qui rend un titre importé de Spotify VRAIMENT jouable en jeu (Deezer).
+async function deezerAudioFor(artist, title) {
+  const nrm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\(.*?\)|\[.*?\]/g, '').replace(/[^a-z0-9]+/g, '');
+  const prim = String(artist).split(/\s*(?:feat\.?|ft\.?|featuring|avec|&|,| x )\s*/i)[0].trim();
+  const na = nrm(prim), nt = nrm(title);
+  if (!na || !nt) return null;
+  for (const q of [`artist:"${prim}" track:"${String(title).replace(/"/g, '')}"`, `${prim} ${title}`]) {
+    let items = [];
+    try { const r = await fetch(`${DZ}/search?limit=8&q=` + encodeURIComponent(q), UA); items = r.ok ? (await r.json()).data || [] : []; } catch { items = []; }
+    const hit = items.find((t) => {
+      if (!t.preview) return false;
+      const a = nrm(t.artist && t.artist.name), tt = nrm(t.title);
+      const am = a && (a.includes(na) || na.includes(a));
+      const tm = tt === nt || ((tt.includes(nt) || nt.includes(tt)) && Math.min(tt.length, nt.length) >= 5);
+      return am && tm;
+    });
+    if (hit) return { dz: String(hit.id), cover: (hit.album && (hit.album.cover_medium || hit.album.cover)) || '', year: +((hit.album && hit.album.release_date || '').slice(0, 4)) || 0 };
+  }
+  return null;
+}
 // Glisser-déposer d'un morceau depuis Spotify : on ne connaît que l'id → on résout titre+artiste via la PAGE EMBED
-// publique (open.spotify.com/embed/track/{id} → champs "name"/"subtitle"), SANS token → plus de 403.
+// publique (open.spotify.com/embed/track/{id}), SANS token, PUIS on cherche l'audio sur Deezer (sinon muet en jeu).
 app.post('/api/curation/drop-spotify', express.json({ limit: '32kb' }), async (req, res) => {
   try {
     const ids = ((req.body && req.body.ids) || []).slice(0, 30);
@@ -2145,11 +2167,16 @@ app.post('/api/curation/drop-spotify', express.json({ limit: '32kb' }), async (r
         const artist = arts.length ? (arts[0] + (arts.length > 1 ? ' feat. ' + arts.slice(1).join(', ') : '')) : '';
         const cm = html.match(/https:\/\/[a-z0-9-]*\.?(?:scdn\.co|spotifycdn\.com)\/image\/[a-zA-Z0-9]+/i);   // pochette depuis l'embed → posée direct au drop
         const ym = html.match(/"releaseDate":\{"isoString":"(\d{4})/);
-        if (title && artist) tracks.push({ artist, title, band, spId: id, cover: cm ? cm[0] : '', year: ym ? +ym[1] : 0 });
+        if (title && artist) {
+          const dza = await deezerAudioFor(artist, title);   // audio Deezer (sinon muet en jeu)
+          tracks.push({ artist, title, band, spId: id, dz: dza ? dza.dz : undefined, cover: (cm ? cm[0] : '') || (dza ? dza.cover : ''), year: (ym ? +ym[1] : 0) || (dza ? dza.year : 0) });
+        }
       } catch { /* skip */ }
     }
     if (!tracks.length) return res.json({ ok: false, error: 'titre Spotify illisible' });
-    res.json({ ok: true, resolved: tracks.map((t) => t.artist + ' - ' + t.title), ...mergeCanonTracks(tracks) });
+    const dzFound = tracks.filter((t) => t.dz).length;
+    const keys = tracks.map((t) => dkey({ artist: t.artist, title: t.title }));
+    res.json({ ok: true, resolved: tracks.map((t) => t.artist + ' - ' + t.title), keys, dzFound, noAudio: tracks.length - dzFound, ...mergeCanonTracks(tracks) });
   } catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
 });
 // Résout une playlist via sa PAGE EMBED (jusqu'à 100 titres, sans token) → {artist,title,band,spId}. subtitle = artiste(s), uri = id.
