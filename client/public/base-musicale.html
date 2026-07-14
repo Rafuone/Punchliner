@@ -280,9 +280,10 @@
 const COLS = { gp:{band:'top'}, co:{band:'high'}, rm:{band:'mid'}, ex:{band:'exc'} };
 const BAND2COL = { top:'gp', high:'co', mid:'rm', deep:'rm', exc:'ex' };
 const TARGET_GP = 300;                                  // objectif « grand public » (actuellement ~160)
-const CAP = 90;                                         // rendu max par colonne (le reste via « afficher plus ») — baissé pour alléger l'affichage sur petites configs
+const CAP = 100000;                                     // AUCUN plafond : on affiche TOUS les titres de chaque colonne, toujours (jamais rien de caché). Perf OK grâce à la délégation d'événements + images en lazy-load.
 const el = (id)=>document.getElementById(id);
 const esc = (s)=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const _acc = (s)=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');   // minuscule + SANS accents → recherche/filtre insensible aux accents (Saïan = Saian)
 
 let ALL = [], EXSET = new Set(), SUM = {};
 let changes = {}; try{ changes = JSON.parse(localStorage.getItem('pl_curation_v2')||'{}'); }catch(e){}
@@ -336,7 +337,7 @@ async function load(){
 
 // ── rendu ────────────────────────────────────────────────────────────────────────────────────────────
 function passFilter(r){
-  if(filt.q){ const h=(r.a+' '+r.t+' '+((r.f||[]).join(' '))).toLowerCase(); if(!h.includes(filt.q)) return false; }  // cherche aussi dans les feats
+  if(filt.q){ const h=_acc(r.a+' '+r.t+' '+((r.f||[]).join(' '))); if(!h.includes(filt.q)) return false; }  // insensible aux accents (Saïan = Saian) + cherche dans les feats
   if(!filt.dec.has(decRow(r))) return false;
   if(filt.scene && !(r.g||[]).includes(filt.scene)) return false;
   if(filt.unl && !isUnl(r)) return false;
@@ -389,7 +390,7 @@ function setupBoard(){
   const board = el('board');
   board.addEventListener('click', e=>{
     const more = e.target.closest('.more'); if(more){ caps[more.dataset.c] = (caps[more.dataset.c]||CAP) + CAP; render(); return; }
-    const ql = e.target.closest('.qlink'); if(ql){ const q = ql.dataset.q||''; el('q').value = q; filt.q = q.toLowerCase(); render(); showArtistPool(q); return; }   // clic artiste/feat → recherche + top Spotify de l'artiste
+    const ql = e.target.closest('.qlink'); if(ql){ const q = ql.dataset.q||''; el('q').value = q; filt.q = _acc(q); render(); showArtistPool(q); return; }   // clic artiste/feat → recherche (sans accents) + top de l'artiste
     const card = e.target.closest('.card'); if(!card) return;
     const r = ALL.find(x=>x.k===card.dataset.k); if(!r) return;
     if(e.target.closest('.play')){ playRec(r, card); return; }
@@ -484,7 +485,7 @@ document.querySelectorAll('.dch').forEach(c=>c.addEventListener('click',e=>{ con
   if(e.shiftKey){ if(filt.dec.has(d)) filt.dec.delete(d); else filt.dec.add(d); if(!filt.dec.size) filt.dec=new Set(ALLDEC); }
   else { filt.dec = (filt.dec.size===1 && filt.dec.has(d)) ? new Set(ALLDEC) : new Set([d]); }   // clic = isoler ; reclic = tout ; Maj+clic = multi
   syncDec(); render(); }));
-let _qT; el('q').addEventListener('input', ()=>{ clearTimeout(_qT); _qT=setTimeout(()=>{ filt.q = el('q').value.trim().toLowerCase(); render(); }, 140); });  // anti-rebond : plus de re-rendu à chaque frappe
+let _qT; el('q').addEventListener('input', ()=>{ clearTimeout(_qT); _qT=setTimeout(()=>{ filt.q = _acc(el('q').value.trim()); render(); }, 140); });  // anti-rebond + insensible aux accents
 // (filtre « scènes » retiré)
 el('tUnl').addEventListener('click', ()=>{ filt.unl=!filt.unl; el('tUnl').classList.toggle('on',filt.unl); render(); });
 el('tEd').addEventListener('click', ()=>{ filt.ed=!filt.ed; el('tEd').classList.toggle('on',filt.ed); render(); });
@@ -644,12 +645,16 @@ async function fillSpotify(){
 el('apply').addEventListener('click', async ()=>{
   const p = buildPayload();
   const n = Object.keys(p.labels).length + p.exclude.length;
-  if(!n){ toast('Rien à appliquer.'); return; }
+  if(!n){
+    if(_recent.size){ const rn=_recent.size; _recent.clear(); saveRecent(); render(); toast('✓ '+rn+' ajout(s) déjà enregistré(s) sur le serveur — marqueurs « AJOUTÉ » retirés'); }
+    else toast('Rien à appliquer.');
+    return;
+  }
   if(!confirm(`Appliquer ${n} changement(s) au serveur ? (backup .bak créé, effet immédiat sans redémarrage)`)) return;
   el('apply').textContent='…';
   const res = await fetch('/api/curation/apply', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p) }).then(r=>r.json()).catch(()=>null);
   el('apply').textContent='⚡ Appliquer au serveur';
-  if(res && res.ok){ changes={}; save(); toast(`✓ appliqué : ${res.labels} labels, ${res.excluded} exclus (total ${res.totalLabels})`); await load(); }
+  if(res && res.ok){ changes={}; _recent.clear(); saveRecent(); save(); toast(`✓ appliqué : ${res.labels} labels, ${res.excluded} exclus (total ${res.totalLabels})`); await load(); }
   else toast('Échec de l’application' + (res && res.error ? ' : '+res.error : ''), true);
 });
 
@@ -763,7 +768,7 @@ el('ad-sort').addEventListener('change', ()=>{ _adSt.sort = el('ad-sort').value;
 let _adT; el('ad-q').addEventListener('input', ()=>{ clearTimeout(_adT); _adT=setTimeout(()=>{ _adSt.q=_dn(el('ad-q').value.trim()); if(_adSt.mode==='gaps') renderGaps(); else renderDash(); }, 110); });
 el('ad-body').addEventListener('click', e=>{
   const ex=e.target.closest('.ad-explore'); if(ex){ closeDash(); showArtistPool(ex.dataset.x); return; }
-  const tr=e.target.closest('tr[data-a]'); if(!tr) return; const a=tr.dataset.a; closeDash(); el('q').value=a; filt.q=a.toLowerCase(); render(); showArtistPool(a); });
+  const tr=e.target.closest('tr[data-a]'); if(!tr) return; const a=tr.dataset.a; closeDash(); el('q').value=a; filt.q=_acc(a); render(); showArtistPool(a); });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && el('adash').classList.contains('on')) closeDash(); });
 document.querySelectorAll('#ad-tab thead th.c').forEach(th=>{ const map={Main:'gp',Conn:'co',Puri:'rm',Pool:'tot','♪…':'unl'}; th.addEventListener('click',()=>{ const key=map[(th.textContent||'').trim()]; if(!key) return; _adSt.sort=key; el('ad-sort').value=key; renderDash(); }); });
 
