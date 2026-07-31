@@ -17,6 +17,11 @@ const POOL = ['rohff','jolagreen23','bouss','ninho','jewelusain','kortex','ntm',
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function connect() { return io(URL, { transports: ['websocket'], forceNew: true, reconnection: false }); }
+// Un socket HÔTE doit se comporter comme la vraie TV : depuis le 2026-07-25 le serveur PRÉCHARGE toute la
+// playlist et retient la manche 1 jusqu'au feu vert de l'écran (`game:preload` → `host:preloaded`, plafond 25 s).
+// Sans cet accusé de réception, chaque partie de test attendait le plafond et le late-join tombait pendant
+// le préchargement (salon encore en `lobby`) → « pas marqué en attente ».
+function hostSock() { const s = connect(); s.on('game:preload', (d) => { if (d && d.start) s.emit('host:preloaded'); }); return s; }
 function onConnect(s) { return new Promise((res, rej) => { const t = setTimeout(() => rej(new Error('no connect')), 5000); s.once('connect', () => { clearTimeout(t); res(); }); }); }
 function ack(s, ev, payload = {}, ms = 6000) {
   return new Promise((res) => { let done = false; const t = setTimeout(() => { if (!done) { done = true; res({ error: 'ack-timeout ' + ev }); } }, ms);
@@ -33,7 +38,7 @@ function nextAvatars(n) { const a = []; for (let i = 0; i < n; i++) a.push(POOL[
 async function playGame({ mode, difficulty, rounds, mj = false }, nPlayers = 5) {
   const avatars = nextAvatars(nPlayers);
   const rep = { label: `${mode}${mj ? '/MJ' : ''} · ${difficulty} · ${rounds}m`, revealCount: 0, powerErrors: [], errors: [], final: null, ok: false, activated: new Set() };
-  const host = connect(); await onConnect(host).catch((e) => rep.errors.push('host ' + e.message));
+  const host = hostSock(); await onConnect(host).catch((e) => rep.errors.push('host ' + e.message));
   const created = await ack(host, 'host:create', {});
   const code = created.code;
   if (!code) { rep.errors.push('host:create KO ' + JSON.stringify(created)); host.close(); return rep; }
@@ -76,7 +81,7 @@ async function playGame({ mode, difficulty, rounds, mj = false }, nPlayers = 5) 
     // MJ : le pupitre distribue les points, révèle, puis passe
     mjDriver.sock.on('mj:track', async () => {
       await sleep(120);
-      for (const p of players) if (!p.isMj) await ack(mjDriver.sock, 'mj:award', { playerId: p.id, points: Math.random() < 0.5 ? 10000 : 0 });
+      for (const p of players) if (!p.isMj) await ack(mjDriver.sock, 'mj:award', { playerId: p.id, points: Math.random() < 0.5 ? 6000 : 0 });
       await ack(mjDriver.sock, 'mj:reveal', {});
     });
     mjDriver.sock.on('round:reveal', async () => { rep.revealCount++; await sleep(120); await ack(mjDriver.sock, 'mj:next', {}); });
@@ -106,7 +111,7 @@ async function playGame({ mode, difficulty, rounds, mj = false }, nPlayers = 5) 
 // ---- tests spéciaux : reconnexion + late-join ----
 async function testReconnectAndLateJoin() {
   const out = { name: 'reconnexion + late-join', errors: [], ok: false };
-  const host = connect(); await onConnect(host).catch(() => {});
+  const host = hostSock(); await onConnect(host).catch(() => {});
   const { code } = await ack(host, 'host:create', {});
   // joueur A rejoint
   const a = connect(); await onConnect(a); const ja = await ack(a, 'player:join', { code, name: 'Alice', avatar: 'booba' });
@@ -140,7 +145,7 @@ async function testReconnectAndLateJoin() {
 
 async function testLateJoinLobby() {
   const out = { name: 'late-join pendant le lobby', errors: [], ok: false };
-  const host = connect(); await onConnect(host);
+  const host = hostSock(); await onConnect(host);
   const { code } = await ack(host, 'host:create', {});
   await sleep(300); // "quelques instants après la création"
   const p = connect(); await onConnect(p);
@@ -154,7 +159,7 @@ async function testLateJoinLobby() {
 // ---- série multi-parties : cumul d'auditeurs + trophées de fin ----
 async function testSeriesAndAwards() {
   const out = { name: 'série multi-parties + trophées', errors: [], ok: false };
-  const host = connect(); await onConnect(host);
+  const host = hostSock(); await onConnect(host);
   const { code } = await ack(host, 'host:create', {});
   const avs = nextAvatars(2);
   const socks = [];

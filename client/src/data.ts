@@ -35,14 +35,14 @@ export const isGenie = (cat: string) => cat === 'Génies incompris'; // cartes �
 // Le score se compte en AUDITEURS. Formatage FR + certification de fin de partie.
 export const fmtAud = (n: number) => Math.round(n || 0).toLocaleString('fr-FR');
 export function certif(score: number, rounds: number) {
-  const per = (score || 0) / Math.max(1, rounds || 1); // auditeurs / manche → indépendant de la longueur de partie
-  // Paliers DURCIS (2e passe) : gagner une partie ne doit PAS donner du 3× Platine par défaut. Diamant =
-  // quasi sans-faute en difficulté élevée. Le Platine reste atteignable sur une belle partie.
-  if (per >= 46000) return { label: 'Disque de Diamant', short: 'Diamant' };
-  if (per >= 35000) return { label: 'Triple Platine', short: '3× Platine' };
-  if (per >= 25000) return { label: 'Double Platine', short: '2× Platine' };
-  if (per >= 16000) return { label: 'Disque de Platine', short: 'Platine' };
-  if (per >= 8500) return { label: "Disque d'Or", short: 'Or' };
+  // Auditeurs de la partie, normalisés au format de référence (16 manches) → comparables quel que soit
+  // le format joué (8 / 16 / 24). Seuils = les VRAIS paliers SNEP album (équivalents ventes).
+  const norm = ((score || 0) / Math.max(1, rounds || 1)) * 16;
+  if (norm >= 500000) return { label: 'Disque de Diamant', short: 'Diamant' };
+  if (norm >= 300000) return { label: 'Triple Platine', short: '3× Platine' };
+  if (norm >= 200000) return { label: 'Double Platine', short: '2× Platine' };
+  if (norm >= 100000) return { label: 'Disque de Platine', short: 'Platine' };
+  if (norm >= 50000) return { label: "Disque d'Or", short: 'Or' };
   return { label: 'Espoir du rap', short: 'Espoir' };
 }
 
@@ -51,73 +51,88 @@ export const CERTIF_TIER: Record<string, number> = { 'Espoir': 0, 'Or': 1, 'Plat
 
 export const AVATARS: Avatar[] = [
   // ---- Légende (pionniers) — tier S ----
-  { id: 'booba', name: 'Booba', color: '#3A2F52', cat: 'Légende', img: true, power: { name: 'DUC', effect: 'Rafle 14 000 auditeurs au meneur ET devient intouchable ce tour (vol, sabotage et dîme sans effet).' }, stats: { flow: 4, punch: 5, tech: 4, aura: 5 } },
-  { id: 'iam', name: 'IAM', color: '#C98A4A', cat: 'Légende', img: true, power: { name: 'Planète Mars', effect: 'Les sages ne tombent pas : 24 000 auditeurs minimum cette manche (+9 000 si tu marques), immunisé au vol et au sabotage.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 5 } },
+  { id: 'booba', name: 'Booba', color: '#3A2F52', cat: 'Légende', img: true, power: { name: 'DUC', effect: 'Rafle 8 400 auditeurs au meneur ET devient intouchable ce tour (vol, sabotage et dîme sans effet).' }, stats: { flow: 4, punch: 5, tech: 4, aura: 5 } },
+  { id: 'iam', name: 'IAM', color: '#C98A4A', cat: 'Légende', img: true, power: { name: 'Planète Mars', effect: 'Les sages ne tombent pas : 14 400 auditeurs minimum cette manche (+9 400 si tu marques), immunisé au vol et au sabotage.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 5 } },
   { id: 'ntm', name: 'NTM', color: '#B12A2A', cat: 'Légende', img: true, power: { name: 'Police', effect: 'Muselle les 2 joueurs en tête : 0 auditeur pour eux cette manche.' }, stats: { flow: 4, punch: 5, tech: 4, aura: 5 } },
   // ---- Mainstream (grand public) ----
-  { id: 'jul', name: 'Jul', color: '#2E9E8F', cat: 'Mainstream', img: true, power: { name: 'La Machine', effect: 'La machine s\'emballe : +15 000 auditeurs, +6 000 de plus par manche gagnée d\'affilée (max +30 000).' }, stats: { flow: 4, punch: 2, tech: 2, aura: 5 } },
-  { id: 'gims', name: 'Gims', color: '#C6A24B', cat: 'Mainstream', img: true, power: { name: 'Sapés comme jamais', effect: 'Le tube qu\'on a trop porté : +33 000 auditeurs, puis -10 % à chaque réutilisation.' }, stats: { flow: 4, punch: 3, tech: 3, aura: 4 } },
-  { id: 'rohff', name: 'Rohff', color: '#932F2F', cat: 'Mainstream', img: true, power: { name: "Le Code de l'Honneur", effect: 'Le padre prélève sa dîme : 4 500 auditeurs pris à CHAQUE adversaire.' }, stats: { flow: 4, punch: 5, tech: 3, aura: 4 } },
-  { id: 'lafouine', name: 'La Fouine', color: '#3E6B8C', cat: 'Mainstream', img: true, crop: { z: 1.35 }, power: { name: 'Capitale du Crime', effect: 'Muselle le n°1 : 0 auditeur pour lui cette manche, et tu lui rafles 8 000 auditeurs au passage.' }, stats: { flow: 4, punch: 4, tech: 3, aura: 3 } },
+  { id: 'jul', name: 'Jul', color: '#2E9E8F', cat: 'Mainstream', img: true, power: { name: 'La Machine', effect: 'La machine s\'emballe : +10 400 auditeurs, +3 600 de plus par manche gagnée d\'affilée (max +18 000).' }, stats: { flow: 4, punch: 2, tech: 2, aura: 5 } },
+  { id: 'gims', name: 'Gims', color: '#C6A24B', cat: 'Mainstream', img: true, power: { name: 'Sapés comme jamais', effect: 'Le tube qu\'on a trop porté : +19 800 auditeurs, puis -10 % à chaque réutilisation.' }, stats: { flow: 4, punch: 3, tech: 3, aura: 4 } },
+  { id: 'rohff', name: 'Rohff', color: '#932F2F', cat: 'Mainstream', img: true, power: { name: "Le Code de l'Honneur", effect: 'Le padre prélève sa dîme : 2 520 auditeurs pris à CHAQUE adversaire.' }, stats: { flow: 4, punch: 5, tech: 3, aura: 4 } },
+  { id: 'lafouine', name: 'La Fouine', color: '#3E6B8C', cat: 'Mainstream', img: true, crop: { z: 1.35 }, power: { name: 'Capitale du Crime', effect: 'Muselle le n°1 : 0 auditeur pour lui cette manche, et tu lui rafles 4 800 auditeurs au passage.' }, stats: { flow: 4, punch: 4, tech: 3, aura: 3 } },
   // ---- Rap game (contemporain établi) ----
   { id: 'pnl', name: 'PNL', color: '#4C6BE0', cat: 'Rap game', img: true, power: { name: 'Onizuka', effect: 'Ta prochaine bonne réponse compte presque double (×1.7).' }, stats: { flow: 5, punch: 2, tech: 3, aura: 5 } },
-  { id: 'vald', name: 'Vald', color: '#6FBF3A', cat: 'Rap game', img: true, power: { name: 'NQNT', effect: 'Brouillage : les autres ne répondent qu\'après 4,5 s ; toi tu démarres direct (+16 000 si tu marques).' }, stats: { flow: 4, punch: 4, tech: 5, aura: 4 } },
+  { id: 'vald', name: 'Vald', color: '#6FBF3A', cat: 'Rap game', img: true, power: { name: 'NQNT', effect: 'Brouillage : les autres ne répondent qu\'après 4,5 s ; toi tu démarres direct (+11 000 si tu marques).' }, stats: { flow: 4, punch: 4, tech: 5, aura: 4 } },
   { id: 'ninho', name: 'Ninho', color: '#B07E33', cat: 'Rap game', img: true, power: { name: 'Certifié Diamant', effect: 'Enchaîne les certifs : ta réponse ×mult qui grossit avec la série (jusqu\'à ×1.9).' }, stats: { flow: 4, punch: 3, tech: 3, aura: 5 } },
-  { id: 'sch', name: 'SCH', color: '#44405A', cat: 'Rap game', img: true, power: { name: 'JVLIVS', effect: 'Quitte ou double : ×1.8 si tu marques cette manche, sinon -20 000 auditeurs.' }, stats: { flow: 4, punch: 4, tech: 4, aura: 4 } },
-  { id: 'plk', name: 'PLK', color: '#B4472E', cat: 'Rap game', img: true, power: { name: 'Polak', effect: 'Surrégime : +12 500 auditeurs, et si tu marques tu récupères la charge dépensée.' }, stats: { flow: 4, punch: 4, tech: 3, aura: 4 } },
-  { id: 'damso', name: 'Damso', color: '#8A1F1C', cat: 'Rap game', img: true, power: { name: 'Le Vice', effect: 'Le 1er à trouver cette manche rafle +50 000 auditeurs. Les autres qui trouvent : +15 000.' }, stats: { flow: 5, punch: 5, tech: 5, aura: 4 } },
+  { id: 'sch', name: 'SCH', color: '#44405A', cat: 'Rap game', img: true, power: { name: 'JVLIVS', effect: 'Quitte ou double : ×1.8 si tu marques cette manche, sinon -12 000 auditeurs.' }, stats: { flow: 4, punch: 4, tech: 4, aura: 4 } },
+  { id: 'plk', name: 'PLK', color: '#B4472E', cat: 'Rap game', img: true, power: { name: 'Polak', effect: 'Surrégime : +4 300 auditeurs, et si tu marques tu récupères la charge dépensée.' }, stats: { flow: 4, punch: 4, tech: 3, aura: 4 } },
+  { id: 'damso', name: 'Damso', color: '#8A1F1C', cat: 'Rap game', img: true, power: { name: 'Le Vice', effect: 'Le 1er à trouver cette manche rafle +30 000 auditeurs. Les autres qui trouvent : +9 000.' }, stats: { flow: 5, punch: 5, tech: 5, aura: 4 } },
   // ---- Plume (technique / écriture) — ordre voulu : Alpha Wann + Nekfeu en tête, Fabe + MC Solaar en fin ----
   { id: 'alphawann', name: 'Alpha Wann', color: '#3E5C6E', cat: 'Plume', img: true, power: { name: "Une Main Lave l'Autre", effect: 'Sans-faute chirurgical : ta réponse passe même mal orthographiée ET ton score grimpe (×1.3) cette manche.' }, stats: { flow: 5, punch: 4, tech: 5, aura: 4 } },
   { id: 'nekfeu', name: 'Nekfeu', color: '#E9703C', cat: 'Plume', img: true, power: { name: 'Feu', effect: 'Ça prend feu : ta prochaine bonne réponse ×1.7.' }, stats: { flow: 5, punch: 4, tech: 5, aura: 5 } },
-  { id: 'oxmo', name: 'Oxmo Puccino', color: '#B5892E', cat: 'Plume', img: true, power: { name: 'Mines de Cristal', effect: 'Révèle les premières lettres (titre + artiste). +11 000 auditeurs si tu marques.' }, stats: { flow: 4, punch: 4, tech: 5, aura: 4 } },
-  { id: 'orelsan', name: 'Orelsan', color: '#5E7052', cat: 'Plume', img: true, power: { name: 'Basique', effect: 'Plus t\'es à la traîne, plus ça paie : récupère 55 % de ton retard sur le n°1 (jusqu\'à 32 000).' }, stats: { flow: 3, punch: 5, tech: 5, aura: 5 } },
-  { id: 'fabe', name: 'Fabe', color: '#4A5568', cat: 'Plume', img: true, power: { name: 'Le Fond et la Forme', effect: 'Increvable : pendant 3 manches, tu ne peux rien perdre et tu grattes 14 000 auditeurs minimum à chaque fois.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 3 } },
-  { id: 'solaar', name: 'MC Solaar', color: '#D0A24E', cat: 'Plume', img: true, power: { name: 'Le Prince des Mots', effect: 'Le prince des mots n\'écrit jamais de faute : ta réponse passe même mal orthographiée, et +17 000 auditeurs si tu marques.' }, stats: { flow: 5, punch: 3, tech: 5, aura: 5 } },
+  { id: 'oxmo', name: 'Oxmo Puccino', color: '#B5892E', cat: 'Plume', img: true, power: { name: 'Mines de Cristal', effect: 'Révèle les premières lettres (titre + artiste). +6 600 auditeurs si tu marques.' }, stats: { flow: 4, punch: 4, tech: 5, aura: 4 } },
+  { id: 'orelsan', name: 'Orelsan', color: '#5E7052', cat: 'Plume', img: true, power: { name: 'Basique', effect: 'Plus t\'es à la traîne, plus ça paie : récupère 55 % de ton retard sur le n°1 (jusqu\'à 19 200).' }, stats: { flow: 3, punch: 5, tech: 5, aura: 5 } },
+  { id: 'fabe', name: 'Fabe', color: '#4A5568', cat: 'Plume', img: true, power: { name: 'Le Fond et la Forme', effect: 'Increvable : pendant 3 manches, tu ne peux rien perdre et tu grattes 10 200 auditeurs minimum à chaque fois.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 3 } },
+  { id: 'solaar', name: 'MC Solaar', color: '#D0A24E', cat: 'Plume', img: true, power: { name: 'Le Prince des Mots', effect: 'Le prince des mots n\'écrit jamais de faute : ta réponse passe même mal orthographiée, et +10 200 auditeurs si tu marques.' }, stats: { flow: 5, punch: 3, tech: 5, aura: 5 } },
   // ---- Conscient ----
-  { id: 'kery', name: 'Kery James', color: '#2A3D66', cat: 'Conscient', img: true, power: { name: 'Banlieusards', effect: 'Remonte : récupère 55 % de ton retard sur le n°1 (jusqu\'à 33 000).' }, stats: { flow: 4, punch: 5, tech: 4, aura: 4 } },
-  { id: 'medine', name: 'Médine', color: '#2E7D5B', cat: 'Conscient', img: true, crop: { z: 1.4 }, power: { name: "Don't Panik", effect: 'Don\'t panik : 20 000 auditeurs minimum cette manche (+10 000 si tu marques), immunisé au sabotage.' }, stats: { flow: 4, punch: 4, tech: 4, aura: 3 } },
-  { id: 'youssoupha', name: 'Youssoupha', color: '#5B3E8C', cat: 'Conscient', img: true, power: { name: 'Prise de position', effect: 'Prise de position : +15 000 auditeurs, +6 000 de plus par manche gagnée d\'affilée (max +30 000).' }, stats: { flow: 5, punch: 4, tech: 5, aura: 4 } },
+  { id: 'kery', name: 'Kery James', color: '#2A3D66', cat: 'Conscient', img: true, power: { name: 'Banlieusards', effect: 'Remonte : récupère 55 % de ton retard sur le n°1 (jusqu\'à 19 800).' }, stats: { flow: 4, punch: 5, tech: 4, aura: 4 } },
+  { id: 'medine', name: 'Médine', color: '#2E7D5B', cat: 'Conscient', img: true, crop: { z: 1.4 }, power: { name: "Don't Panik", effect: 'Don\'t panik : 12 000 auditeurs minimum cette manche (+9 800 si tu marques), immunisé au sabotage.' }, stats: { flow: 4, punch: 4, tech: 4, aura: 3 } },
+  { id: 'youssoupha', name: 'Youssoupha', color: '#5B3E8C', cat: 'Conscient', img: true, power: { name: 'Prise de position', effect: 'Prise de position : +10 400 auditeurs, +3 600 de plus par manche gagnée d\'affilée (max +18 000).' }, stats: { flow: 5, punch: 4, tech: 5, aura: 4 } },
   // ---- Drill / Trap ----
-  { id: 'gazo', name: 'Gazo', color: '#2A7E48', cat: 'Drill', img: true, power: { name: 'Drill', effect: 'Vole 15 000 auditeurs au joueur en tête.' }, stats: { flow: 3, punch: 5, tech: 3, aura: 4 } },
-  { id: 'kaaris', name: 'Kaaris', color: '#5A2333', cat: 'Drill', img: true, power: { name: 'Or Noir', effect: 'Tout ou rien : ×1.85 si tu marques cette manche, sinon -30 000 auditeurs.' }, stats: { flow: 3, punch: 5, tech: 3, aura: 4 } },
+  { id: 'gazo', name: 'Gazo', color: '#2A7E48', cat: 'Drill', img: true, power: { name: 'Drill', effect: 'Vole 9 000 auditeurs au joueur en tête.' }, stats: { flow: 3, punch: 5, tech: 3, aura: 4 } },
+  { id: 'kaaris', name: 'Kaaris', color: '#5A2333', cat: 'Drill', img: true, power: { name: 'Or Noir', effect: 'Tout ou rien : ×1.85 si tu marques cette manche, sinon -18 000 auditeurs.' }, stats: { flow: 3, punch: 5, tech: 3, aura: 4 } },
   // ---- Alternative (rap moderne installé, hors-format : Laylow, Jewel Usain…) ----
-  { id: 'laylow', name: 'Laylow', color: '#9E2B3A', cat: 'Alternative', img: true, power: { name: 'Trinity', effect: 'Hors du temps : score au max même à la dernière seconde. +11 000 auditeurs si tu marques.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 4 } },
-  { id: 'jewelusain', name: 'Jewel Usain', color: '#2E7D6B', cat: 'Alternative', img: true, power: { name: 'Bruce Lee', effect: 'Le conteur, ça résonne : +11 000 auditeurs cette manche ET la manche suivante.' }, stats: { flow: 4, punch: 4, tech: 5, aura: 4 } },
+  { id: 'laylow', name: 'Laylow', color: '#9E2B3A', cat: 'Alternative', img: true, power: { name: 'Trinity', effect: 'Hors du temps : score au max même à la dernière seconde. +8 200 auditeurs si tu marques.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 4 } },
+  { id: 'jewelusain', name: 'Jewel Usain', color: '#2E7D6B', cat: 'Alternative', img: true, power: { name: 'Bruce Lee', effect: 'Le conteur, ça résonne : +6 000 auditeurs cette manche ET la manche suivante.' }, stats: { flow: 4, punch: 4, tech: 5, aura: 4 } },
   // ---- Génies incompris (rap raté, stats au fond du sac ; SAUF Bishok, l'exception : grosses stats… mais pas des stats de rappeur) ----
   { id: 'bishok', name: 'Bishok', color: '#6E1E28', cat: 'Génies incompris', img: true, crop: { y: 44 },
-    power: { name: 'Complotisme', effect: 'Complotisme : Bishok a décrypté le message caché — premières lettres du titre ET de l\'artiste révélées. +11 000 auditeurs si tu marques.' },
+    power: { name: 'Complotisme', effect: 'Complotisme : Bishok a décrypté le message caché · premières lettres du titre ET de l\'artiste révélées. +8 400 auditeurs si tu marques.' },
     stats: { flow: 5, punch: 5, tech: 4, aura: 5 }, statLabels: ['Complot', 'Maroc', 'Conscience', 'Révolte'] },
-  { id: 'bilaldu92', name: 'Bilal du 92', color: '#2E4A6E', cat: 'Génies incompris', img: true, power: { name: 'Le Buzz 2006', effect: 'Son seul buzz, c\'était en 2006 : +23 000 auditeurs si tu es le 1er à trouver. Les autres qui trouvent : +5 000.' }, stats: { flow: 1, punch: 2, tech: 1, aura: 2 } },
-  { id: 'alexdu76', name: 'Alex du 76', color: '#5C3A1E', cat: 'Génies incompris', img: true, power: { name: 'Je Voulais Juste Briller', effect: 'Il voulait juste briller : +19 000 auditeurs, puis -40 % à chaque réutilisation (ça retombe vite).' }, stats: { flow: 2, punch: 1, tech: 1, aura: 2 } },
-  { id: 'kortex', name: 'Cortex', color: '#3A3A3A', cat: 'Génies incompris', img: true, power: { name: 'Le Clash', effect: 'Il clashe le n°1 et lui grappille à peine 4 000 auditeurs (personne ne le calcule).' }, stats: { flow: 2, punch: 2, tech: 1, aura: 2 } },
+  { id: 'bilaldu92', name: 'Bilal du 92', color: '#2E4A6E', cat: 'Génies incompris', img: true, power: { name: 'Le Buzz 2006', effect: 'Son seul buzz, c\'était en 2006 : +13 800 auditeurs si tu es le 1er à trouver. Les autres qui trouvent : +3 000.' }, stats: { flow: 1, punch: 2, tech: 1, aura: 2 } },
+  { id: 'alexdu76', name: 'Alex du 76', color: '#5C3A1E', cat: 'Génies incompris', img: true, power: { name: 'Je Voulais Juste Briller', effect: 'Il voulait juste briller : +11 400 auditeurs, puis -40 % à chaque réutilisation (ça retombe vite).' }, stats: { flow: 2, punch: 1, tech: 1, aura: 2 } },
+  { id: 'kortex', name: 'Cortex', color: '#3A3A3A', cat: 'Génies incompris', img: true, power: { name: 'Le Clash', effect: 'Il clashe le n°1 et lui grappille à peine 2 400 auditeurs (personne ne le calcule).' }, stats: { flow: 2, punch: 2, tech: 1, aura: 2 } },
   // ---- Rookies (la nouvelle scène FR qui monte) ----
   { id: 'bouss', name: 'Bouss', color: '#5C4A2E', cat: 'Rookies', img: true, power: { name: 'Le Mirage', effect: 'Comme un tube viral, tu surfes sur la vague : tu rafles 38 % du meilleur score adverse de la manche.' }, stats: { flow: 4, punch: 3, tech: 3, aura: 5 } },
-  { id: 'huntrill', name: 'Huntrill', color: '#2E3A5C', cat: 'Rookies', img: true, power: { name: 'Le Bruit de la Machine', effect: 'Le bruit de la machine : 20 000 auditeurs minimum cette manche (+10 000 si tu marques), immunisé au sabotage.' }, stats: { flow: 3, punch: 4, tech: 5, aura: 3 } },
-  { id: 'jolagreen23', name: 'Jolagreen23', color: '#1F5C3A', cat: 'Rookies', img: true, power: { name: 'Barillet', effect: 'Il vide le barillet : claque TOUTES tes charges d\'un coup → +16 000 auditeurs par charge dépensée.' }, stats: { flow: 4, punch: 4, tech: 3, aura: 4 } },
-  { id: 'junglejack', name: 'Jungle Jack', color: '#2E3A1E', cat: 'Rookies', img: true, power: { name: 'Flow Dévastateur', effect: 'Flow dévastateur : le 1er à trouver rafle +48 000 auditeurs. Les autres qui trouvent : +16 000.' }, stats: { flow: 5, punch: 4, tech: 4, aura: 3 } },
-  { id: 'lafeve', name: 'La Fève', color: '#5C1F1F', cat: 'Rookies', img: true, power: { name: 'Hors du Temps', effect: 'Planant, hors du temps : score au max même à la dernière seconde. +11 000 auditeurs si tu marques.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 4 } },
-  { id: 'okis', name: 'Okis', color: '#3A2E2E', cat: 'Rookies', img: true, power: { name: 'La Crème', effect: 'La crème du rap artisanal : +8 500 auditeurs garantis à chaque manche, pendant 4 manches.' }, stats: { flow: 3, punch: 3, tech: 4, aura: 3 } },
+  { id: 'huntrill', name: 'Huntrill', color: '#2E3A5C', cat: 'Rookies', img: true, power: { name: 'Le Bruit de la Machine', effect: 'Le bruit de la machine : 12 000 auditeurs minimum cette manche (+10 400 si tu marques), immunisé au sabotage.' }, stats: { flow: 3, punch: 4, tech: 5, aura: 3 } },
+  { id: 'jolagreen23', name: 'Jolagreen23', color: '#1F5C3A', cat: 'Rookies', img: true, power: { name: 'Barillet', effect: 'Il vide le barillet : claque TOUTES tes charges d\'un coup → +12 000 auditeurs par charge dépensée.' }, stats: { flow: 4, punch: 4, tech: 3, aura: 4 } },
+  { id: 'junglejack', name: 'Jungle Jack', color: '#2E3A1E', cat: 'Rookies', img: true, power: { name: 'Flow Dévastateur', effect: 'Flow dévastateur : le 1er à trouver rafle +28 800 auditeurs. Les autres qui trouvent : +9 600.' }, stats: { flow: 5, punch: 4, tech: 4, aura: 3 } },
+  { id: 'lafeve', name: 'La Fève', color: '#5C1F1F', cat: 'Rookies', img: true, power: { name: 'Hors du Temps', effect: 'Planant, hors du temps : score au max même à la dernière seconde. +7 400 auditeurs si tu marques.' }, stats: { flow: 4, punch: 3, tech: 5, aura: 4 } },
+  { id: 'okis', name: 'Okis', color: '#3A2E2E', cat: 'Rookies', img: true, power: { name: 'La Crème', effect: 'La crème du rap artisanal : +3 800 auditeurs garantis à chaque manche, pendant 4 manches.' }, stats: { flow: 3, punch: 3, tech: 4, aura: 3 } },
   // ---- Robin & Kevin (Alternative) : potes libraires de Tsukimi, deux frangins fans de rap/manga/ciné ----
   { id: 'robinkevin', name: 'Robin & Kevin', color: '#3E2A63', cat: 'Alternative', img: true,
     power: { name: "L'Intégrale", effect: 'Deux frères complétistes, zéro demi-mesure : une fois lancés, ils vont au bout. Ta réponse ×mult qui grossit à chaque bonne réponse d\'affilée (jusqu\'à ×2).' },
     stats: { flow: 5, punch: 4, tech: 4, aura: 5 }, statLabels: ['Diggin\'', 'Mangas', 'Ciné', 'Passion'] },
   // ---- Déblocables (locked:true) : CACHÉS du character-select tant que pas dans localStorage `pl_unlocked` ;
   //      conditions dans UNLOCKS. Rangés dans leur vraie catégorie (montrés à part une fois débloqués ; « ??? » dans le roster). ----
-  { id: 'freezecorleone', name: 'Freeze Corleone', color: '#241F38', cat: 'Drill', img: true, locked: true, power: { name: 'Freeze Raël', effect: 'Propos problématiques : ta réponse ×1.8 si tu marques cette manche… sinon il se fait cancel (-20 000 auditeurs).' }, stats: { flow: 5, punch: 5, tech: 5, aura: 4 } },
-  { id: 'lino', name: 'Lino', color: '#38414F', cat: 'Plume', img: true, locked: true, power: { name: 'Requiem', effect: 'Il écrit le requiem du n°1 : 0 auditeur pour lui cette manche, et lui rafle 6 000 auditeurs au passage.' }, stats: { flow: 4, punch: 5, tech: 5, aura: 4 } },
-  { id: 'diams', name: "Diam's", color: '#B23A6B', cat: 'Mainstream', img: true, locked: true, power: { name: 'Jeune Demoiselle', effect: "Carton mainstream qui s'emballe : +15 000 auditeurs, +6 000 de plus par manche gagnée d'affilée (max +30 000)." }, stats: { flow: 4, punch: 4, tech: 3, aura: 5 } },
+  { id: 'freezecorleone', name: 'Freeze Corleone', color: '#241F38', cat: 'Drill', img: true, locked: true, power: { name: 'Freeze Raël', effect: 'Propos problématiques : ta réponse ×1.8 si tu marques cette manche… sinon il se fait cancel (-12 000 auditeurs).' }, stats: { flow: 5, punch: 5, tech: 5, aura: 4 } },
+  { id: 'lino', name: 'Lino', color: '#38414F', cat: 'Plume', img: true, locked: true, power: { name: 'Requiem', effect: 'Il écrit le requiem du n°1 : 0 auditeur pour lui cette manche, et lui rafle 3 600 auditeurs au passage.' }, stats: { flow: 4, punch: 5, tech: 5, aura: 4 } },
+  { id: 'diams', name: "Diam's", color: '#B23A6B', cat: 'Mainstream', img: true, locked: true, power: { name: 'Jeune Demoiselle', effect: "Carton mainstream qui s'emballe : +10 400 auditeurs, +3 600 de plus par manche gagnée d'affilée (max +18 000)." }, stats: { flow: 4, punch: 4, tech: 3, aura: 5 } },
   { id: 'disiz', name: 'Disiz', color: '#45607C', cat: 'Conscient', img: true, locked: true, power: { name: "J'pète les plombs", effect: 'Il pète les plombs et remonte : récupère la moitié de ton retard sur le n°1 (si tu es à la traîne).' }, stats: { flow: 4, punch: 4, tech: 4, aura: 4 } },
   { id: 'caballerojeanjass', name: 'Caballero & JeanJass', color: '#3E8E5E', cat: 'Alternative', img: true, locked: true, power: { name: 'Double Hélice', effect: 'À deux sur le mic : ta prochaine bonne réponse ×1.6.' }, stats: { flow: 4, punch: 5, tech: 4, aura: 4 } },
 ];
 
 export const avatarById = (id?: string | null): Avatar | undefined => AVATARS.find((a) => a.id === id);
 
+// D'OÙ VIENNENT LES POINTS quand le joueur n'a PAS trouvé (2026-07-26). Le serveur trace chaque source
+// hors-réponse dans `why` ; ici on la met en français pour la révélation. Sans ça : « il marque et personne
+// ne comprend pourquoi » → le jeu paraît cassé alors qu'un pouvoir fait juste son travail.
+export const POINT_SOURCE: Record<string, string> = {
+  safety: 'plancher garanti',
+  veteran: 'gratte du vétéran',
+  sustain: 'revenu régulier',
+  draft: 'copié sur le meilleur',
+  wager: 'quitte ou double raté',
+  muted: 'muselé (sabotage)',
+  nofault: 'faute pardonnée',
+};
+export const pointSource = (t: string) => POINT_SOURCE[t] || t;
+
+
 // Persos VERROUILLÉS (démo) : silhouette, ni nom ni stats — on ne voit QUE l'objectif à accomplir.
 // Le vrai déblocage (persistance + alerte « nouveau challenger » en fin de partie) viendra après.
 export type LockedSlot = { id: string; objective: string };
 export const LOCKED_SLOTS: LockedSlot[] = [
   { id: 'lock1', objective: 'Décroche le Disque de Diamant sur une seule manche, en difficulté Puriste.' },
-  { id: 'lock2', objective: 'Termine une partie avec moins de 1 000 auditeurs. Le vrai fond du sac.' },
+  { id: 'lock2', objective: 'Termine une partie avec moins de 600 auditeurs. Le vrai fond du sac.' },
   { id: 'lock3', objective: 'Gagne 3 parties d’affilée dans la même série.' },
   { id: 'lock4', objective: 'Sois le premier à trouver sur 5 manches d’une même partie.' },
   { id: 'lock5', objective: 'Remporte une partie sans activer un seul pouvoir.' },
@@ -142,6 +157,13 @@ export const UNLOCKS: { id: string; objective: string; check: (c: UnlockCtx) => 
   { id: 'disiz', objective: 'Termine une partie en Mainstream (facile).', check: (c) => c.difficulty === 'facile' },
 ];
 export const unlockObjective = (id: string) => UNLOCKS.find((u) => u.id === id)?.objective || 'À débloquer.';
+// Clé localStorage des challengers débloqués. VERSIONNÉE : la bumper REMET TOUT LE MONDE À ZÉRO (les 5
+// redeviennent verrouillés et se regagnent en jouant). Passée en v2 le 2026-07-25 — pendant la période où le
+// verrou avait été retiré (cf. CORRECTIFS « BUG-UNLOCK »), les appareils ont accumulé des déblocages fantômes :
+// plus rien ne se débloquait puisque tout l'était déjà. À rebumper si on veut re-armer une saison.
+// v3 le 2026-07-31 : la TV persistait le déblocage à `game:final` AVANT l'arrivée (ChallengerReveal) → les 5
+// s'enregistraient en silence sans jamais jouer l'animation. Corrigé (écriture à la fermeture de l'arrivée) + reset.
+export const UNLOCK_KEY = 'pl_unlocked_v3';
 
 // Fiche de présentation par rappeur (affichée dans le roster) : origine / année / ventes (certifs) + une
 // ligne d'ambiance. Les données réelles (from/since/sales) viennent d'une recherche web (certifs SNEP en
@@ -181,13 +203,13 @@ export const BIOS: Record<string, Bio> = {
   lafeve: { from: 'Paris (20e) / Fontenay (94)', since: '2018', sales: '« ERRR » platine', note: 'La new wave, planante et hors du temps.' },
   okis: { from: 'Lyon (Croix-Rousse)', since: '2022', sales: 'Émergent (rap indé)', note: 'La crème du rap fait maison.' },
   // ---- déblocables ----
-  freezecorleone: { from: 'Rungis (94)', since: '2015', sales: '« LMF » disque de platine', note: 'La menace fantôme. 667, flow glacial, références en pagaille — et polémiques.' },
+  freezecorleone: { from: 'Rungis (94)', since: '2015', sales: '« LMF » disque de platine', note: 'La menace fantôme. 667, flow glacial, références en pagaille · et polémiques.' },
   lino: { from: 'Villiers-le-Bel (95)', since: '1994', sales: "Ärsenik disque d'or, culte", note: 'La lame. Technicien brutal, punchlines chirurgicales.' },
   diams: { from: 'Paris (née à Nicosie)', since: '1999', sales: '« Dans ma bulle » diamant (best-seller 2006)', note: 'La reine du rap 2000s. A tout raflé, puis a tout quitté.' },
   disiz: { from: 'Évry (91), origines sénégalaises', since: '2000', sales: '« L\'Amour » (2022) encensé', note: 'La Peste. De « J\'pète les plombs » à « L\'Amour », il se réinvente sans fin.' },
   caballerojeanjass: { from: 'Bruxelles (Belgique)', since: '2015', sales: 'Saga « Double Hélice » · culte web', note: 'Le duo chill de Bruxelles. Punchlines, weed et second degré.' },
   // ---- Robin & Kevin (Alternative) : potes libraires de Tsukimi ----
-  robinkevin: { from: 'Librairie Tsukimi', since: 'Tome 1', sales: 'Rayon rap ET manga au complet', note: 'Deux frangins libraires, complétistes fous : ils écoutent toute la disca et lisent tous les tomes. Rap, manga, ciné — ils vont au bout de tout.' },
+  robinkevin: { from: 'Librairie Tsukimi', since: 'Tome 1', sales: 'Rayon rap ET manga au complet', note: 'Deux frangins libraires, complétistes fous : ils écoutent toute la disca et lisent tous les tomes. Rap, manga, ciné · ils vont au bout de tout.' },
   // ---- persos fictifs : données bidon (chambrage) ----
   bishok: { from: 'Maroc', since: '???', sales: '0 disque, 100 % conviction', note: 'Le révolté. Décrypte les complots. Grosses stats… mais pas de rappeur.' },
   bilaldu92: { from: 'Le 92', since: '2006', sales: '3 CD vendus (à sa famille)', note: 'Sa carrière tient dans un buzz de 2006. Depuis, silence radio.' },
@@ -221,9 +243,9 @@ export const THEME_ARTISTS: Record<string, string[]> = {
 };
 
 export const DIFFICULTIES = [
-  { key: 'facile', label: 'Mainstream', desc: 'Les gros hits — jouable même sans être calé en rap' },
+  { key: 'facile', label: 'Mainstream', desc: 'Les gros hits · jouable même sans être calé en rap' },
   { key: 'normal', label: 'Connaisseur', desc: 'Atteignable, mais pas donné' },
-  { key: 'puriste', label: 'Puriste', desc: 'Digger + underground — pour les vrais' },
+  { key: 'puriste', label: 'Puriste', desc: 'Digger + underground · pour les vrais' },
 ];
 
 export const MODES = [
@@ -295,7 +317,7 @@ export const END_REACTIONS: Reaction[] = [
 // On en pioche une différente à chaque fois → ça pique un peu, ça motive à marquer pour recharger.
 export const TRASH_TALK = [
   'Jauge à sec. Le talent, pas les pouvoirs.',
-  'Zéro charge — va falloir mériter la prochaine.',
+  'Zéro charge · va falloir mériter la prochaine.',
   'Rien dans le chargeur. Trouve, ça remplira.',
   'À poil, aucune charge. On rappe à l’ancienne.',
   'Pouvoir en PLS. Marque des points pour recharger.',
@@ -311,6 +333,8 @@ export const initials = (s: string) =>
 // (server/awards.js) ; ici on ne porte que l'icône (petit glyphe dessiné, zéro emoji), mappée par id.
 const SVG = (inner: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 export const AWARD_ICONS: Record<string, string> = {
+  // cadenas : trophée pas encore décroché (galerie grisée, 2026-07-26)
+  lock: SVG('<rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/>'),
   crown: SVG('<path d="M4 8l3.5 4 4.5-6 4.5 6L20 8l-1.6 10.5H5.6z"/><path d="M6 18.5h12"/>'),
   up: SVG('<path d="M12 20V6"/><path d="M6 12l6-6 6 6"/>'),
   flag: SVG('<path d="M6 21V4"/><path d="M6 4h11l-2 4 2 4H6"/>'),

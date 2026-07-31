@@ -54,13 +54,24 @@ function randStr(n = 64) {
   let s = ''; for (const x of crypto.getRandomValues(new Uint8Array(n))) s += a[x % a.length]; return s;
 }
 
+// Spotify (policy 2025) exige une redirect URI en IP loopback LITTÉRALE : « localhost » est REFUSÉ.
+// Ouvert ailleurs que sur http://127.0.0.1, le bouton « Connecter » ne peut RIEN faire (spotifyLogin sort
+// aussitôt) → ça donne un bouton mort. On renvoie ici la MÊME page en 127.0.0.1 pour proposer le clic qui
+// débloque, ou '' quand on est déjà au bon endroit.
+export function spotifyLoopbackUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const l = window.location;
+  if (l.hostname === '127.0.0.1') return '';
+  return `http://127.0.0.1:${l.port || '5173'}${l.pathname}${l.search}`;
+}
+
 export async function spotifyLogin() {
   // Spotify (policy 2025) EXIGE une redirect URI en IP loopback LITTÉRALE (http://127.0.0.1) : « localhost » ET les IP
   // de LAN en http:// sont REFUSÉS. REDIRECT_URI = origin + '/host' → si l'hôte n'est PAS ouvert sur http://127.0.0.1,
   // l'écran Spotify répond « Invalid redirect URI » et la popup ne revient JAMAIS avec un code (= « jamais connecté »).
   // On bloque tôt avec un message clair au lieu d'une popup vouée à l'échec. (Les téléphones gardent l'IP LAN, indépendant.)
   if (window.location.hostname !== '127.0.0.1') {
-    setErr('Pour Spotify : ouvre l’hôte sur http://127.0.0.1:' + (window.location.port || '5173') + '/host — Spotify refuse « localhost » et les IP du réseau local.');
+    setErr('Pour Spotify : ouvre l’hôte sur http://127.0.0.1:' + (window.location.port || '5173') + '/host · Spotify refuse « localhost » et les IP du réseau local.');
     return;
   }
   const verifier = randStr(64);
@@ -105,12 +116,12 @@ export function listenSpotifyAuth(onDone: (ok: boolean) => void) {
 
 async function exchangeCode(code: string) {
   const verifier = localStorage.getItem(VERIFIER_KEY) || sessionStorage.getItem(VERIFIER_KEY) || '';
-  if (!verifier) { setErr('Reconnexion : code de sécurité (verifier) introuvable — reclique « Reconnecter ».'); throw new Error('no verifier'); }
+  if (!verifier) { setErr('Reconnexion : code de sécurité (verifier) introuvable · reclique « Reconnecter ».'); throw new Error('no verifier'); }
   const body = new URLSearchParams({ client_id: CLIENT_ID, grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI, code_verifier: verifier });
   const r = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
   if (!r.ok) {
     const txt = await r.text().catch(() => '');
-    setErr('Échange du code refusé par Spotify (HTTP ' + r.status + ') — ' + txt + ' · redirect_uri=' + REDIRECT_URI);
+    setErr('Échange du code refusé par Spotify (HTTP ' + r.status + ') · ' + txt + ' · redirect_uri=' + REDIRECT_URI);
     throw new Error('spotify token exchange failed');
   }
   store(await r.json());
@@ -132,7 +143,7 @@ async function doRefresh(): Promise<Tokens | null> {
       const r = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
       if (r.ok) { store(await r.json()); return load(); }
       const txt = await r.text().catch(() => '');
-      console.warn('[SPOTIFY] refresh HTTP ' + r.status + ' — ' + txt);
+      console.warn('[SPOTIFY] refresh HTTP ' + r.status + ' · ' + txt);
       if (/invalid_grant/i.test(txt)) { localStorage.removeItem(KEY); ready = false; deviceId = ''; return null; } // vraiment mort → reconnexion
       await new Promise((res) => setTimeout(res, 500)); // transitoire → on réessaie une fois, session conservée
     } catch (e) { console.warn('[SPOTIFY] refresh réseau KO', e); await new Promise((res) => setTimeout(res, 500)); }
@@ -341,7 +352,24 @@ export async function spotifyPlayUri(uri: string): Promise<boolean> {
 /* ---------- recherche + lecture ---------- */
 const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 
+// ⚠️ LATENCE (retour soirée 2026-07-26 : « la musique met 12 s à démarrer »). Le préchargement met les extraits
+// DEEZER en blob, mais côté Spotify chaque manche refaisait une RECHERCHE avant de pouvoir jouer — donc l'attente
+// revenait à chaque manche, préchargement ou pas. On mémorise donc la résolution : `spotifyResolves`, appelé sur
+// TOUTE la playlist pendant le préchargement, remplit ce cache → au coup d'envoi, jouer = un seul PUT.
+const uriCache = new Map<string, { uri: string; durationMs: number } | null>();
+const uriKey = (t: string, a: string) => (t + '|' + a).toLowerCase();
+export function spotifyCacheSize() { return [...uriCache.values()].filter(Boolean).length; }
+export function spotifyDropCache() { uriCache.clear(); }
+
 async function findUri(title: string, artist: string): Promise<{ uri: string; durationMs: number } | null> {
+  const ck = uriKey(title, artist);
+  if (uriCache.has(ck)) return uriCache.get(ck) || null;
+  const hit = await findUriNet(title, artist);
+  if (hit) uriCache.set(ck, hit); // on ne mémorise QUE les succès : un échec réseau ne doit pas condamner le titre
+  return hit;
+}
+
+async function findUriNet(title: string, artist: string): Promise<{ uri: string; durationMs: number } | null> {
   const token = await getToken(); if (!token) return null;
   const q = `track:${title} artist:${artist}`;
   const r = await fetch('https://api.spotify.com/v1/search?type=track&limit=5&market=FR&q=' + encodeURIComponent(q), { headers: { Authorization: 'Bearer ' + token } });
@@ -350,6 +378,12 @@ async function findUri(title: string, artist: string): Promise<{ uri: string; du
   const want = norm(artist);
   const hit = items.find((t: any) => (t.artists || []).some((a: any) => { const n = norm(a.name); return n && (n.includes(want) || want.includes(n)); })) || items[0];
   return hit ? { uri: hit.uri, durationMs: hit.duration_ms || 0 } : null;
+}
+
+// Le morceau existe-t-il sur Spotify ? (préchargement : on VÉRIFIE avant la partie les titres qui n'ont aucun
+// extrait Deezer de repli — un « introuvable » découvert en pleine manche = manche muette.)
+export async function spotifyResolves(title: string, artist: string): Promise<boolean> {
+  try { return !!(await findUri(title, artist)); } catch { return false; }
 }
 
 // Joue `title/artist` sur notre device. On démarre TOUJOURS en plein morceau (JAMAIS l'intro) : Spotify n'a plus
@@ -374,3 +408,10 @@ export async function spotifyPlay(title: string, artist: string, offset: boolean
 }
 
 export async function spotifyPause() { try { await player?.pause(); } catch {} }
+// REPRENDRE explicitement (jamais `togglePlay` : une bascule DEVINE l'état, et quand l'état réel diffère elle
+// fait exactement l'inverse — d'où « la musique ne s'arrête pas et l'autre commence » en Buzzer, 2026-07-26).
+export async function spotifyResume() { try { await player?.resume(); } catch {} }
+// Le lecteur Spotify joue-t-il RÉELLEMENT ? (garde-fou « une seule source à la fois » côté hôte.)
+export async function spotifyIsPlaying(): Promise<boolean> {
+  try { const s = await player?.getCurrentState(); return !!s && !s.paused; } catch { return false; }
+}

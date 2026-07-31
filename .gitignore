@@ -30,3 +30,6 @@ server/*.json.bak
 client/public/_g/
 client/public/sfx/gimmicks/
 server/gimmick-clips.json
+
+# scripts de vérif jetables (tests headless ponctuels)
+scratchpad/

@@ -7,13 +7,13 @@ const URLS: Record<string, string> = {
   confirm: 'https://cdn.freesound.org/previews/729/729216_15690038-lq.mp3', // valider / bonne réponse / rejoint
   error: 'https://cdn.freesound.org/previews/343/343017_5968849-lq.mp3',    // faute / raté
   scratch: 'https://cdn.freesound.org/previews/661/661404_14498354-lq.mp3', // reveal / activation pouvoir
-  horn: 'https://cdn.freesound.org/previews/131/131930_1542102-lq.mp3',     // victoire / hype
+  // `horn` SUPPRIME le 2026-07-26 (juge « catastrophique », a retirer partout). Ne pas le remettre.
   countdown: 'https://cdn.freesound.org/previews/849/849886_17559721-lq.mp3', // UI TextBlip 08 (tick 3-2-1)
   launch: 'https://cdn.freesound.org/previews/542/542043_6856600-lq.mp3',   // GASP UI Notification 1 (lancer la partie)
   recap: 'https://cdn.freesound.org/previews/484/484632_10392137-lq.mp3',   // LCHZ 140 Bass 06 (boucle sur le récap)
   airhorn: 'https://cdn.freesound.org/previews/414/414208_6938106-lq.mp3',  // "Airhorn" (sélection d'Alexandre) — cheat code
 };
-const VOL: Record<string, number> = { hover: 0.34, click: 0.5, confirm: 0.6, error: 0.58, scratch: 0.62, horn: 0.6, countdown: 0.5, launch: 0.62, recap: 0.4, airhorn: 0.65 };
+const VOL: Record<string, number> = { hover: 0.34, click: 0.5, confirm: 0.6, error: 0.58, scratch: 0.62, countdown: 0.5, launch: 0.62, recap: 0.4, airhorn: 0.65 };
 // Durée MAX de lecture (ms) par son : au-delà on COUPE net. Absent = le son joue en entier.
 // 'scratch' (activation de pouvoir) = vrai sample DJ mais COUPÉ court (~340 ms) → punchy, plus la longue traînée.
 const MAXMS: Record<string, number> = { scratch: 340 };

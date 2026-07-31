@@ -41,9 +41,12 @@ const THEMES_EXTRA = [
   { id: 'legendes', name: 'Légendes', sub: 'Le panthéon' }, { id: 'trap', name: 'Trap FR', sub: 'Hi-hats' },
 ];
 const DIFFS = [
-  { key: 'facile', name: 'Mainstream', desc: 'Les gros hits — jouable même sans être calé en rap', signal: 1 },
+  { key: 'facile', name: 'Mainstream', desc: 'Les gros hits · jouable même sans être calé en rap', signal: 1 },
   { key: 'normal', name: 'Connaisseur', desc: 'Atteignable, mais pas donné', signal: 2 },
   { key: 'puriste', name: 'Puriste', desc: 'Digger + underground, pour les vrais', signal: 3 },
+  // Ajoute le 2026-07-26 : « je pense qu'il y a un mode aleatoire qui peut s'installer assez facilement ».
+  // Le serveur tire une des trois difficultes au lancement (cf. host:start).
+  { key: 'random', name: 'Au hasard', desc: 'Le jeu tire la difficulté au sort', signal: 0 },
 ];
 const FORMATS = [
   { rounds: 8, label: 'Petit set', desc: 'Une partie courte pour lancer la soirée.' },
@@ -55,6 +58,9 @@ const REBALANCE = [
   { key: 'comeback', name: 'Comeback', desc: 'À la traîne = jauge qui monte plus vite.' },
   { key: 'snowball', name: 'Snowball', desc: 'Plus tu gagnes, plus ta jauge monte.' },
   { key: 'off', name: 'Neutre', desc: 'Même vitesse de jauge pour tout le monde.' },
+  // « Il faut rajouter un mode de jeu dans les choses de pouvoir : pas de pouvoir » (2026-07-26).
+  // Blind test pur : personne n'a de pouvoir, pas de fenêtre d'activation entre les manches.
+  { key: 'none', name: 'Sans pouvoirs', desc: 'Blind test pur : personne n’a de pouvoir.' },
 ];
 const ORCHESTRATION = [
   { key: 'auto', name: 'Automatique', desc: 'L’app arbitre seule, sans animateur.' },
@@ -220,7 +226,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
     STEP_SUB[0],
     isQuiz ? 'Le style de questions : QCM seul, ou avec les Vrai/Faux.' : STEP_SUB[1],
     isRush ? 'La difficulté MONTE toute seule : ça démarre facile, puis de plus en plus pointu.' : STEP_SUB[2],
-    isRush ? 'Le temps de départ — c\'est ton créneau au classement mondial.' : isQuiz ? 'Le nombre de questions du quiz.' : STEP_SUB[3],
+    isRush ? 'Le temps de départ · c\'est ton créneau au classement mondial.' : isQuiz ? 'Le nombre de questions du quiz.' : STEP_SUB[3],
     STEP_SUB[4],
   ];
   function launch() {
@@ -411,7 +417,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                   className={`gpill srcpill sp ${spotify.state === 'ready' && spotify.spotifyOn ? 'on' : 'off'}`}
                   onClick={spotify.onToggleSpotify}
                   title={spotify.state === 'ready'
-                    ? (spotify.spotifyOn ? 'Spotify actif (prioritaire) — cliquer pour couper' : 'Spotify en veille — cliquer pour activer')
+                    ? (spotify.spotifyOn ? 'Spotify actif (prioritaire) · cliquer pour couper' : 'Spotify en veille · cliquer pour activer')
                     : spotify.state === 'premium_required' ? 'Spotify : compte Premium requis'
                     : spotify.state === 'connecting' ? 'Connexion à Spotify…' : 'Connecter Spotify'}>
                   <span className="srclogo" {...H(spotifyIco)} />Spotify
@@ -419,12 +425,12 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 <button
                   className={`gpill srcpill dz ${spotify.deezerOn ? 'on' : 'off'}`}
                   onClick={spotify.onToggleDeezer}
-                  title={spotify.deezerOn ? 'Deezer actif — cliquer pour couper' : 'Deezer coupé — cliquer pour activer'}>
+                  title={spotify.deezerOn ? 'Deezer actif · cliquer pour couper' : 'Deezer coupé · cliquer pour activer'}>
                   <img className="dzimg" src="/deezer.svg" alt="" aria-hidden="true" /><span className="dzword">deezer</span>
                 </button>
                 {spotify.state !== 'ready' && typeof window !== 'undefined' && window.location.hostname !== '127.0.0.1' && (
                   <div style={{ flexBasis: '100%', fontSize: 11.5, color: 'var(--muted)', marginTop: 4, lineHeight: 1.4 }}>
-                    Pour <b style={{ color: 'var(--txt)' }}>Spotify</b> : ouvre le jeu sur <b style={{ color: 'var(--fluo)' }}>http://127.0.0.1:{window.location.port || '5173'}/host</b> — Spotify refuse « localhost » et les IP du réseau local.
+                    Pour <b style={{ color: 'var(--txt)' }}>Spotify</b> : <button type="button" className="lnk" style={{ color: 'var(--fluo)', font: 'inherit', fontWeight: 700, background: 'none', border: 0, padding: 0, cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { window.location.href = `http://127.0.0.1:${window.location.port || '5173'}${window.location.pathname}`; }}>ouvrir sur 127.0.0.1 →</button> · Spotify refuse « localhost » et les IP du réseau local.
                   </div>
                 )}
               </div>
@@ -491,7 +497,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                 <div className="axis-head"><span className="axis-chip"><span>Type de questions</span></span><span className="axis-note">Le style du quiz</span></div>
                 <div className="opt-stack">
                   <button className={`opt ${!quizNoVf ? 'sel' : ''}`} onClick={() => setQuizNoVf(false)}><span className="ol"><b>QCM + Vrai / Faux</b><small>Toutes les questions : les QCM à 4 choix ET les Vrai / Faux.</small></span></button>
-                  <button className={`opt ${quizNoVf ? 'sel' : ''}`} onClick={() => setQuizNoVf(true)}><span className="ol"><b>QCM uniquement</b><small>On vire les Vrai / Faux — que des questions à 4 choix.</small></span></button>
+                  <button className={`opt ${quizNoVf ? 'sel' : ''}`} onClick={() => setQuizNoVf(true)}><span className="ol"><b>QCM uniquement</b><small>On vire les Vrai / Faux · que des questions à 4 choix.</small></span></button>
                 </div>
               </div>
             )}
@@ -570,7 +576,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                   <div className="rs-op">→</div>
                   <div className="rs-chip full"><span className="rs-k">Les deux</span><span className="rs-v">+9 s · max de points</span></div>
                 </div>
-                <p className="rush-scoring-note">Un seul volet suffit pour <b>enchaîner</b> — mais mets le <b>titre ET l'artiste</b> pour gagner bien plus de temps et de points.</p>
+                <p className="rush-scoring-note">Un seul volet suffit pour <b>enchaîner</b> · mais mets le <b>titre ET l'artiste</b> pour gagner bien plus de temps et de points.</p>
               </>
             )}
 
@@ -588,11 +594,11 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                   <div className="setblock">
                     <div className="set-lbl"><span className="axis-chip"><span>Qui joue ?</span></span></div>
                     {playerList.length === 0
-                      ? <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '4px 2px 0' }}>Le Survivor est <b style={{ color: 'var(--txt)' }}>solo</b> : un seul joueur relève le défi. <b style={{ color: 'var(--txt)' }}>Attends qu'un joueur rejoigne</b>, puis choisis-le ici — obligatoire pour lancer.</p>
+                      ? <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '4px 2px 0' }}>Le Survivor est <b style={{ color: 'var(--txt)' }}>solo</b> : un seul joueur relève le défi. <b style={{ color: 'var(--txt)' }}>Attends qu'un joueur rejoigne</b>, puis choisis-le ici · obligatoire pour lancer.</p>
                       : <><div className="opt-stack">{playerList.map((p) => (
                           <button key={p.id} className={`opt ${rushPlayerId === p.id ? 'sel' : ''}`} onClick={() => setRushPlayerId(p.id)}><span className="ol"><b>{p.name}</b><small>{avatarById(p.avatar)?.name || 'Au contre-la-montre'}</small></span></button>
                         ))}</div>
-                        <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '10px 2px 0' }}>Choisis <b style={{ color: 'var(--txt)' }}>qui joue</b> parmi les connectés — les autres regardent. <b style={{ color: 'var(--txt)' }}>Obligatoire</b> (pas de choix au hasard).</p></>}
+                        <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: '10px 2px 0' }}>Choisis <b style={{ color: 'var(--txt)' }}>qui joue</b> parmi les connectés · les autres regardent. <b style={{ color: 'var(--txt)' }}>Obligatoire</b> (pas de choix au hasard).</p></>}
                   </div>
                 )}
                 {isQuiz && (
@@ -608,7 +614,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                     const locked = o.key === 'mj' && !mjAllowed;
                     return (
                       <button key={o.key} className={`opt ${orch === o.key ? 'sel' : ''}`} disabled={locked} style={locked ? { opacity: .5, cursor: 'not-allowed' } : undefined} onClick={() => !locked && setOrch(o.key)}>
-                        <span className="ol"><b>{o.name}{locked && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, letterSpacing: '.12em', color: 'var(--muted2)', border: '1px solid var(--line3)', borderRadius: 3, padding: '2px 6px', textTransform: 'uppercase', verticalAlign: 'middle' }}>Bientôt</span>}</b><small>{locked ? 'Mode en préparation — pas encore jouable.' : o.desc}</small></span>
+                        <span className="ol"><b>{o.name}{locked && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, letterSpacing: '.12em', color: 'var(--muted2)', border: '1px solid var(--line3)', borderRadius: 3, padding: '2px 6px', textTransform: 'uppercase', verticalAlign: 'middle' }}>Bientôt</span>}</b><small>{locked ? 'Mode en préparation · pas encore jouable.' : o.desc}</small></span>
                       </button>
                     );
                   })}</div>
@@ -616,9 +622,9 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
                     <div style={{ marginTop: 14 }}>
                       <div className="eyebrow" style={{ marginBottom: 8 }}>Qui anime ? <span className="muted" style={{ fontWeight: 600 }}>(ne joue pas)</span></div>
                       {playerList.length === 0
-                        ? <p className="muted" style={{ fontSize: 12.5, margin: 0, lineHeight: 1.4 }}>Personne n'a encore rejoint. Le mode Maître du jeu demande au moins 2 joueurs — 1 anime, les autres jouent.</p>
+                        ? <p className="muted" style={{ fontSize: 12.5, margin: 0, lineHeight: 1.4 }}>Personne n'a encore rejoint. Le mode Maître du jeu demande au moins 2 joueurs · 1 anime, les autres jouent.</p>
                         : <div className="opt-stack">{playerList.map((p) => (
-                            <button key={p.id} className={`opt ${(mjId || playerList[0]?.id) === p.id ? 'sel' : ''}`} onClick={() => setMjId(p.id)}><span className="ol"><b>{p.name}</b><small>Animateur — voit la réponse, distribue les points à la voix</small></span></button>
+                            <button key={p.id} className={`opt ${(mjId || playerList[0]?.id) === p.id ? 'sel' : ''}`} onClick={() => setMjId(p.id)}><span className="ol"><b>{p.name}</b><small>Animateur · voit la réponse, distribue les points à la voix</small></span></button>
                           ))}</div>}
                     </div>
                   )}
@@ -669,7 +675,7 @@ export default function ConfigWizard({ poolSize, roomCode, players, playerList =
         <button className="btn hublink" onClick={() => onOpenHub?.('trophies')}><span {...H(trophyIco)} /> Palmarès</button>
         <button className="btn hublink" onClick={() => onOpenHub?.('radio')}><span {...H(radioIco)} /> Radio</button>
         {/* Ni « Suivant » ni « Lancer » ici : un SEUL CTA primaire = « Lancer la partie » dans la carte de match (à droite).
-            Navigation des étapes au clavier (← → · Entrée) — voir le hint ci-dessus. */}
+            Navigation des étapes au clavier (← → · Entrée) · voir le hint ci-dessus. */}
       </div>
     </div>
   );

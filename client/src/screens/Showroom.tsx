@@ -20,18 +20,33 @@ if (EMBED) {
   installMock();
   const st = scene.make();
   setScene(() => st);
+  // Les scenes SANS session (character select, roster, palmares) ne declenchent aucun reclaim : le state
+  // n'arrive jamais par le socket mock, donc les indices `__*` non plus. On les expose ici, et Player les lit
+  // au montage. (Uniquement en mode ?embed du showroom.)
+  (window as any).__PL_SR = st;
   try {
     if (scene.comp === 'host') localStorage.setItem('pl_host', JSON.stringify({ code: st.code || 'PUNCH', hostToken: 'showroom' }));
-    else if (scene.session) localStorage.setItem('pl_session', JSON.stringify(scene.session));
+    else if (scene.session) localStorage.setItem('pl_session', JSON.stringify({ ...scene.session, __sr: true })); // __sr = session showroom → le vrai jeu la purge (loadSession) au lieu de rejoindre le salon fantôme « PUNCH »
     else localStorage.removeItem('pl_session');
   } catch {}
 }
 
+// Vue croisee : quel ecran telephone regarder en face de quel ecran TV (et l'inverse).
 const PAIR: Record<string, string> = {
   'tv-lobby': 'ph-form', 'tv-prep': 'ph-prep', 'tv-playing': 'ph-playing', 'tv-reveal': 'ph-reveal',
-  'tv-podium': 'ph-final', 'tv-buzz-wait': 'ph-buzz', 'tv-buzz-win': 'ph-buzz', 'tv-quiz': 'ph-quiz', 'tv-survivor': 'ph-playing',
+  'tv-podium': 'ph-final', 'tv-buzz-wait': 'ph-buzz', 'tv-buzz-win': 'ph-buzz', 'tv-quiz': 'ph-quiz', 'tv-survivor': 'ph-survivor',
   'ph-form': 'tv-lobby', 'ph-prep': 'tv-prep', 'ph-playing': 'tv-playing', 'ph-reveal': 'tv-reveal',
   'ph-buzz': 'tv-buzz-win', 'ph-quiz': 'tv-quiz', 'ph-final': 'tv-podium', 'ph-waiting': 'tv-playing',
+  // paires ajoutees le 2026-07-26 avec les nouvelles scenes
+  'tv-clash-intro': 'ph-clash-intro', 'tv-clash-bets': 'ph-clash-bet', 'tv-clash-play': 'ph-clash-duel',
+  'tv-clash-ease': 'ph-clash-duel', 'tv-clash-reveal': 'ph-clash-reveal', 'tv-clash-draw': 'ph-clash-reveal',
+  'tv-rushend': 'ph-rushend', 'tv-series': 'ph-final', 'tv-trophies': 'ph-final', 'tv-suspense': 'ph-suspense',
+  'tv-mj': 'ph-mj', 'tv-wizard': 'ph-lobby', 'tv-hub-roster': 'ph-roster', 'tv-hub-trophies': 'ph-trophies',
+  'ph-clash-intro': 'tv-clash-intro', 'ph-clash-bet': 'tv-clash-bets', 'ph-clash-duel': 'tv-clash-play',
+  'ph-clash-reveal': 'tv-clash-reveal', 'ph-rushend': 'tv-rushend', 'ph-survivor': 'tv-survivor',
+  'ph-survivor-spec': 'tv-survivor', 'ph-suspense': 'tv-suspense', 'ph-mj': 'tv-mj',
+  'ph-lobby': 'tv-lobby', 'ph-changing': 'tv-lobby', 'ph-charselect': 'tv-lobby',
+  'ph-roster': 'tv-hub-roster', 'ph-trophies': 'tv-hub-trophies',
 };
 
 export default function Showroom() {
@@ -139,7 +154,7 @@ function Chrome() {
       const me = { name: 'Rafuo', avatar: 'disiz' };
       if (d.event === 'player:reaction') win.postMessage({ __sr: 'deliver', event: 'reaction', payload: { id: Number(d.payload && d.payload.id) || 0, ...me, end: !!(d.payload && d.payload.end) } }, '*');
       else if (d.event === 'player:buzz') win.postMessage({ __sr: 'deliver', event: 'buzz:winner', payload: { id: 'me', ...me, endsAt: Date.now() + 15000, answerMs: 15000, serverNow: Date.now() } }, '*');
-      else if (d.event === 'player:power') win.postMessage({ __sr: 'deliver', event: 'power:used', payload: { ...me, power: 'Vol', effect: '−12 000 auditeurs à MoMo' } }, '*');
+      else if (d.event === 'player:power') win.postMessage({ __sr: 'deliver', event: 'power:used', payload: { ...me, power: 'Vol', effect: '−7 200 auditeurs à MoMo' } }, '*');
     }
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
@@ -182,10 +197,10 @@ function Chrome() {
   function simulatePowers() {
     const win = tvRef.current && tvRef.current.contentWindow; if (!win) return;
     const acts = [
-      { name: 'MoMo', avatar: 'sch', power: 'Vol', effect: '−12 000 auditeurs à Rafuo' },
+      { name: 'MoMo', avatar: 'sch', power: 'Vol', effect: '−7 200 auditeurs à Rafuo' },
       { name: 'Léo', avatar: 'ninho', power: 'Certifié Diamant', effect: '×1.6 ce tour' },
-      { name: 'Sofiane', avatar: 'jul', power: 'La Machine', effect: '+21 000 auditeurs' },
-      { name: 'Manon', avatar: 'gazo', power: 'Drill', effect: '−15 000 à MoMo' },
+      { name: 'Sofiane', avatar: 'jul', power: 'La Machine', effect: '+12 600 auditeurs' },
+      { name: 'Manon', avatar: 'gazo', power: 'Drill', effect: '−9 000 à MoMo' },
     ];
     acts.forEach((a, i) => setTimeout(() => { try { win.postMessage({ __sr: 'deliver', event: 'power:used', payload: a }, '*'); } catch {} }, i * 550));
   }
@@ -236,7 +251,7 @@ function Chrome() {
 
       <main className="sr-stage">
         <div className="sr-top">
-          <div className="sr-title">{scene.label}{scene.note && <span className="sr-note"> — {scene.note}</span>}</div>
+          <div className="sr-title">{scene.label}{scene.note && <span className="sr-note"> · {scene.note}</span>}</div>
           <div className="sr-actions">
             <button className={'sr-btn' + (target ? ' hot' : '')} onClick={() => setTarget((t) => !t)} title="Clique un élément de la scène pour l'ajouter au retour">🎯 {target ? 'Ciblage ON' : 'Cibler'}</button>
             {scene.comp === 'host' && <button className="sr-btn" onClick={simulatePowers} title="Envoie 4 activations de pouvoir échelonnées à la TV (test multi-activation + bannières empilées)">⚡ Simuler pouvoirs</button>}

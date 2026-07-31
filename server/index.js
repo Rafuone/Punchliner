@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { execFile, spawnSync } from 'node:child_process';
 import { Server } from 'socket.io';
 import { SEED_TRACKS, SEED_ARTISTS, ARTIST_TAGS } from './tracks.js';
-import { gradeAnswer, speedMult, normalize, extractFeats } from './match.js';
+import { gradeAnswer, speedMult, normalize, extractFeats, matchQuality } from './match.js';
 import { POWERS, firstLetters } from './powers.js';
 import { pickQuiz, buildQuizRound } from './quiz.js';
 import { computeAwards } from './awards.js';
@@ -42,13 +42,16 @@ function powerNote(type, pw, detail) {
     case 'momentum':   return detail ? `en feu : +${A(detail.amount)} armé` : 'momentum armé';
     case 'decay':      return detail ? `+${A(detail.amount)} auditeurs armés` : 'armé';
     case 'double':     return `prochaine bonne réponse ×${pw.mult || 2}`;
-    case 'wager':      return `quitte ou double ×${pw.mult || 2} (ou -${A(pw.penalty || 20000)})`;
-    case 'bonus':      return `+${A(pw.amount || 10000)} auditeurs sur ta réponse${pw.refuel ? ' (charge rendue)' : ''}`;
+    case 'wager':      return `quitte ou double ×${pw.mult || 2} (ou -${A(pw.penalty || 12000)})`;
+    case 'bonus':      return `+${A(pw.amount || 6000)} auditeurs sur ta réponse${pw.refuel ? ' (charge rendue)' : ''}`;
     default:           return pw?.name || 'pouvoir';
   }
 }
 // stats de partie d'un joueur (remises à zéro à chaque partie) → servent aux trophées de fin
-const newStat = () => ({ att: 0, scored: 0, perfect: 0, firsts: 0, best: 0, zeros: 0, powers: 0, denial: false, gamble: false, solo: 0, firstHalf: 0, secondHalf: 0, worstRank: 1, lowRounds: 0, denialGain: 0, datedFinds: 0, oldFinds: 0, newFinds: 0 });
+// att = manches où le joueur a TENTÉ (1 max par manche → base du ratio « Sniper »).
+// subs = SOUMISSIONS brutes (le ré-essai anti-T9 en autorise jusqu'à 8/manche) → base de « La Mitraillette ».
+// Les deux étaient confondus avant le ré-essai ; les séparer garde les 2 trophées décernables.
+const newStat = () => ({ att: 0, subs: 0, scored: 0, perfect: 0, firsts: 0, best: 0, zeros: 0, powers: 0, denial: false, gamble: false, solo: 0, firstHalf: 0, secondHalf: 0, worstRank: 1, lowRounds: 0, denialGain: 0, datedFinds: 0, oldFinds: 0, newFinds: 0 });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // SERVER_PORT (pas PORT) pour ne pas être capté par un outil qui injecte PORT (ex. preview)
@@ -58,15 +61,22 @@ const W = (ms) => (FAST ? 1500 : ms); // durée d'écoute par manche (raccourcie
 const BUZZ_ANSWER_MS = FAST ? 2500 : 15000; // fenêtre pour répondre après avoir buzzé (sinon lockout + réouverture) — 15 s : taper un titre + artiste long sous stress prend du temps
 const BUZZ_ROUND_MAX_MS = FAST ? 4000 : 30000; // buzzer : PLAFOND ABSOLU par manche → révèle même si ça buzze/rate en boucle (plus de musique infinie)
 const MIN_BUZZ_MS = FAST ? 200 : 800; // buzzer : grâce en début de manche (le son doit avoir démarré côté TV avant qu'on puisse buzzer)
+// Ré-essai en Blind Test : on réécrit tant qu'on n'a pas marqué (anti-T9). Garde-fous anti-brute-force.
+const MAX_TRIES = 8;        // tentatives max par manche et par joueur : le T9 en demande 2-3, 8 tue le spam alphabétique
+const TRY_COOLDOWN_MS = 400; // anti-flood (même patron que l'anti-spam des réactions) : ne gêne aucun humain, tue le script
 // Manche BATTLE (clash 1v1 généré par le jeu, façon battle hip-hop) — événement BONUS, PAS un pouvoir.
 // 2 joueurs s'affrontent ; les autres PARIENT sur le vainqueur. Le 1er des deux qui trouve gagne.
-const BATTLE_WIN = 20000;              // auditeurs pour le vainqueur du clash
-const BATTLE_DRAW = 6000;              // consolation aux 2 si personne ne trouve
-const BATTLE_BET_BONUS = 4000;         // bonus pour un spectateur qui a parié sur le bon (pas de perte si raté)
+const BATTLE_WIN = 12000;              // auditeurs pour le vainqueur du clash
+const BATTLE_DRAW = 3600;              // consolation aux 2 si personne ne trouve
+const BATTLE_BET_BONUS = 2400;         // bonus pour un spectateur qui a parié sur le bon (pas de perte si raté)
 const BATTLE_AUTO = true;              // clash auto : 1/partie, ~milieu, ≥3 joueurs. (Le crash live n'est PAS le clash : il survient en pleine LECTURE d'extrait, manche 3-4, avant le clash — cause native RAM/GPU, hors code JS.) Forçage dev host:forceBattle indépendant.
 const BATTLE_INTRO_MS = FAST ? 700 : 4500;
 const BATTLE_BET_MS = FAST ? 1200 : 10000;
 const BATTLE_PLAY_MS = FAST ? 2500 : 22000;
+// PALIER DU CLASH (2026-07-26). Exiger titre + artiste tout du long rendait les fins de clash stériles.
+// On assouplit sur la fin : passé ce seuil, **l'ARTISTE SEUL suffit** pour emporter le duel. Annoncé à
+// l'écran au moment où ça bascule (event `battle:ease`) — une règle qui change sans le dire serait pire.
+const BATTLE_EASE_MS = FAST ? 1000 : 8000; // durée de la phase « artiste seul », en fin de clash
 
 const PREVIEW_MS = 30000; // durée d'un extrait Deezer
 const QUIZ_MS = FAST ? 1500 : 22000; // durée d'une question de quiz (QCM)
@@ -127,7 +137,12 @@ const saveDead = () => { try { fs.writeFileSync(DEAD_FILE, JSON.stringify([...DE
 const previewPath = (id) => path.join(PREVIEW_DIR, `${id}.mp3`);
 const onDisk = (id) => { try { return fs.statSync(previewPath(id)).size > 2000; } catch { return false; } };
 const isDead = (t) => DEAD.has(String(t.id));
-const livePool = () => POOL.filter((t) => !isDead(t) && !isOffTopic(t)); // pool jouable (extraits morts + non-rap écartés)
+// ⚠️ SPOTIFY EST LA SOURCE PAR DÉFAUT (2026-07-25). Un morceau se joue sur Spotify avec juste TITRE + ARTISTE :
+// n'avoir aucun extrait Deezer résolu (`spOnly`) ne le rend PAS injouable, ça le rend « Spotify seulement ».
+// → `sp = true` (l'écran hôte a Spotify prêt) : on pioche dans TOUT le catalogue curé (2555 titres · 353 artistes).
+// → `sp = false` (repli Deezer) : on RESTREINT à ce qui a un extrait (2037 · 313), sinon la manche serait muette.
+// C'est le SEUL endroit où l'on « crope » pour Deezer — la curation, elle, ne dépend d'aucune source.
+const livePool = (sp = false) => POOL.filter((t) => !isOffTopic(t) && (t.spOnly ? sp : !isDead(t)));
 let warm = { total: 0, done: 0, dead: 0, running: false }; // progression du préchauffage (exposée /api/health)
 // tags par artiste, clés NORMALISÉES → lookup sur l'artiste Deezer (casse/accents variables)
 const TAGMAP = new Map(Object.entries(ARTIST_TAGS).map(([k, v]) => [normalize(k), v]));
@@ -155,7 +170,10 @@ function refreshHosts() { for (const room of rooms.values()) { if (room.hostConn
 function readPoolCache() {
   try {
     const raw = JSON.parse(fs.readFileSync(POOL_CACHE, 'utf8'));
-    const fresh = Date.now() - (raw.builtAt || 0) < 3 * 24 * 3600 * 1000;
+    // 30 j (était 3 j) : depuis que la BASE MUSICALE CURÉE pilote le pool (applyCuration), rafraîchir les
+    // catalogues Deezer n'apporte quasi rien — et un cache « périmé » forçait une reconstruction de ~5 min
+    // au démarrage (exactement au moment où on veut lancer une soirée). La curation, elle, est relue à chaque boot.
+    const fresh = Date.now() - (raw.builtAt || 0) < 30 * 24 * 3600 * 1000;
     if (raw.hash === seedHash() && fresh && Array.isArray(raw.tracks) && raw.tracks.length > 50) return raw.tracks;
   } catch { /* pas de cache / illisible → on reconstruit */ }
   return null;
@@ -169,7 +187,7 @@ function writePoolCache() {
 // cache mémoire borné (les extraits vivent surtout sur DISQUE ; la mémoire ne garde que les récents)
 function rememberBuf(id, buf) { previewCache.set(id, buf); if (previewCache.size > 500) previewCache.delete(previewCache.keys().next().value); }
 async function cacheTrack(t) {
-  if (!t) return false;
+  if (!t || t.spOnly) return false; // pas d'extrait Deezer résolu (titre joué via Spotify) → rien à rapatrier
   const id = String(t.id);
   if (previewCache.has(id)) return true;
   if (onDisk(id)) return true;                       // déjà rapatrié sur disque (persistant) → jouable
@@ -194,9 +212,12 @@ async function cacheTracks(list) {
 // survit aux redémarrages, et aucun morceau muet ne peut tomber. Relancé à chaque boot (rapide si déjà en cache).
 async function prewarmPool() {
   if (FAST || warm.running || !POOL.length) return; // jamais en mode test
-  const need = POOL.filter((t) => !onDisk(String(t.id)));
-  warm = { total: POOL.length, done: POOL.length - need.length, dead: DEAD.size, running: true };
-  if (!need.length) { warm.running = false; console.log(`[prewarm] cache disque déjà complet (${POOL.length} extraits).`); return; }
+  // Les titres « Spotify seulement » (aucun extrait Deezer résolu) n'ont RIEN à rapatrier : les inclure ici
+  // les faisait tous marquer INJOUABLES (`.preview-dead.json` pollué de fausses entrées `c:…`).
+  const pool = POOL.filter((t) => !t.spOnly);
+  const need = pool.filter((t) => !onDisk(String(t.id)));
+  warm = { total: pool.length, done: pool.length - need.length, dead: DEAD.size, running: true };
+  if (!need.length) { warm.running = false; console.log(`[prewarm] cache disque déjà complet (${pool.length} extraits).`); return; }
   console.log(`[prewarm] ${need.length} extraits à rapatrier (${warm.done} déjà en cache)…`);
   let deadNew = false;
   for (let i = 0; i < need.length; i += 5) {
@@ -260,7 +281,7 @@ async function enrichYears() {
 async function loadPool() {
   // 1) Cache disque → boot instantané tant que la liste de graines ne bouge pas
   const cached = readPoolCache();
-  if (cached) { POOL = cached; buildPoolIndex(); console.log(`[pool] ${POOL.length} morceaux (cache disque, extraits à la volée).`); refreshHosts(); prewarmPool(); return; }
+  if (cached) { POOL = cached; buildPoolIndex(); console.log(`[pool] ${POOL.length} morceaux (cache disque, extraits à la volée).`); applyCuration(); refreshHosts(); prewarmPool(); return; }
   // 2) Construction : catalogues d'artistes (le gros du pool) + quelques classiques garantis
   console.log(`[deezer] construction du pool : ${SEED_ARTISTS.length} artistes + ${SEED_TRACKS.length} classiques…`);
   const byId = new Map();
@@ -279,8 +300,9 @@ async function loadPool() {
   buildPoolIndex();
   console.log(`[pool] ${POOL.length} morceaux (${gotArtists} via artistes + ${POOL.length - gotArtists} classiques). Datation des albums…`);
   const yr = await enrichYears(); // année par morceau (pour le filtre ÉPOQUE)
-  if (POOL.length > 50) writePoolCache(); // on ne fige pas un pool anémique (réseau KO)
+  if (POOL.length > 50) writePoolCache(); // on ne fige pas un pool anémique (réseau KO) — cache écrit AVANT curation (le cache reste brut, la curation se rejoue à chaque boot)
   console.log(`[pool] prêt · ${yr.dated}/${yr.albums} albums datés · extraits rapatriés à la volée.`);
+  applyCuration();
   refreshHosts();
   prewarmPool();
 }
@@ -316,8 +338,8 @@ function eraList(era) {
   if (Array.isArray(era)) return era.filter((x) => x && x !== 'all');
   return (era && era !== 'all') ? [era] : [];
 }
-function selectPool(era, themes) {
-  let s = livePool(); // exclut les extraits injouables (repérés au préchauffage) → jamais de manche muette
+function selectPool(era, themes, sp = false) {
+  let s = livePool(sp); // exclut les extraits injouables ; `sp` = l'hôte a Spotify prêt → tout le catalogue curé
   const eras = eraList(era);
   if (eras.length) s = s.filter((t) => t.year && eras.some((e) => inEra(t.year, e))); // UNION des décennies cochées
   const list = themeList(themes);
@@ -361,9 +383,78 @@ function dnorm(s) { return (s || '').toLowerCase().normalize('NFD').replace(/[̀
 function dkey(t) { return dnorm(t.artist) + '|' + dnorm(t.title); }
 // Artistes bannis EN ENTIER (RnB / variété / parodie qui a fui via les canons) : exclusion PAR ARTISTE, robuste
 // aux titres qu'on n'a pas listés (le pool vient de Deezer → impossible de tous les énumérer à la main).
+// ⚠️ NE PAS ÉTENDRE CETTE LISTE. La curation est le domaine d'Alexandre : ce qui doit sortir du jeu se
+// marque « hors pool » dans la BASE MUSICALE (→ difficulty-exclude.json), pas en dur ici. (Ajouts faits
+// d'initiative le 2026-07-25 → retirés le jour même, à raison : personne ne les avait demandés.)
 const EXCLUDE_ARTISTS = new Set(['dadju', 'fatalbazooka']);
-function isOffTopic(t) { return EXCLUDE_ARTISTS.has(dnorm(t.artist)) || DIFF_EXCLUDE.has(dkey(t)); } // artiste banni OU titre non-rap → jamais en jeu
-function trackBand(t) { return DIFF_LABELS[dkey(t)] || 'mid'; } // hors liste (titre ajouté après) → difficile par défaut, JAMAIS facile
+// ⚠️ 2026-07-25 : le bannissement se testait sur `dnorm(t.artist)`, qui CONCATÈNE les feats
+// (« Fatal Bazooka feat. Vitaa » → `fatalbazookavitaa` ≠ `fatalbazooka`) → l'artiste banni repassait dès
+// qu'il avait un invité. Observé en jouant : « Mauvaise foi nocturne » tombé en difficulté MAINSTREAM.
+// On teste donc l'artiste PRINCIPAL (artistKey) ET la forme concaténée (compat).
+function isOffTopic(t) { return EXCLUDE_ARTISTS.has(artistKey(t)) || EXCLUDE_ARTISTS.has(dnorm(t.artist)) || DIFF_EXCLUDE.has(dkey(t)); } // artiste banni OU titre non-rap → jamais en jeu
+
+// ── LA BASE MUSICALE CURÉE EST LA SOURCE DE VÉRITÉ DU POOL (2026-07-25) ───────────────────────────
+// AVANT : le pool venait UNIQUEMENT des catalogues Deezer (SEED_ARTISTS) ; la curation ne servait qu'à
+// ÉTIQUETER ce qu'elle croisait au passage. Mesuré le 2026-07-25 sur .pool-cache.json : 1615 morceaux en
+// pool, dont **1004 dans AUCUNE liste curée** (donc 'mid' = Puriste par défaut) et seulement **350 des 3306
+// entrées de canon-active.json** réellement jouables. Autrement dit le tri fait dans la base musicale ne
+// pilotait presque rien : on jouait surtout des deep cuts jamais relus, classés difficiles par défaut.
+// MAINTENANT : POOL = canon-active.json ∪ (pool Deezer DÉJÀ ÉTIQUETÉ), moins « hors pool »
+// (= difficulty-exclude.json, ce qu'on a marqué ✕ dans la base musicale : c'est la SEULE liste d'exclusion).
+// Tout ce qui tombe en jeu a donc été vu et classé à la main.
+// Mesuré : **2555 titres · 353 artistes** en Spotify (top 686 / high 1153 / mid 716) ; en repli Deezer,
+// restreint aux 2037 qui ont un extrait résolu · 313 artistes (cf. `spOnly` / `livePool`).
+// Un titre sans étiquette n'est PAS basculé en Puriste : il n'entre simplement pas dans le jeu.
+const CURATED_ONLY = true; // false = ancien comportement (pool Deezer brut, non curé) — garder true
+const DEC_MID = { 90: 1995, '00': 2005, 10: 2015, 20: 2021 }; // décennie curée → année plausible (filtre ÉPOQUE) quand `yr` manque
+const BAND_RANK = { top: 700000, high: 420000, mid: 200000, deep: 90000 }; // rang SYNTHÉTIQUE (le rank Deezer est faux, cf. plus haut) : sert l'ORDRE intra-bande
+let CANON_BAND = new Map();  // clé curée → bande (repli quand difficulty-labels.json ne connaît pas encore l'entrée)
+let _canonTracks = null;
+function hashJit(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h) % 60000; } // dispersion DÉTERMINISTE dans la bande
+// Entrées de canon-active.json qui ont un audio Deezer résolu (`dz`) → morceaux jouables, forme identique au pool.
+function canonTracks() {
+  if (_canonTracks) return _canonTracks;
+  let list = [];
+  try { list = JSON.parse(fs.readFileSync(path.join(__dirname, 'canon-active.json'), 'utf8')); } catch { list = []; }
+  const out = [];
+  for (const c of list) {
+    if (!c || !c.k) continue;
+    if (c.band) CANON_BAND.set(c.k, c.band);
+    const artist = c.a || '', title = c.t || '';
+    const band = DIFF_LABELS[c.k] || c.band || 'mid';
+    // Pas d'extrait Deezer résolu → le morceau reste JOUABLE sur Spotify (titre + artiste suffisent),
+    // il est juste marqué `spOnly` et écarté quand l'écran hôte retombe sur Deezer (cf. livePool).
+    out.push({
+      id: c.dz ? String(c.dz) : 'c:' + c.k, title, artist, spOnly: !c.dz, sp: c.sp || '',
+      cover: c.cov || '', deezer: '', preview: c.dz ? `/api/preview/${c.dz}` : '',
+      rank: (BAND_RANK[band] || BAND_RANK.mid) + hashJit(c.k),
+      feats: extractFeats({ title, artist }),
+      albumId: null, year: c.yr || DEC_MID[c.dec] || 0,
+      tags: TAGMAP.get(normalize(artist)) || [],
+      curated: true,
+    });
+  }
+  _canonTracks = out;
+  return out;
+}
+// Applique la curation au POOL chargé (cache disque OU reconstruction Deezer). Idempotent : rejouée à chaque boot.
+function applyCuration() {
+  const canon = canonTracks(); // NB : remplit aussi CANON_BAND (utilisé par trackBand) même si CURATED_ONLY=false
+  if (!CURATED_ONLY) return;
+  const before = POOL.length;
+  const byKey = new Map();
+  for (const t of POOL) { const k = dkey(t); if (!byKey.has(k)) byKey.set(k, t); }   // le morceau Deezer gagne (rank/album/année réels)
+  for (const t of canon) { const k = dkey(t); if (!byKey.has(k)) byKey.set(k, t); }  // sinon on prend l'entrée curée
+  POOL = [...byKey.values()].filter((t) => { const k = dkey(t); return (DIFF_LABELS[k] || CANON_BAND.has(k)) && !isOffTopic(t); });
+  buildPoolIndex();
+  _bandCache = null; _bandLen = -1;
+  const bands = {}; for (const t of POOL) { const b = trackBand(t); bands[b] = (bands[b] || 0) + 1; }
+  const arts = new Set(POOL.map((t) => artistKey(t)));
+  const dz = POOL.filter((t) => !t.spOnly);
+  console.log(`[curation] pool ${before} → ${POOL.length} morceaux CURÉS (${arts.size} artistes) · ${JSON.stringify(bands)}`);
+  console.log(`[curation] Spotify (défaut) : ${POOL.length} jouables · repli Deezer : ${dz.length} (${POOL.length - dz.length} sans extrait résolu)`);
+}
+function trackBand(t) { const k = dkey(t); return DIFF_LABELS[k] || CANON_BAND.get(k) || 'mid'; } // hors liste (titre ajouté après) → difficile par défaut, JAMAIS facile
 let _bandCache = null, _bandLen = -1;
 function computeBands() { // memoïsé sur POOL.length (comme artistPeaks) — bande PRÉ-CALCULÉE + éraNorm pour l'ORDRE
   if (_bandCache && _bandLen === POOL.length) return _bandCache;
@@ -398,7 +489,7 @@ function tierSlice(arr, tier) {
   }
   return sel;
 }
-function poolForTier(tier) { return tierSlice(livePool(), tier); } // compat (Survivor recycle)
+function poolForTier(tier, sp = false) { return tierSlice(livePool(sp), tier); } // compat (Survivor recycle)
 // ÉQUILIBRAGE DES ÉPOQUES (époque = « toutes ») : le pool est très orienté récent (mesuré : 90s 3% · 00s 15% ·
 // 10s 33% · 20s 40%). On échantillonne par DÉCENNIE selon une cible « à peu près autant partout, léger surpoids
 // 2010/2020 » au lieu de la répartition brute → un blind-test balaie les époques au lieu de matraquer du récent.
@@ -422,11 +513,34 @@ function eraWeightFor(tier) {
 }
 function eraBucket(t) { const y = t.year || 0; return !y ? 'x' : y <= 1999 ? '90' : y <= 2009 ? '00' : y <= 2019 ? '10' : '20'; }
 function shuffleArr(a) { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; }
+// ── UN ARTISTE = UNE SEULE MANCHE PAR PARTIE (règle du proprio, 2026-07-25) ───────────────────────
+// La dédup de `tierSlice` portait sur artiste+TITRE (ré-éditions) : rien n'empêchait 3 Booba dans la même
+// partie. Ici on tire la clé de l'artiste PRINCIPAL (avant feat./&/x/,) → « Booba » et « Booba feat. Kaaris »
+// comptent pour le même. Appliqué à la playlist, au son du CLASH et au flux Survivor.
+function artistKey(t) {
+  const raw = String((t && t.artist) || '').replace(/\(.*?\)|\[.*?\]/g, ' ');
+  const head = raw.split(/\s*(?:feat\.?|ft\.?|featuring|avec|,|&|\bx\b|\bvs\.?\b)\s+/i)[0];
+  return dnorm(head) || dnorm(raw);
+}
+// Garde le 1er morceau de chaque artiste (l'ordre d'entrée décide → shuffler AVANT pour un représentant au hasard).
+function uniqByArtist(list, used = null) {
+  const seen = used ? new Set(used) : new Set(), out = [];
+  for (const t of list) { const a = artistKey(t); if (!a || seen.has(a)) continue; seen.add(a); out.push(t); }
+  return out;
+}
+// Complète `out` jusqu'à `take` en RELÂCHANT la règle (pool trop maigre) : mieux vaut un doublon d'artiste
+// qu'une partie tronquée. En pratique jamais atteint (≥230 artistes distincts par bande).
+function fillUp(out, src, take) {
+  if (out.length >= take) return out;
+  const have = new Set(out);
+  for (const t of shuffleArr(src)) { if (out.length >= take) break; if (!have.has(t)) { have.add(t); out.push(t); } }
+  return out;
+}
 // Interleaving par « déficit » : à chaque tirage on prend la décennie la plus EN RETARD sur sa cible. Avantage
 // clé : TOUT PRÉFIXE de la sortie respecte déjà la cible → marche pour une partie de N manches (blind test /
 // buzzer) ET pour un FLUX potentiellement infini (Survivor, qui enchaîne et peut s'arrêter à tout moment).
 // Plafonné par la dispo : quand une décennie rare (90s) s'épuise, les autres complètent proprement.
-function sampleBalancedByEra(src, n, tier) {
+function sampleBalancedByEra(src, n, tier, avoidArtists = null) {
   const W = eraWeightFor(tier);                                       // pondération d'époques selon la difficulté (gère les bandes multiples)
   const g = { '90': [], '00': [], '10': [], '20': [], 'x': [] };
   for (const t of src) g[eraBucket(t)].push(t);
@@ -434,29 +548,33 @@ function sampleBalancedByEra(src, n, tier) {
   const keys = Object.keys(W);
   const totW = keys.reduce((s, k) => s + W[k], 0);
   const ptr = {}, cnt = {}; for (const k of keys) { ptr[k] = 0; cnt[k] = 0; }
+  const used = new Set(avoidArtists || []);                           // artistes DÉJÀ pris (règle : un artiste = une manche)
   const take = Math.min(n, src.length), out = [];
   while (out.length < take) {
+    for (const k of keys) while (ptr[k] < g[k].length && used.has(artistKey(g[k][ptr[k]]))) ptr[k]++; // saute les artistes déjà servis
     let best = null, bestDef = -Infinity;
     for (const k of keys) {
       if (ptr[k] >= g[k].length) continue;                            // décennie épuisée
       const def = (out.length + 1) * (W[k] / totW) - cnt[k];          // le plus sous sa cible l'emporte
       if (def > bestDef) { bestDef = def; best = k; }
     }
-    if (!best) break;
-    out.push(g[best][ptr[best]++]); cnt[best]++;
+    if (!best) break;                                                 // plus AUCUN artiste neuf → on sort (fillUp relâchera si besoin)
+    const t = g[best][ptr[best]++];
+    used.add(artistKey(t));
+    out.push(t); cnt[best]++;
   }
-  return out;
+  return fillUp(out, src, take);
 }
 // Tire n morceaux : ÉPOQUE + THÈME → DIFFICULTÉ → aléatoire. Repli PROGRESSIF si le combo est trop restrictif
 // (on lâche d'abord la difficulté, puis époque/thème) → le jeu reste TOUJOURS jouable, jamais 0 morceau.
-function pickPlaylist(n, tier, era = 'all', themes = 'all', played = null) {
-  const base = selectPool(era, themes);
+function pickPlaylist(n, tier, era = 'all', themes = 'all', played = null, avoidArtists = null, sp = false) {
+  const base = selectPool(era, themes, sp);
   const tiered = tierSlice(base, tier);
   let src;
   if (tiered.length >= n) src = tiered;              // idéal : époque + thème + difficulté
   else if (base.length >= n) src = base;             // assez en époque+thème mais pas au bon tier → on garde le filtre
-  else src = tierSlice(livePool(), tier);            // filtre trop restrictif → on le lâche, on garde la difficulté
-  if (src.length < Math.min(n, 3)) src = livePool(); // ultime filet (morts exclus)
+  else src = tierSlice(livePool(sp), tier);          // filtre trop restrictif → on le lâche, on garde la difficulté
+  if (src.length < Math.min(n, 3)) src = livePool(sp); // ultime filet (morts exclus)
   if (src.length < Math.min(n, 3)) src = POOL;       // réseau/préchauffage KO → au pire tout le pool
   // ANTI-RÉPÉTITION SALON : on écarte les titres DÉJÀ JOUÉS dans la série. Si le pool NON-JOUÉ de CETTE difficulté
   // ne suffit plus pour remplir une partie, on RECYCLE ce pool (on efface SA mémoire, pas celle des autres
@@ -467,8 +585,10 @@ function pickPlaylist(n, tier, era = 'all', themes = 'all', played = null) {
     src = avail;
   }
   const take = Math.min(n, src.length);
-  // 0 ou ≥2 décennies → rééquilibrage PONDÉRÉ PAR DIFFICULTÉ (balaye les époques sélectionnées) ; 1 seule décennie → simple shuffle
-  return eraList(era).length === 1 ? shuffleArr(src).slice(0, take) : sampleBalancedByEra(src, take, tier);
+  // 0 ou ≥2 décennies → rééquilibrage PONDÉRÉ PAR DIFFICULTÉ (balaye les époques sélectionnées) ; 1 seule décennie → simple shuffle.
+  // Dans les deux cas : UN SEUL MORCEAU PAR ARTISTE (avoidArtists = artistes déjà consommés ailleurs, ex. le clash).
+  if (eraList(era).length === 1) return fillUp(uniqByArtist(shuffleArr(src), avoidArtists).slice(0, take), src, take);
+  return sampleBalancedByEra(src, take, tier, avoidArtists);
 }
 
 /* ------------------------------------------------------------------ */
@@ -487,7 +607,7 @@ function newRoom(code, hostId, hostToken) {
   return {
     code, hostId, hostToken, hostConnected: true, hostGrace: null,
     phase: 'lobby', players: new Map(), playlist: [], roundIndex: 0, totalRounds: 8,
-    settings: { difficulty: 'normal', mode: 'multi', mj: false, rebalance: 'comeback' },
+    settings: { difficulty: 'facile', mode: 'multi', mj: false, rebalance: 'comeback' }, // défaut salon = Grand public (aligné sur le ConfigWizard) ; écrasé par startGame() de toute façon
     current: null, answers: new Map(), timer: null, buzzTimer: null, lastReveal: null, createdAt: Date.now(),
     gamesPlayed: 0, lastFinal: null, usedQuiz: new Set(), playedTracks: new Set(),
   };
@@ -507,7 +627,7 @@ function emitLobby(room) {
   io.to(room.code).emit('lobby', {
     code: room.code, phase: room.phase, players: publicPlayers(room),
     round: room.roundIndex + 1, totalRounds: room.totalRounds, settings: room.settings,
-    waiting: waitingCount(room), gamesPlayed: room.gamesPlayed || 0, poolSize: POOL.length,
+    waiting: waitingCount(room), gamesPlayed: room.gamesPlayed || 0, poolSize: livePool(!!room.spotify).length, // taille RÉELLE selon la source (Spotify = tout le catalogue curé)
   });
 }
 
@@ -538,6 +658,7 @@ function snapshot(room, isHost) {
     const P = (id) => { const p = room.players.get(id); return p ? { id: p.id, name: p.name, avatar: p.avatar, score: p.score } : null; };
     s.battle = { a: P(room.battle.a), b: P(room.battle.b), flavor: room.battle.flavor, endsAt: room.battle.endsAt, betBonus: BATTLE_BET_BONUS, win: BATTLE_WIN };
     if (room.phase === 'battle-reveal') s.battle.reveal = room.lastBattleReveal || null;
+    s.battle.eased = !!room.battle.eased; s.battle.easeAt = room.battle.easeAt || 0;
     if (isHost && room.phase === 'battle-play' && room.battle.track) Object.assign(s.battle, { preview: room.battle.track.preview, startAt: 0, durationMs: BATTLE_PLAY_MS, sp: { title: room.battle.track.title, artist: room.battle.track.artist } });
   }
   return s;
@@ -556,7 +677,7 @@ function canPowerAct(room, p, pw) {
     case 'steal': { if (pw.shield) return true; const t = attackable().sort((a, b) => b.score - a.score)[0]; return !!(t && t.score > p.score && t.score > 0); }
     case 'sabotage': return attackable().length > 0;
     case 'tax': return attackable().some((x) => x.score > 0);
-    case 'comeback': { const lead = others().sort((a, b) => b.score - a.score)[0]; return !!(lead && lead.score - p.score >= 2000); }
+    case 'comeback': { const lead = others().sort((a, b) => b.score - a.score)[0]; return !!(lead && lead.score - p.score >= 1200); }
     case 'draft': return others().length > 0;
     case 'jam': return !room.jam;
     default: return true; // double/bonus/hint/safety/veteran/momentum/decay/firstblood/freeze/nofault/ace/wager/allin/combo/sustain : pas de cible requise
@@ -573,6 +694,46 @@ function powerIneligibleReason(pw) {
     default: return 'Sans effet ce tour';
   }
 }
+// Ce que la TV doit préparer avant le coup d'envoi : les extraits Deezer à mettre en blob (`urls`) ET les
+// titres SANS extrait, jouables sur Spotify uniquement, à VÉRIFIER sur Spotify (`sp`) — la TV renvoie ceux
+// qu'elle n'a pas su résoudre et on les remplace (cf. host:preloaded).
+// L'écran hôte PERD Spotify en pleine partie (token expiré, device perdu, bascule manuelle sur Deezer).
+// Les manches À VENIR tirées sans extrait Deezer (`spOnly`) seraient alors muettes : on les remplace tout de
+// suite par de l'audio Deezer sûr. On ne touche NI à la manche en cours NI aux manches déjà jouées.
+// (C'est le seul risque que le passage « Spotify d'abord » ajoutait : ~15 % des titres n'ont pas de repli.)
+function repairPlaylistForDeezer(room) {
+  const pl = room.playlist || [];
+  if (!pl.length || room.settings?.mode === 'quiz') return;
+  const from = Math.max(0, (room.roundIndex || 0) + 1);
+  const bad = [];
+  for (let i = from; i < pl.length; i++) if (pl[i] && pl[i].spOnly) bad.push(i);
+  if (!bad.length) return;
+  const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
+  const avoid = new Set([...(room.playedTracks || []), ...pl.filter(Boolean).map(dkey)]);
+  const avoidA = new Set(pl.filter(Boolean).map(artistKey));
+  const repl = pickPlaylist(bad.length, diff.bands, room.settings.era, room.settings.themes, avoid, avoidA, false) || [];
+  let n = 0;
+  bad.forEach((i, k) => { if (repl[k]) { pl[i] = repl[k]; n++; } });
+  if (!n) return;
+  console.log(`[source] ${n} manche(s) à venir sans repli Deezer → remplacée(s) (Spotify perdu en cours de partie)`);
+  cacheTracks(repl);
+  const urls = repl.map((t) => t && t.preview).filter(Boolean);
+  if (urls.length) io.to(room.hostId).emit('game:preload', { urls, sp: [] }); // la TV les met en blob en fond
+}
+
+// ⚠️ On envoie TOUTE la playlist à résoudre sur Spotify (pas seulement les titres sans repli Deezer) :
+// la TV met les URI Spotify en cache pendant le préchargement, sinon chaque manche refait une RECHERCHE avant
+// de jouer et la latence revient manche après manche — préchargement ou pas (soirée du 2026-07-26 : 12 s).
+// `must` = ce titre n'a AUCUN extrait Deezer : un échec de résolution doit le faire remplacer (sinon muet).
+function preloadPayload(room) {
+  const pl = room.playlist || [];
+  return {
+    start: true,
+    urls: pl.filter(Boolean).map((t) => t.preview).filter(Boolean),
+    sp: pl.map((t, i) => (t ? { i, title: t.title, artist: t.artist, must: !!t.spOnly } : null)).filter(Boolean),
+  };
+}
+
 function beginRound(room) {
   // le morceau est choisi MAINTENANT (avant la fenêtre pouvoirs → le hint peut révéler ses lettres)
   room.current = room.playlist[room.roundIndex];
@@ -590,7 +751,9 @@ function beginRound(room) {
   // Fenêtre d'activation des pouvoirs AVANT la musique (sinon on active en connaissant déjà la réponse).
   // PAS à la manche 1 : sans classement établi, les pouvoirs anti-leader n'ont aucune cible → on n'ouvre
   // la fenêtre qu'à partir de la manche 2 (après au moins une question jouée).
-  const powerPhase = room.settings.mode === 'multi' && !room.settings.mj && room.roundIndex >= 1; // pouvoirs UNIQUEMENT en Blind Test auto (jamais Buzzer/Quiz/MJ/Survivor/Clash)
+  // `rebalance: 'none'` = mode SANS POUVOIRS (2026-07-26) : blind test pur, aucune fenetre d'activation.
+  const powerPhase = room.settings.mode === 'multi' && !room.settings.mj && room.settings.rebalance !== 'none' && room.roundIndex >= 1; // pouvoirs UNIQUEMENT en Blind Test auto (jamais Buzzer/Quiz/MJ/Survivor/Clash)
+  room.prepClosing = false; // fenêtre pouvoirs neuve (cf. checkPrepDone)
   if (powerPhase) {
     room.phase = 'prep';
     const seconds = FAST ? 2 : 10;
@@ -615,15 +778,32 @@ function beginRound(room) {
     room.phase = 'countdown';
     const seconds = FAST ? 1 : 5;
     const preload = room.settings.mode !== 'quiz' ? (room.current?.preview || '') : '';
-    io.to(room.hostId).emit('round:countdown', { seconds, index: room.roundIndex, total: room.totalRounds, preload });
+    // `mode` envoyé DÈS le décompte : l'hôte sait quelle musique de fond mettre AVANT la 1re question
+    // (quiz = instru lobby). Sans lui, round.mode vaut encore 'multi' → 5 s de silence sur la 1re question.
+    io.to(room.hostId).emit('round:countdown', { seconds, index: room.roundIndex, total: room.totalRounds, preload, mode: room.settings.mode });
     io.to(room.code).emit('round:countdown', { seconds });
     room.cdTimer = setTimeout(() => startRound(room), seconds * 1000);
   }
 }
 
-// La fenêtre pouvoirs va TOUJOURS jusqu'au bout de ses 10 s, même si tout le monde est prêt : on a le
-// temps de LIRE qui a lancé quel pouvoir (et son effet) sur la TV. (Avant : elle se fermait d'un coup.)
-function checkPrepDone(_room) { /* no-op volontaire — le décompte complet est conservé */ }
+// Fenêtre pouvoirs : dès que TOUT LE MONDE a tranché (activé ou passé), on coupe le décompte au lieu
+// d'attendre les 10 s (2026-07-25, demande du proprio — avant : no-op volontaire, on laissait filer).
+// On garde une courte grâce : le décompte de 3 s de startCountdown enchaîne derrière et laisse largement
+// le temps de LIRE sur la TV qui a lancé quel pouvoir.
+function checkPrepDone(room) {
+  if (!room || room.phase !== 'prep') return;
+  const active = [...room.players.values()].filter((p) => p.connected && !p.isMJ && !p.waiting);
+  if (!active.length || !active.every((p) => room.ready.has(p.id))) return;
+  if (room.prepClosing) return;                       // déjà en train de se fermer → pas de double timer
+  room.prepClosing = true;
+  clearTimeout(room.cdTimer);
+  const grace = FAST ? 100 : 900;                     // le dernier tap a le temps de s'afficher avant la bascule
+  room.prepEndsAt = Date.now() + grace;
+  const info = { endsAt: room.prepEndsAt, serverNow: Date.now() };
+  io.to(room.code).emit('prep:done', info);
+  io.to(room.hostId).emit('prep:done', info);
+  room.cdTimer = setTimeout(() => startCountdown(room), grace);
+}
 
 // DÉCOMPTE ~3 s AVANT la musique (Blind Test multi, APRÈS la fenêtre pouvoirs). Deux buts : (1) laisser l'hôte
 // PRÉCHARGER l'extrait (URL envoyée dans 'preload' → mis en cache navigateur avant lecture, plus de son qui met
@@ -634,7 +814,9 @@ function startCountdown(room) {
   room.phase = 'countdown';
   clearTimeout(room.cdTimer);
   const seconds = FAST ? 1 : 3;
-  io.to(room.hostId).emit('round:countdown', { seconds, index: room.roundIndex, total: room.totalRounds, preload: room.current?.preview || '' });
+  // `mode` : ce chemin n'est jamais un quiz, mais l'envoyer PURGE le round.mode résiduel ('quiz' de la partie
+  // précédente) → plus d'instru parasite pendant le décompte d'un Blind Test joué après un Quiz dans la même série.
+  io.to(room.hostId).emit('round:countdown', { seconds, index: room.roundIndex, total: room.totalRounds, preload: room.current?.preview || '', mode: room.settings.mode });
   io.to(room.code).emit('round:countdown', { seconds });
   room.cdTimer = setTimeout(() => startRound(room), seconds * 1000);
 }
@@ -645,6 +827,7 @@ function startRound(room) {
   room.suspense = suspenseActive(room); // manche de fin serrée → on masquera le score en direct + à la révélation
   room.current = room.playlist[room.roundIndex];
   room.answers = new Map();
+  room.tries = new Map(); // nb de tentatives par joueur cette manche (plafond anti-brute-force du ré-essai)
   room.buzz = { winnerId: null, winnerName: null, open: true, lockedOut: new Set(), endsAt: 0 };
   room.roundRemainingMs = null; room.hardRemainingMs = null; // invariant : pas de temps restant/plafond périmé au démarrage d'une manche (buzzer)
   clearTimeout(room.buzzTimer);
@@ -690,7 +873,7 @@ function startRound(room) {
 
 // Remplit la jauge de pouvoir de chaque joueur en fin de manche selon la règle choisie
 function fillCharges(room) {
-  if (room.settings.mode !== 'multi' || room.settings.mj) return; // jauge de charges seulement en Blind Test auto (pas Buzzer/Quiz/MJ)
+  if (room.settings.mode !== 'multi' || room.settings.mj || room.settings.rebalance === 'none') return; // jauge seulement en Blind Test auto, et jamais en mode SANS POUVOIRS
   const rule = room.settings.rebalance || 'comeback';
   const sorted = [...room.players.values()].filter((p) => !p.isMJ && !p.waiting).sort((a, b) => b.score - a.score);
   const N = sorted.length;
@@ -722,7 +905,13 @@ function suspenseActive(room) {
   if (act.length < 2) return false;
   const gap = act[0].score - act[1].score;
   const roundsLeft = room.totalRounds - room.roundIndex; // manches restantes, celle-ci incluse
-  return gap <= roundsLeft * 38000;                      // rattrapable → suspense ; sinon runaway → on montre
+  // Le rattrapage max par manche DÉPEND DU MODE : le Quiz plafonne à 6 000 × 2.5 = 15 000, très en dessous
+  // du Blind Test → avec 22 800 on masquait le classement alors que le leader était mathématiquement
+  // intouchable (exactement la frustration « carapace bleue » que cette règle veut éviter).
+  // ⚠️ Le BUZZER reste sur 22 800 volontairement : son vrai plafond (base × mult + 3 000) monterait à 39 000
+  // en Puriste, ce qui ÉLARGIRAIT le masquage. 22 800 sous-estime → on montre plutôt qu'on ne masque = sens sûr.
+  const step = room.settings.mode === 'quiz' ? 15000 : 22800;
+  return gap <= roundsLeft * step;                       // rattrapable → suspense ; sinon runaway → on montre
 }
 
 function endRound(room) {
@@ -736,7 +925,7 @@ function endRound(room) {
   const half = room.roundIndex < room.totalRounds / 2 ? 'firstHalf' : 'secondHalf'; // début vs fin de partie (feu de paille / diesel)
   for (const p of room.players.values()) {
     if (p.waiting) continue; // arrivé en pleine partie : il regarde, il n'entre pas dans les scores
-    let points, titleHit = false, artistHit = false;
+    let points, titleHit = false, artistHit = false, why = null; // `why` = sources de points HORS réponse (affichées au reveal)
     if (room.settings.mj) {
       // en mode MJ, les points sont donnés à la voix et déjà appliqués au score en direct
       points = room.mjRoundPoints?.get(p.id) || 0;
@@ -745,14 +934,19 @@ function endRound(room) {
       points = a ? a.points : 0;
       titleHit = a?.titleHit || false; artistHit = a?.artistHit || false;
       const vet = p.veteranUntil != null && room.roundIndex <= p.veteranUntil; // vétéran increvable actif
-      if (room.muted?.has(p.id)) points = 0;                       // sabotage : muselé cette manche
-      if (p.safety && points < p.safety) points = p.safety;        // filet : plancher garanti (auditeurs)
-      if (vet && points < (p.veteranFloor || 4000)) points = p.veteranFloor || 4000; // gratte garanti du vétéran
-      if (p.sustainUntil != null && room.roundIndex <= p.sustainUntil) points += (p.sustainAmount || 0); // revenu régulier (sustain)
-      if (p.draftFrac) { let om = 0; for (const [pid, a] of room.answers) { if (pid !== p.id && a.points > om) om = a.points; } points += Math.round(p.draftFrac * om); } // draft : part du meilleur score adverse
-      if (p.armed?.type === 'wager') points -= (p.armed.penalty || 15000); // quitte ou double raté
+      // ⚠️ D'OÙ VIENNENT LES POINTS (2026-07-26) : « un joueur gagne des points alors qu'il n'a pas trouvé et
+      // personne ne comprend pourquoi » → le jeu devient confus. On TRACE chaque source hors-réponse pour
+      // l'afficher à la révélation. (Le pouvoir de la manche est déjà tracé par `roundPowers`.)
+      why = [];
+      if (room.muted?.has(p.id)) { if (points > 0) why.push({ t: 'muted', amount: -points }); points = 0; } // sabotage : muselé
+      if (p.safety && points < p.safety) { why.push({ t: 'safety', amount: p.safety - points }); points = p.safety; } // plancher garanti
+      if (vet && points < (p.veteranFloor || 2400)) { why.push({ t: 'veteran', amount: (p.veteranFloor || 2400) - points }); points = p.veteranFloor || 2400; }
+      if (p.sustainUntil != null && room.roundIndex <= p.sustainUntil) { const v = p.sustainAmount || 0; if (v) why.push({ t: 'sustain', amount: v }); points += v; } // revenu régulier
+      if (p.draftFrac) { let om = 0; for (const [pid, a] of room.answers) { if (pid !== p.id && a.points > om) om = a.points; } const v = Math.round(p.draftFrac * om); if (v) why.push({ t: 'draft', amount: v }); points += v; }
+      if (p.armed?.type === 'wager') { const v = p.armed.penalty || 9000; why.push({ t: 'wager', amount: -v }); points -= v; } // quitte ou double raté
+      if (p.noFaultSaved) { why.push({ t: 'nofault', amount: Math.round(p.noFaultSaved * (room.mult || 1)) }); p.noFaultSaved = 0; } // faute pardonnée : rendre l'effet VISIBLE
       p.score = Math.max(0, p.score + points);
-      p.armed = null; p.safety = false; p.shield = false; p.nofault = false; p.selfBonus = 0; p.draftFrac = 0; // les pouvoirs de manche expirent
+      p.armed = null; p.safety = false; p.shield = false; p.nofault = false; p.noFaultSaved = 0; p.selfBonus = 0; p.draftFrac = 0; // les pouvoirs de manche expirent
       p.streak = points > 0 ? (p.streak || 0) + 1 : 0;             // série de bonnes manches (momentum)
     }
     // stats de partie (trophées de fin) — le MJ n'est pas noté
@@ -774,7 +968,7 @@ function endRound(room) {
       else answerText = ansEntry?.text || null;
     }
     const usedPower = room.roundPowers ? room.roundPowers.get(p.id) : null;
-    results.push({ id: p.id, name: p.name, avatar: p.avatar, isMJ: !!p.isMJ, points, titleHit, artistHit, answer: answerText, tried: !!ansEntry, power: usedPower || null, hitBy: (room.powerHits && room.powerHits.get(p.id)) || null });
+    results.push({ id: p.id, name: p.name, avatar: p.avatar, isMJ: !!p.isMJ, points, titleHit, artistHit, answer: answerText, tried: !!ansEntry, power: usedPower || null, hitBy: (room.powerHits && room.powerHits.get(p.id)) || null, why: (why && why.length) ? why : null });
   }
   if (roundScorers.length === 1) { const w = room.players.get(roundScorers[0]); if (w?.stat) w.stat.solo++; } // seul à trouver cette manche
   // braqueur : crédite le musellement (sabotage) qui a RÉELLEMENT refusé des points à un adversaire cette manche
@@ -833,7 +1027,7 @@ function pickBattleDuelists(room, force = false) {
   if (room.roundIndex >= total - 1) return null;                                       // jamais à la dernière manche
   // 1re occasion atteinte AVEC ≥3 joueurs → on lance (sinon ça glisse jusqu'à total-2).
   const gapTop = act[0].score - act[1].score;
-  if (gapTop <= 45000) return { a: act[0].id, b: act[1].id, flavor: 'sommet' };        // haut du tableau serré = duel au sommet
+  if (gapTop <= 27000) return { a: act[0].id, b: act[1].id, flavor: 'sommet' };        // haut du tableau serré = duel au sommet
   return { a: act[act.length - 2].id, b: act[act.length - 1].id, flavor: 'rattrapage' }; // sinon : les 2 derniers (chance de remontée)
 }
 
@@ -843,7 +1037,12 @@ function startBattle(room, aId, bId, flavor) {
   if (!A || !B) { advanceRound(room); return; }
   room.battlesThisGame = (room.battlesThisGame || 0) + 1;
   room.lastBattleRound = room.roundIndex;
-  room.battle = { a: aId, b: bId, flavor, bets: new Map(), winnerId: null, points: 0, track: null, endsAt: 0 };
+  room.battle = { a: aId, b: bId, flavor, bets: new Map(), found: new Map(), winnerId: null, points: 0, track: null, endsAt: 0 }; // `found` = volets titre/artiste trouvés par duelliste (départage)
+  // Le son du clash est choisi DÈS L'INTRO (avant : au tout dernier moment, dans startBattlePlay) → l'extrait a
+  // 14,5 s (intro + paris) pour être rapatrié côté serveur ET préchargé côté TV. Sans ça le clash démarrait
+  // sur un blanc : les 22 s d'écoute étaient rognées par la latence, et le 1er qui trouve se joue à la seconde.
+  room.battle.track = pickBattleTrack(room);
+  if (room.battle.track) { cacheTrack(room.battle.track); io.to(room.hostId).emit('game:preload', { urls: [room.battle.track.preview] }); }
   room.phase = 'battle-intro';
   const pinfo = (p) => ({ id: p.id, name: p.name, avatar: p.avatar, score: p.score });
   io.to(room.code).emit('battle:intro', { a: pinfo(A), b: pinfo(B), flavor, betBonus: BATTLE_BET_BONUS, win: BATTLE_WIN });
@@ -858,10 +1057,30 @@ function startBattleBets(room) {
   room.cdTimer = setTimeout(() => startBattlePlay(room), BATTLE_BET_MS);
 }
 
+// Choisit le son du CLASH (appelé à l'intro, cf. startBattle).
+// ANTI-RÉPÉTITION (2026-07-15) : ni DÉJÀ joué (série du salon), ni ENCORE À VENIR dans la playlist de la partie —
+// sinon le même morceau repasse à 2 min d'intervalle DANS UN BLIND-TEST. Avant : le 5e arg (played) de pickPlaylist
+// était omis ET le son n'était jamais ajouté à playedTracks.
+// + 2026-07-25 : et surtout pas un ARTISTE déjà présent dans la partie (règle « un artiste = une manche »).
+function pickBattleTrack(room) {
+  const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
+  if (!room.playedTracks) room.playedTracks = new Set();
+  const avoid = new Set(room.playedTracks);                                   // COPIE : la branche de recyclage de
+  for (let i = room.roundIndex + 1; i < (room.playlist || []).length; i++) {  // pickPlaylist vide `played` → ne jamais
+    const q = room.playlist[i]; if (q) avoid.add(dkey(q));                    // lui passer la vraie mémoire du salon.
+  }
+  const avoidA = new Set((room.playlist || []).filter(Boolean).map(artistKey)); // TOUS les artistes de la partie
+  // 5 candidats puis tirage au sort : à n=1 sampleBalancedByEra est déterministe sur la décennie (au 1er tirage le
+  // déficit vaut W[k] → le poids max gagne toujours) → le clash se figerait sur une seule époque.
+  const cands = pickPlaylist(5, diff.bands, room.settings.era, room.settings.themes, avoid, avoidA, !!room.spotify) || [];
+  const t = cands[Math.floor(Math.random() * cands.length)];
+  if (t) room.playedTracks.add(dkey(t)); // le son du clash est CONSOMMÉ comme celui d'une manche normale
+  return t || null;
+}
 function startBattlePlay(room) {
   if (room.phase !== 'battle-bet' || !room.battle) return;
   const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
-  const t = (pickPlaylist(1, diff.bands, room.settings.era, room.settings.themes) || [])[0];
+  const t = room.battle.track || pickBattleTrack(room); // normalement choisi dès l'intro ; repli si le tirage avait échoué
   if (!t) { endBattle(room, null); return; }
   cacheTrack(t);
   room.battle.track = t;
@@ -870,18 +1089,41 @@ function startBattlePlay(room) {
   const maxOffset = Math.max(0, PREVIEW_MS - BATTLE_PLAY_MS - 1000);
   const startAt = diff.offset ? Math.floor(Math.random() * Math.min(14000, maxOffset)) : 0;
   room.battle.endsAt = Date.now() + BATTLE_PLAY_MS;
-  const base = { a: room.battle.a, b: room.battle.b, endsAt: room.battle.endsAt, durationMs: BATTLE_PLAY_MS };
+  const base = { a: room.battle.a, b: room.battle.b, endsAt: room.battle.endsAt, durationMs: BATTLE_PLAY_MS, easeMs: BATTLE_EASE_MS };
+  // ⚠️ L'HÔTE EST DANS LA ROOM `code` : sans `.except`, il recevait les DEUX 'battle:go' — d'abord le sien
+  // (avec preview/sp), puis la version publique SANS son. Son handler rejoue alors playRound() sans piste :
+  // en mode Spotify, ce 2e appel repassait sur la branche Deezer et COUPAIT la musique du clash.
   io.to(room.hostId).emit('battle:go', { ...base, preview: t.preview, startAt, sp: { title: t.title, artist: t.artist } });
-  io.to(room.code).emit('battle:go', base);
+  io.to(room.code).except(room.hostId).emit('battle:go', base);
   clearTimeout(room.timer);
-  room.timer = setTimeout(() => endBattle(room, null), BATTLE_PLAY_MS);
+  // Bascule du palier : sur la fin, l'ARTISTE SEUL suffit. On l'ANNONCE (sinon la règle change en douce).
+  room.battle.easeAt = room.battle.endsAt - BATTLE_EASE_MS;
+  clearTimeout(room.easeTimer);
+  room.easeTimer = setTimeout(() => {
+    if (room.phase !== 'battle-play' || !room.battle) return;
+    room.battle.eased = true;
+    io.to(room.code).emit('battle:ease', { need: 'artist', endsAt: room.battle.endsAt });
+  }, Math.max(0, BATTLE_PLAY_MS - BATTLE_EASE_MS));
+  // Temps écoulé sans double-hit → DÉPARTAGE aux volets trouvés (titre/artiste), nul si égalité. Sans ça,
+  // exiger titre + artiste transformerait la plupart des clashs en match nul (2026-07-26).
+  room.timer = setTimeout(() => endBattle(room, battleLeader(room)), BATTLE_PLAY_MS);
+}
+// Qui mène aux VOLETS trouvés ? (départage de fin de clash) — null si égalité (vrai nul).
+function battleLeader(room) {
+  const b = room.battle; if (!b || !b.found) return null;
+  // l'ARTISTE pèse plus que le titre : c'est lui qu'on demande en fin de clash (cohérence du palier)
+  const n = (id) => { const f = b.found.get(id); return (f?.artist ? 2 : 0) + (f?.title ? 1 : 0); };
+  const na = n(b.a), nb = n(b.b);
+  return na === nb ? null : (na > nb ? b.a : b.b);
 }
 
 function endBattle(room, winnerId) {
   if (!room.battle || !room.phase?.startsWith('battle')) return;
-  clearTimeout(room.timer); clearTimeout(room.cdTimer);
+  clearTimeout(room.timer); clearTimeout(room.cdTimer); clearTimeout(room.easeTimer);
   const b = room.battle;
-  b.winnerId = winnerId; b.points = winnerId ? BATTLE_WIN : 0;
+  // points = ce qui est RÉELLEMENT crédité. En cas de nul les 2 duellistes touchent BATTLE_DRAW : mettre 0
+  // ici faisait afficher « ±0 » au duelliste alors que son score montait bel et bien de 3 600.
+  b.winnerId = winnerId; b.points = winnerId ? BATTLE_WIN : BATTLE_DRAW;
   const betResults = [];
   if (winnerId) {
     const w = room.players.get(winnerId);
@@ -893,7 +1135,11 @@ function endBattle(room, winnerId) {
       betResults.push({ id: sid, won });
     }
   } else {
-    for (const id of [b.a, b.b]) { const p = room.players.get(id); if (p) p.score += BATTLE_DRAW; } // nul → consolation, paris annulés
+    for (const id of [b.a, b.b]) { const p = room.players.get(id); if (p) p.score += BATTLE_DRAW; } // nul → consolation
+    // Paris ANNULÉS (pas perdus) : on renvoie quand même les parieurs, sinon le client ne sait pas que le
+    // pari a existé et affiche « Tu n'avais pas parié. » à quelqu'un qui avait parié. (Se fier au betPick
+    // local ne marcherait pas : battle:intro le remet à null → cassé à la reconnexion sur battle-reveal.)
+    for (const [sid, pick] of b.bets) betResults.push({ id: sid, won: false, cancelled: true, pick });
   }
   room.phase = 'battle-reveal';
   const nm = (id) => room.players.get(id)?.name || '';
@@ -952,8 +1198,8 @@ function rushRankedPool(room) { // pool trié GRAND PUBLIC → puriste (mêmes B
   const { band, eraNorm } = computeBands();
   const ord = { top: 0, high: 1, mid: 2, deep: 3 };
   const rank = (arr) => arr.slice().sort((a, b) => ((ord[band.get(a)] ?? 2) - (ord[band.get(b)] ?? 2)) || ((eraNorm.get(b) || 0) - (eraNorm.get(a) || 0)));
-  let s = rank(selectPool(room.settings.era, room.settings.themes));
-  if (s.length < 20) s = rank(livePool()); // filtre trop restrictif → tout le pool jouable
+  let s = rank(selectPool(room.settings.era, room.settings.themes, !!room.spotify));
+  if (s.length < 20) s = rank(livePool(!!room.spotify)); // filtre trop restrictif → tout le pool jouable
   return s;
 }
 function rushPickTrack(room, n) { // un morceau de la tranche de difficulté du moment (fenêtre glissante sur le pool trié)
@@ -970,11 +1216,33 @@ function rushPickTrack(room, n) { // un morceau de la tranche de difficulté du 
             : n <= 8 ? Math.max(room.rushTopEnd || 0, room.rushHighEnd || 0)
             : M;
   if (cap && hi > cap) { hi = Math.min(hi, cap); lo = Math.min(lo, Math.max(0, hi - 1)); }
-  const fresh = []; for (let i = lo; i < hi; i++) if (!room.rushUsed.has(ranked[i].id)) fresh.push(ranked[i]);
-  const cand = fresh.length ? fresh : ranked.slice(lo, hi); // fenêtre épuisée (run très long) → on ré-autorise
+  // Un artiste ne repasse PAS dans le même run (même règle que les autres modes, 2026-07-25) : on filtre
+  // d'abord sur artiste NEUF, puis on retombe sur « titre neuf », puis sur la fenêtre brute (run très long).
+  if (!room.rushArtists) room.rushArtists = new Set();
+  if (!room.playedTracks) room.playedTracks = new Set();
+  // ⚠️ Survivor ne participait PAS à la mémoire du salon (2026-07-26) : il ne LISAIT pas `playedTracks` et
+  // n'y ÉCRIVAIT rien. Donc il rejouait des sons déjà entendus en Blind Test / Buzzer, et les siens revenaient
+  // ensuite dans les autres modes. La mémoire est COMMUNE À TOUS LES MODES : un son entendu dans ce salon ne
+  // revient pas, quel que soit le mode où il est tombé. Cascade de replis pour ne jamais bloquer un run long.
+  const fresh = [], freshA = [], freshAll = [];
+  for (let i = lo; i < hi; i++) {
+    const t = ranked[i]; if (room.rushUsed.has(t.id)) continue;
+    fresh.push(t);
+    if (room.playedTracks.has(dkey(t))) continue;                       // déjà entendu dans ce salon (tous modes)
+    freshAll.push(t); if (!room.rushArtists.has(artistKey(t))) freshA.push(t);
+  }
+  const cand = freshA.length ? freshA : freshAll.length ? freshAll : fresh.length ? fresh : ranked.slice(lo, hi);
   const track = cand[Math.floor(Math.random() * cand.length)] || ranked[center];
-  if (track) room.rushUsed.add(track.id);
+  if (track) { room.rushUsed.add(track.id); room.rushArtists.add(artistKey(track)); room.playedTracks.add(dkey(track)); }
   return { track, p };
+}
+// JOURNAL DE RUN (2026-07-26) : « en Survivor on ne voit ni la réponse du joueur ni la bonne réponse ».
+// On clôt l'entrée du morceau qui vient de passer (verdict + dernière saisie) avant d'enchaîner.
+function rushCloseEntry(room, outcome, extra = {}) {
+  const e = room.rushLog && room.rushLog[room.rushLog.length - 1];
+  if (!e || e.outcome) return;
+  e.outcome = outcome;                      // 'hit' | 'partial' | 'pass' | 'timeout'
+  Object.assign(e, extra);
 }
 function rushSetTrack(room, evt = {}) {
   room.rushTrackNo = (room.rushTrackNo || 0) + 1;
@@ -983,15 +1251,23 @@ function rushSetTrack(room, evt = {}) {
   room.current = track;              // pour /api/dev/answer + le grade
   room.mult = 1 + p;                 // 1.0 (facile) → 2.0 (le + dur) : les morceaux durs rapportent plus (récompense la survie)
   room.rushTrackStartAt = Date.now();
+  if (!room.rushLog) room.rushLog = [];
+  room.rushLog.push({ no: room.rushTrackNo, title: track.title, artist: track.artist, cover: track.cover || '', answer: '', outcome: '', points: 0 });
   cacheTrack(track);                 // rapatrie l'extrait du morceau courant
   clearTimeout(room.rushTrackTimer); // auto-enchaînement si ni trouvé ni passé (jamais bloqué sur un son)
   const noAtSet = room.rushTrackNo;
-  room.rushTrackTimer = setTimeout(() => { if (room.phase === 'playing' && room.settings.mode === 'rush' && room.rushTrackNo === noAtSet) rushAdvance(room, { reason: 'timeout' }); }, RUSH_TRACK_MAX_MS);
+  room.rushTrackTimer = setTimeout(() => { if (room.phase === 'playing' && room.settings.mode === 'rush' && room.rushTrackNo === noAtSet) { rushCloseEntry(room, 'timeout'); rushAdvance(room, { reason: 'timeout' }); } }, RUSH_TRACK_MAX_MS);
   const common = { mode: 'rush', trackNo: room.rushTrackNo, endsAt: room.rushEndsAt, rushMax: room.rushMaxMs || RUSH_MAX_MS, passMs: room.rushPassMs, bonusMs: room.rushBonusMs, difficulty: rushLabel(p), diffP: Math.round(p * 100) / 100, scores: rushBoard(room), rushPlayerId: room.rushPlayerId, rushPlayerName: room.rushPlayerId ? (room.players.get(room.rushPlayerId)?.name || '') : '', event: evt };
   io.to(room.hostId).emit('rush:host', { ...common, preview: track.preview, startAt: 0, sp: { title: track.title, artist: track.artist } }); // l'hôte joue le son
   io.to(room.code).emit('rush:state', common); // les joueurs : chrono + score + difficulté du moment, pas d'audio
 }
-function rushAdvance(room, evt) { room.rushResolving = false; rushSetTrack(room, evt); }
+function rushAdvance(room, evt) {
+  // On joint au passage AU MORCEAU SUIVANT ce qu'était le PRÉCÉDENT + ce que le joueur avait tapé → la TV et
+  // le téléphone peuvent l'annoncer (« C'était … »), au lieu d'enchaîner sans jamais donner la réponse.
+  const e = room.rushLog && room.rushLog[room.rushLog.length - 1];
+  if (e) evt = { ...evt, prev: { title: e.title, artist: e.artist, cover: e.cover, answer: e.answer || '', outcome: e.outcome || '' } };
+  room.rushResolving = false; rushSetTrack(room, evt);
+}
 function rushApplyDelta(room, deltaMs) {
   room.rushEndsAt = Math.min(Date.now() + (room.rushMaxMs || RUSH_MAX_MS), room.rushEndsAt + deltaMs);
   clearTimeout(room.rushTimer);
@@ -1006,7 +1282,7 @@ function startRush(room) {
   room.rushPlayerId = room.settings.rushPlayerId || ([...room.players.values()].find((p) => p.connected && !p.waiting) || [...room.players.values()][0])?.id || null;
   const startMs = FAST ? RUSH_START_MS : (room.settings.rushStartSec || 60) * 1000; // chrono de départ choisi
   room.rushMaxMs = FAST ? RUSH_MAX_MS : Math.max(RUSH_MAX_MS, startMs + 30000);
-  room.rushRanked = rushRankedPool(room); room.rushUsed = new Set(); room.rushTrackNo = 0; // difficulté PROGRESSIVE
+  room.rushRanked = rushRankedPool(room); room.rushUsed = new Set(); room.rushArtists = new Set(); room.rushTrackNo = 0; room.rushLog = []; // difficulté PROGRESSIVE (+ un artiste = un seul passage) + journal du run
   { const { band } = computeBands(); const R = room.rushRanked; // bornes de bandes → garantie grand public au démarrage
     let te = 0; while (te < R.length && band.get(R[te]) === 'top') te++;
     let he = te; while (he < R.length && band.get(R[he]) === 'high') he++;
@@ -1030,7 +1306,10 @@ function endRush(room) {
     const placed = addScore({ name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0, ...cfg });
     return { id: p.id, name: p.name, avatar: p.avatar, score: p.rushScore || 0, tracks: p.rushTracks || 0, rank: placed.rank, configTotal: placed.configTotal };
   }).sort((a, b) => b.score - a.score);
-  const payload = { results, top: getTop(10, cfg), config: cfg }; // top du MÊME créneau → comparable
+  rushCloseEntry(room, 'timeout'); // le morceau en cours quand le chrono tombe
+  // RÉCAP : chaque morceau du run, ce que le joueur a tapé, et la vérité.
+  const log = (room.rushLog || []).filter((e) => e.outcome);
+  const payload = { results, top: getTop(10, cfg), config: cfg, log }; // top du MÊME créneau → comparable
   room.lastRushEnd = payload;
   io.to(room.code).emit('rush:end', payload);
 }
@@ -1171,6 +1450,7 @@ io.on('connection', (socket) => {
   socket.on('host:start', (args = {}, cb) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
+    if (typeof args.spotify === 'boolean') room.spotify = args.spotify; // source déclarée au lancement (filet si host:source s'est perdu)
     startGame(room, args, cb);
   });
   // Démarre/relance une partie. Utilisé par host:start ET par le vote de rejeu unanime (player:replayVote).
@@ -1185,10 +1465,13 @@ io.on('connection', (socket) => {
     if (room.players.size < 1) return cb?.({ error: 'Il faut au moins un joueur.' });
     if (useMj && room.players.size < 2) return cb?.({ error: 'Le mode Maître du jeu demande au moins 2 joueurs (1 anime, 1 joue).' });
     room.settings = {
-      difficulty: DIFFICULTY[difficulty] ? difficulty : 'normal',
+      // `random` (2026-07-26) : le jeu tire la difficulte au sort AU LANCEMENT, une fois pour la partie
+      // (pas manche par manche : le barème et la fenêtre de réponse doivent rester stables).
+      difficulty: difficulty === 'random' ? ['facile', 'normal', 'puriste'][Math.floor(Math.random() * 3)]
+                : DIFFICULTY[difficulty] ? difficulty : 'normal',
       mode: wantMode,
       mj: useMj,
-      rebalance: ['comeback', 'snowball', 'off'].includes(rebalance) ? rebalance : 'comeback',
+      rebalance: ['comeback', 'snowball', 'off', 'none'].includes(rebalance) ? rebalance : 'comeback', // 'none' = SANS POUVOIRS (2026-07-26)
       era: eraList(era).length ? eraList(era) : 'all',     // ÉPOQUE(S) — multi-décennie (array) ou 'all' ; filtre le pool musical
       themes: themeList(themes !== undefined ? themes : theme), // THÈMES/STYLES (multi, union) — array ; rétro-compat string `theme`
       rushStartSec: Math.min(180, Math.max(30, (rushStartSec | 0) || 60)), // Survivor : SEUL réglage = chrono de départ (difficulté progressive)
@@ -1211,7 +1494,7 @@ io.on('connection', (socket) => {
     } else {
       const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
       if (!room.playedTracks) room.playedTracks = new Set(); // salons créés avant l'ajout du champ
-      room.playlist = pickPlaylist(rounds || 8, diff.bands, room.settings.era, room.settings.themes, room.playedTracks); // + anti-répétition salon (série)
+      room.playlist = pickPlaylist(rounds || 8, diff.bands, room.settings.era, room.settings.themes, room.playedTracks, null, !!room.spotify); // + anti-répétition salon (série)
       cacheTracks(room.playlist); // rapatrie les extraits de la partie en fond (le décompte couvre la manche 1)
     }
     room.totalRounds = room.playlist.length;
@@ -1220,8 +1503,46 @@ io.on('connection', (socket) => {
     room.prevRanks = null;
     room.battle = null; room.battlesThisGame = 0; room.lastBattleRound = -99; // clash : reset par partie
     cb?.({ ok: true });
+    // ── PRÉCHARGEMENT DE TOUTE LA PARTIE AVANT LA 1re MANCHE (2026-07-25) ──────────────────────────
+    // La musique démarrait avec un temps de latence variable (fetch + décodage au moment du 'playing').
+    // Conséquence directe : les pouvoirs À FENÊTRE sont mangés par ce délai — le brouillage de Vald (NQNT,
+    // 4,5 s) est compté depuis le début de manche SERVEUR, donc si le son part 2 s en retard il ne vaut
+    // plus que 2,5 s. On envoie donc TOUTES les URL de la partie à la TV, qui les rapatrie en blob AVANT
+    // que quoi que ce soit ne démarre, et on n'ouvre la manche 1 qu'à son feu vert (plafond 25 s).
+    room.startGen = (room.startGen || 0) + 1;
+    const gen = room.startGen;
+    if (isQuiz) return beginRound(room); // quiz = aucun audio → rien à précharger
+    io.to(room.hostId).emit('game:preload', preloadPayload(room));
+    clearTimeout(room.preTimer);
+    room.preTimer = setTimeout(() => launchFirstRound(room, gen), 25000); // filet : TV muette / réseau KO → on lance quand même
+  }
+  // Feu vert de la TV (ou plafond de 25 s) → la partie commence VRAIMENT. Idempotent par `gen`.
+  function launchFirstRound(room, gen) {
+    if (!room || room.startGen !== gen || room.phase !== 'lobby') return; // restart / salon fermé entre-temps
+    clearTimeout(room.preTimer);
+    room.startGen = gen + 1; // neutralise un 2e appel (ack + timeout)
     beginRound(room);
   }
+  // La TV a fini de précharger. `missing` = index des titres SANS extrait Deezer que Spotify ne sait pas
+  // résoudre (elle les a testés pendant le préchargement) → on les REMPLACE avant le coup d'envoi, plutôt
+  // que de découvrir une manche muette en pleine soirée.
+  socket.on('host:preloaded', ({ missing } = {}) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || room.hostId !== socket.id) return;
+    const bad = (Array.isArray(missing) ? missing : []).map(Number).filter((i) => Number.isInteger(i) && room.playlist[i]);
+    if (bad.length) {
+      const diff = DIFFICULTY[room.settings.difficulty] || DIFFICULTY.normal;
+      const avoid = new Set([...(room.playedTracks || []), ...room.playlist.filter(Boolean).map(dkey)]);
+      const avoidA = new Set(room.playlist.filter(Boolean).map(artistKey));
+      // remplaçants pris SANS `sp` → on force de l'audio Deezer résolu : ceux-là sont jouables quoi qu'il arrive
+      const repl = pickPlaylist(bad.length, diff.bands, room.settings.era, room.settings.themes, avoid, avoidA, false) || [];
+      bad.forEach((i, n) => { if (repl[n]) room.playlist[i] = repl[n]; });
+      console.log(`[preload] ${bad.length} titre(s) introuvable(s) sur Spotify → remplacé(s) par de l'audio Deezer sûr`);
+      const urls = repl.map((t) => t && t.preview).filter(Boolean);
+      if (urls.length) io.to(room.hostId).emit('game:preload', { urls, sp: [] }); // les remplaçants arrivent en fond (le décompte de la manche 1 couvre)
+    }
+    launchFirstRound(room, room.startGen);
+  });
 
   // Réactions/taunts : le joueur balance une réaction préréglée → relayée à l'écran hôte (façon Meet).
   // `end` = jeu de réactions de fin de partie (podium) ; l'hôte mappe le texte sur le bon set.
@@ -1247,14 +1568,38 @@ io.on('connection', (socket) => {
     if (room.jam && p.id !== room.jam.by && Date.now() < (room.roundStartAt || (room.roundEndsAt - room.windowMs)) + room.jam.ms) {
       return cb?.({ error: 'Brouillé — patiente…', jammed: true });
     }
-    if (p.stat) p.stat.att++; // une vraie tentative (trophée « mitraillette »)
+    // RÉ-ESSAI (2026-07-15) : on peut réécrire TANT QU'ON N'A PAS MARQUÉ — le T9 / l'autocorrection du
+    // téléphone massacrent les blazes (« Nekfeu » → « Nef feu ») et on ne veut pas être puni par son clavier.
+    // Le serveur acceptait DÉJÀ les tentatives multiples (max-keeping plus bas) ; c'est le client qui verrouillait.
+    // GARDE-FOUS obligatoires : sans eux la stratégie dominante devient « spammer 10 rappeurs à la seconde 1 »
+    // (le speedMult ne punit PAS le spam précoce : une tentative ratée coûte 0 et le spam touche le ×2.5).
+    if (!room.tries) room.tries = new Map();
+    const nowTry = Date.now();
+    if (p._lastTry && nowTry - p._lastTry < TRY_COOLDOWN_MS) return cb?.({ error: 'Doucement…' });
+    p._lastTry = nowTry;
+    const nTries = (room.tries.get(p.id) || 0) + 1;
+    if (nTries > MAX_TRIES) return cb?.({ error: 'Trop d’essais sur cette manche.' });
+    room.tries.set(p.id, nTries);
+    // « att » = 1 par MANCHE, pas par tentative : sinon « La Mitraillette » (le plus de tentatives) devient
+    // systématique et « Le Sniper » (ratio trouvailles/tentatives ≥ 85 %) devient inatteignable dès qu'on
+    // corrige un T9. room.answers porte une entrée dès la 1re tentative, même à 0 point → bon marqueur.
+    if (p.stat) p.stat.subs++;                          // chaque soumission (→ « La Mitraillette »)
+    if (p.stat && !room.answers.has(p.id)) p.stat.att++; // 1 par manche (→ ratio du « Sniper »)
     const g = gradeAnswer(text, room.current, !!p.nofault); // nofault : fautes tolérées
+    // Les pouvoirs « orthographe » (Solaar/Alpha Wann) sont INVISIBLES : on active, et rien ne se voit —
+    // ils ne paient que sur les manches où l'on a effectivement mal écrit. On mesure donc ce qu'ils ont
+    // RÉELLEMENT rattrapé (écart avec la notation stricte) pour l'afficher à la révélation (2026-07-26).
+    if (p.nofault) {
+      const strict = gradeAnswer(text, room.current, false);
+      const saved = (g.base || 0) - (strict.base || 0);
+      if (saved > 0) p.noFaultSaved = Math.max(p.noFaultSaved || 0, saved);
+    }
     const sm = p.armed?.type === 'freeze' ? 2.0 : speedMult(room.roundEndsAt - Date.now(), room.windowMs); // freeze : vitesse max
     let points = g.base ? Math.round(g.base * sm * room.mult) : 0;
     if (points > 0 && !room.firstScorerId) { room.firstScorerId = p.id; if (p.stat) p.stat.firsts++; } // 1er à trouver cette manche
     if (points > 0 && p.armed) {
       if (p.armed.type === 'double' || p.armed.type === 'wager') points = Math.round(points * (p.armed.mult || 2));
-      else if (p.armed.type === 'bonus') points += (p.armed.amount || 10000);
+      else if (p.armed.type === 'bonus') points += (p.armed.amount || 6000);
       else if (p.armed.type === 'firstblood') { points += (p.armed.base || 0); if (room.firstScorerId === p.id) points += (p.armed.first || 0); }
       if (p.armed.refuel) p.charges = Math.min(3, (p.charges || 0) + 1); // surrégime : charge remboursée si tu marques
       p.armed = null;
@@ -1277,7 +1622,11 @@ io.on('connection', (socket) => {
     const p = room.players.get(socket.data.playerId);
     if (!p || p.waiting) return cb?.({ error: 'Joueur inconnu.' });
     const g = gradeAnswer(text, room.current);
-    if (!(g.titleHit || g.artistHit)) return cb?.({ ok: true, correct: false }); // titre OU artiste suffit pour avancer
+    if (!(g.titleHit || g.artistHit)) { // on MÉMORISE quand même la tentative → visible au récap de fin de run
+      const e = room.rushLog && room.rushLog[room.rushLog.length - 1];
+      if (e && !e.outcome && String(text || '').trim()) e.answer = String(text).slice(0, 60);
+      return cb?.({ ok: true, correct: false }); // titre OU artiste suffit pour avancer
+    }
     room.rushResolving = true; // verrou anti double-résolution
     const full = g.titleHit && g.artistHit; // les DEUX = plus de temps + plus de points (g.base porte déjà la prime de précision)
     const addMs = full ? room.rushBonusMs : room.rushPartialMs; // partiel = petit gain de temps, complet = gros gain
@@ -1286,6 +1635,7 @@ io.on('connection', (socket) => {
     const pts = Math.round((g.base || 0) * sm * (room.mult || 1));
     p.rushScore = (p.rushScore || 0) + pts; p.rushTracks = (p.rushTracks || 0) + 1;
     cb?.({ ok: true, correct: true, points: pts, addedMs: addMs, full });
+    rushCloseEntry(room, full ? 'hit' : 'partial', { answer: String(text || '').slice(0, 60), points: pts });
     rushApplyDelta(room, addMs); // +temps (partiel ou complet)
     if (room.phase === 'playing') rushAdvance(room, { reason: 'hit', by: p.id, name: p.name, points: pts, addedMs: addMs, full });
   });
@@ -1297,6 +1647,7 @@ io.on('connection', (socket) => {
     if (!p || p.waiting) return;
     room.rushResolving = true;
     cb?.({ ok: true, removedMs: room.rushPassMs });
+    rushCloseEntry(room, 'pass');
     rushApplyDelta(room, -room.rushPassMs); // -temps (peut finir le run)
     if (room.phase === 'playing') rushAdvance(room, { reason: 'pass', by: p.id, name: p.name, removedMs: room.rushPassMs });
   });
@@ -1312,7 +1663,7 @@ io.on('connection', (socket) => {
     if (p.stat) p.stat.att++;
     const idx = Number(choice);
     const correct = idx === room.quiz.answer;
-    const points = correct ? Math.round(10000 * speedMult(room.roundEndsAt - Date.now(), room.windowMs)) : 0;
+    const points = correct ? Math.round(6000 * speedMult(room.roundEndsAt - Date.now(), room.windowMs)) : 0;
     room.answers.set(p.id, { points, choice: idx, correct });
     io.to(room.hostId).emit('player:answered', { id: p.id, name: p.name });
     cb?.({ ok: true, correct, points, answer: room.quiz.answer });
@@ -1356,11 +1707,11 @@ io.on('connection', (socket) => {
     if (p.stat) p.stat.att++;
     const g = gradeAnswer(text, room.current, !!p.nofault);
     if (g.titleHit && g.artistHit) { // BUZZER : titre ET artiste obligatoires (sinon injuste vs qqn qui met les deux)
-      let points = Math.round(g.base * room.mult) + 5000; // bonus buzzer
+      let points = Math.round(g.base * room.mult) + 3000; // bonus buzzer
       if (!room.firstScorerId) { room.firstScorerId = p.id; if (p.stat) p.stat.firsts++; } // le buzz gagnant = 1er à trouver
       if (p.armed) {
         if (p.armed.type === 'double' || p.armed.type === 'wager') points = Math.round(points * (p.armed.mult || 2));
-        else if (p.armed.type === 'bonus') points += (p.armed.amount || 10000);
+        else if (p.armed.type === 'bonus') points += (p.armed.amount || 6000);
         else if (p.armed.type === 'firstblood') { points += (p.armed.base || 0); if (room.firstScorerId === p.id) points += (p.armed.first || 0); }
         if (p.armed.refuel) p.charges = Math.min(3, (p.charges || 0) + 1);
         p.armed = null;
@@ -1441,7 +1792,7 @@ io.on('connection', (socket) => {
       // le pouvoir reste utile même sans cible (défense quand on mène) → on continue.
       if ((!leader || leader.score <= 0) && !pw.shield) return cb?.({ error: 'Personne à voler pour l\'instant.' });
       let amt = 0;
-      if (leader && leader.score > 0) { amt = Math.min(pw.amount || 12000, leader.score); leader.score -= amt; p.score += amt; if (p.stat) p.stat.denialGain += amt; recordHit(leader, amt); }
+      if (leader && leader.score > 0) { amt = Math.min(pw.amount || 7200, leader.score); leader.score -= amt; p.score += amt; if (p.stat) p.stat.denialGain += amt; recordHit(leader, amt); }
       if (pw.shield) { p.shield = true; room.muted.delete(p.id); } // devient intouchable ce tour (immunisé vol/sabotage/dîme, annule un sabotage déjà posé) → peut DÉFENDRE son rang
       detail = { stoleFrom: amt ? leader.name : null, amount: amt, shield: !!pw.shield };
     } else if (pw.type === 'sabotage') {
@@ -1453,13 +1804,13 @@ io.on('connection', (socket) => {
       // prélève une petite dîme sur CHAQUE adversaire attaquable
       const others = [...room.players.values()].filter((x) => x.id !== p.id && x.connected && !x.isMJ && !x.waiting && !protectedNow(x));
       let grabbed = 0;
-      others.forEach((t) => { const amt = Math.min(pw.amount || 2500, t.score); t.score -= amt; p.score += amt; grabbed += amt; recordHit(t, amt); });
+      others.forEach((t) => { const amt = Math.min(pw.amount || 1500, t.score); t.score -= amt; p.score += amt; grabbed += amt; recordHit(t, amt); });
       if (grabbed > 0 && p.stat) p.stat.denialGain += grabbed;
       detail = { amount: grabbed, count: others.length };
     } else if (pw.type === 'allin') {
       // vide TOUTES les charges d'un coup pour un burst immédiat
       const spent = p.charges; // ≥ 1 (garanti plus haut)
-      const gain = (pw.per || 12000) * spent;
+      const gain = (pw.per || 7200) * spent;
       p.score += gain; p.charges = 1; // le "p.charges -= 1" plus bas ramène à 0
       detail = { gain, spent };
     } else if (pw.type === 'combo') {
@@ -1470,8 +1821,8 @@ io.on('connection', (socket) => {
     } else if (pw.type === 'sustain') {
       // revenu garanti pendant plusieurs manches (echo / slowburn)
       p.sustainUntil = room.roundIndex + ((pw.rounds || 2) - 1);
-      p.sustainAmount = pw.amount || 8000;
-      detail = { amount: pw.amount || 8000, rounds: pw.rounds || 2 };
+      p.sustainAmount = pw.amount || 4800;
+      detail = { amount: pw.amount || 4800, rounds: pw.rounds || 2 };
     } else if (pw.type === 'draft') {
       // aspiration : tu gagnes une part du MEILLEUR score adverse de la manche (calculé au endRound)
       p.draftFrac = pw.frac || 0.5;
@@ -1479,30 +1830,30 @@ io.on('connection', (socket) => {
     } else if (pw.type === 'comeback') {
       const leader = topOther();
       const deficit = leader ? leader.score - p.score : 0;
-      if (deficit < 2000) return cb?.({ error: 'Tu n\'es pas assez à la traîne pour remonter.' });
-      const gain = Math.min(pw.cap || 30000, Math.round(deficit * (pw.factor || 0.5)));
+      if (deficit < 1200) return cb?.({ error: 'Tu n\'es pas assez à la traîne pour remonter.' });
+      const gain = Math.min(pw.cap || 18000, Math.round(deficit * (pw.factor || 0.5)));
       p.score += gain;
       detail = { gain };
     } else if (pw.type === 'hint') {
       detail = { hint: { title: firstLetters(room.current.title), artist: firstLetters(room.current.artist) } };
     } else if (pw.type === 'safety') {
-      p.safety = pw.floor || 7000; room.muted.delete(p.id); // le filet annule aussi un sabotage déjà posé sur toi
+      p.safety = pw.floor || 4200; room.muted.delete(p.id); // le filet annule aussi un sabotage déjà posé sur toi
     } else if (pw.type === 'veteran') {
       p.veteranUntil = room.roundIndex + ((pw.rounds || 3) - 1); // increvable cette manche + les suivantes
-      p.veteranFloor = pw.floor || 4000;
+      p.veteranFloor = pw.floor || 2400;
       detail = { rounds: pw.rounds || 3 };
     } else if (pw.type === 'momentum') {
-      const amt = Math.min(pw.cap || 1e9, (pw.base || 5000) + (p.streak || 0) * (pw.per || 5000)); // grossit avec la série, PLAFONNÉ (cap)
+      const amt = Math.min(pw.cap || 1e9, (pw.base || 3000) + (p.streak || 0) * (pw.per || 3000)); // grossit avec la série, PLAFONNÉ (cap)
       p.armed = { type: 'bonus', amount: amt };
       detail = { amount: amt, streak: p.streak || 0 };
     } else if (pw.type === 'decay') {
       const uses = p.decayUses || 0;
-      const amt = Math.round((pw.base || 15000) * Math.pow(pw.factor || 0.75, uses)); // fond à chaque usage
+      const amt = Math.round((pw.base || 9000) * Math.pow(pw.factor || 0.75, uses)); // fond à chaque usage
       p.decayUses = uses + 1;
       p.armed = { type: 'bonus', amount: amt };
       detail = { amount: amt };
     } else if (pw.type === 'firstblood') {
-      p.armed = { type: 'firstblood', base: pw.base || 0, first: pw.first || 20000 };
+      p.armed = { type: 'firstblood', base: pw.base || 0, first: pw.first || 12000 };
     } else if (pw.type === 'freeze') {
       p.armed = { type: 'freeze' }; // le temps n'aura pas d'incidence cette manche
     } else if (pw.type === 'nofault') {
@@ -1575,13 +1926,28 @@ io.on('connection', (socket) => {
     if (!isMj(room)) return cb?.({ error: 'Non autorisé.' });
     const t = room.players.get(playerId);
     if (!t || t.isMJ) return cb?.({ error: 'Joueur inconnu.' });
-    const amt = Math.max(100, Math.min(30000, Math.round(points || 10000)));
+    const amt = Math.max(60, Math.min(18000, Math.round(points || 6000)));
     t.score = Math.max(0, t.score + amt);
     // mémorise le gain de la manche pour l'afficher à la révélation
     if (room.mjRoundPoints) room.mjRoundPoints.set(t.id, (room.mjRoundPoints.get(t.id) || 0) + amt);
     io.to(room.code).emit('scores:update', { scores: publicPlayers(room) });
     io.to(room.hostId).emit('power:used', { name: 'Maître du jeu', power: `+${amt} à ${t.name}` });
     cb?.({ ok: true });
+  });
+
+  // La TV déclare SA SOURCE AUDIO. Spotify est le modèle par défaut : quand son lecteur est prêt, le serveur
+  // pioche dans TOUT le catalogue curé (un morceau se joue avec titre + artiste). Quand la TV retombe sur
+  // Deezer, on restreint aux titres qui ont un extrait résolu, sinon la manche serait muette. Cf. livePool().
+  socket.on('host:source', ({ spotify } = {}, cb) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || room.hostId !== socket.id) return cb?.({ error: 'Non autorisé.' });
+    const nv = !!spotify;
+    if (room.spotify === nv) return cb?.({ ok: true, poolSize: livePool(nv).length });
+    room.spotify = nv;
+    console.log(`[source] salon ${room.code} → ${nv ? 'SPOTIFY (catalogue complet)' : 'Deezer (extraits résolus)'} · ${livePool(nv).length} morceaux`);
+    if (!nv) repairPlaylistForDeezer(room); // Spotify tombe EN PLEINE PARTIE → on rattrape les manches à venir
+    if (room.phase === 'lobby') emitLobby(room); // le compteur de morceaux du salon suit la source
+    cb?.({ ok: true, poolSize: livePool(nv).length });
   });
 
   socket.on('host:next', (_p, cb) => {
@@ -1613,9 +1979,19 @@ io.on('connection', (socket) => {
     if (!room || room.phase !== 'battle-play' || !room.battle) return cb?.({ error: 'Pas de clash.' });
     const p = room.players.get(socket.data.playerId);
     if (!p || (p.id !== room.battle.a && p.id !== room.battle.b)) return cb?.({ error: 'Tu n\'es pas dans le clash.' });
+    // ⚠️ RÈGLE DU CLASH (2026-07-26). Avant : le premier volet trouvé (titre OU artiste) emportait le duel —
+    // injuste, celui qui tapait un seul mot battait celui qui avait les DEUX. On exige donc **titre + artiste**
+    // (même exigence que le Buzzer). Pour ne pas casser le rythme, les volets partiels sont MÉMORISÉS : à la fin
+    // du temps, celui qui en a le plus l'emporte (nul si égalité) — cf. le timeout de startBattlePlay.
     const g = gradeAnswer(text, room.battle.track, false);
-    if (g.base > 0) { cb?.({ ok: true, correct: true }); endBattle(room, p.id); }
-    else cb?.({ ok: true, correct: false });
+    if (!room.battle.found) room.battle.found = new Map();
+    const prev = room.battle.found.get(p.id) || { title: false, artist: false };
+    const now = { title: prev.title || g.titleHit, artist: prev.artist || g.artistHit };
+    room.battle.found.set(p.id, now);
+    const eased = !!room.battle.eased; // fin de clash : l'artiste seul suffit
+    if ((now.title && now.artist) || (eased && now.artist)) { cb?.({ ok: true, correct: true, eased }); endBattle(room, p.id); return; }
+    // retour utile : le joueur sait CE QU'IL LUI MANQUE au lieu de croire qu'il s'est trompé
+    cb?.({ ok: true, correct: false, half: g.titleHit || g.artistHit, got: now, eased, need: eased ? 'artist' : now.title ? 'artist' : now.artist ? 'title' : '' });
   });
 
   // Dev/test : forcer un clash depuis une révélation (le lien « + clash test » côté hôte, et test-games)
@@ -1739,13 +2115,26 @@ app.get('/api/preview/:id', async (req, res) => {
   }
   res.set('Content-Length', String(buf.length)).end(buf);
 });
-function lanIp() {
+// IP à afficher/encoder dans le QR. ⚠️ Une machine a souvent PLUSIEURS cartes sur des réseaux DIFFÉRENTS qui
+// utilisent la même plage 192.168.1.x (vécu le 2026-07-25 : Ethernet sur l'ancienne box, Wi-Fi sur la nouvelle
+// → le QR pointait vers une IP que les téléphones ne pouvaient pas joindre, « pourtant on est sur le même wifi »).
+// Les téléphones rejoignent TOUJOURS par le Wi-Fi → on classe les cartes sans fil en premier.
+function lanIps() {
   const cands = [];
-  for (const list of Object.values(os.networkInterfaces())) for (const ni of list || []) if (ni.family === 'IPv4' && !ni.internal) cands.push(ni.address);
-  const pref = (a) => (a.startsWith('192.168.') ? 2 : a.startsWith('10.') || a.startsWith('172.') ? 1 : 0);
-  return cands.sort((a, b) => pref(b) - pref(a))[0] || null;
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
+    for (const ni of list || []) {
+      if (ni.family !== 'IPv4' || ni.internal) continue;
+      const wifi = /wi.?fi|wlan|wireless|sans.?fil|airport/i.test(name);
+      const virt = /virtual|vethernet|vmware|vbox|hyper-v|loopback|tailscale|zerotier|docker|wsl/i.test(name);
+      const priv = ni.address.startsWith('192.168.') ? 2 : (ni.address.startsWith('10.') || ni.address.startsWith('172.')) ? 1 : 0;
+      cands.push({ ip: ni.address, name, score: (virt ? -10 : 0) + (wifi ? 4 : 0) + priv });
+    }
+  }
+  return cands.sort((a, b) => b.score - a.score);
 }
-app.get('/api/net', (_req, res) => res.json({ ip: lanIp() }));
+function lanIp() { return lanIps()[0]?.ip || null; }
+// `ips` = TOUTES les cartes (nom + IP) → l'écran hôte peut proposer l'autre adresse quand le QR ne passe pas.
+app.get('/api/net', (_req, res) => res.json({ ip: lanIp(), ips: lanIps() }));
 // Test : renvoie le salon ouvert le plus récent (pour /?dev côté joueur)
 app.get('/api/dev/room', (_req, res) => {
   const list = [...rooms.values()].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -2233,7 +2622,12 @@ app.get('/api/unlock-preview', async (req, res) => {
   if (unlockCache.has(key)) return res.json({ preview: unlockCache.get(key) });
   try {
     const t = await resolveTrack({ title, artist });
-    if (t) { await cacheTrack(t); unlockCache.set(key, t.preview); return res.json({ preview: t.preview }); }
+    // ⚠️ `resolveTrack` ne valide QUE l'artiste (son repli « artist:"X" titre » accepte n'importe quel titre de X).
+    // Résultat le 2026-07-26 : l'arrivée de Diam's jouait « Confession nocturne » au lieu de « La Boulette ».
+    // L'arrivée d'un challenger est scriptée sur UN morceau précis → on exige que le TITRE corresponde.
+    const same = t && matchQuality(t.title, title) > 0;
+    if (t && !same) console.warn(`[unlock] "${title}" (${artist}) → Deezer a renvoyé "${t.title}" : refusé (mauvais morceau)`);
+    if (same) { await cacheTrack(t); unlockCache.set(key, t.preview); return res.json({ preview: t.preview }); }
   } catch { /* injouable */ }
   unlockCache.set(key, '');
   res.json({ preview: '' });

@@ -37,27 +37,31 @@ export const AWARDS = [
   { id: 'ecrasant', title: 'Rouleau Compresseur', icon: 'crown', weight: 8, pick(list, c) {
     if (c.N < 2) return null;
     const s = [...list].sort((a, b) => b.score - a.score);
-    if (s[0].score < 30000 || s[0].score < s[1].score * 1.8) return null;
-    return { playerId: s[0].id, desc: `Victoire écrasante — personne n'a jamais été au niveau.` };
+    if (s[0].score < 18000 || s[0].score < s[1].score * 1.8) return null;
+    return { playerId: s[0].id, desc: `Victoire écrasante · personne n'a jamais été au niveau.` };
   } },
   { id: 'photofinish', title: 'Photo Finish', icon: 'flag', weight: 9, pick(list, c) {
     if (c.N < 2) return null;
     const s = [...list].sort((a, b) => b.score - a.score);
     if (s[0].score <= 0 || (s[0].score - s[1].score) > s[0].score * 0.05) return null;
-    return { playerId: s[0].id, desc: `Gagné sur le fil face à ${s[1].name} — ${c.fmt(s[0].score - s[1].score)} auditeurs d'écart.` };
+    return { playerId: s[0].id, desc: `Gagné sur le fil face à ${s[1].name} · ${c.fmt(s[0].score - s[1].score)} auditeurs d'écart.` };
   } },
   { id: 'mitraillette', title: 'La Mitraillette', icon: 'spray', weight: 7, pick(list, c) {
     // seulement les vrais ARROSEURS (beaucoup de tentatives, PEU de trouvailles) — jamais le vainqueur qui tape juste
+    // ⚠️ Se base sur `subs` (SOUMISSIONS brutes), pas `att` (1 max par manche depuis le ré-essai anti-T9 →
+    //    att ne peut plus dépasser c.total, le seuil c.total+3 rendait ce trophée INDÉCERNABLE).
     const sprayers = list.filter((p) => p.scored <= Math.ceil((c.total || 0) * 0.4));
-    const r = top(sprayers, (p) => p.att, Math.max(8, c.total + 3));
+    const r = top(sprayers, (p) => p.subs || 0, Math.max(8, c.total + 3));
     if (!r) return null;
     return { playerId: r.player.id, desc: `${r.value} réponses balancées dans le tas. Au moins il aura essayé.` };
   } },
   { id: 'sniper', title: 'Le Sniper', icon: 'target', weight: 9, pick(list) {
-    const r = top(list.filter((p) => p.att >= 3 && p.scored >= 3), (p) => p.scored / p.att, 0.85);
+    // Math.min(scored, att) : un revenu PASSIF (sustain/momentum) incrémente `scored` sans que le joueur ait
+    // répondu → le ratio pouvait dépasser 1 et voler le trophée au vrai sniper. On borne aux manches tentées.
+    const r = top(list.filter((p) => p.att >= 3 && p.scored >= 3), (p) => Math.min(p.scored, p.att) / p.att, 0.85);
     if (!r) return null;
     const p = r.player;
-    return { playerId: p.id, desc: `${p.scored} trouvailles pour ${p.att} tentatives — précision chirurgicale.` };
+    return { playerId: p.id, desc: `${Math.min(p.scored, p.att)} trouvailles pour ${p.att} tentatives · précision chirurgicale.` };
   } },
   { id: 'machine', title: 'La Machine', icon: 'gauge', weight: 6, pick(list, c) {
     const r = top(list, (p) => p.scored, Math.ceil(c.total * 0.6));
@@ -76,7 +80,7 @@ export const AWARDS = [
   } },
   // (« Le Puriste » retiré : faisait doublon avec « Sans-Faute » — les deux se basent sur les manches perfect titre+artiste)
   { id: 'diamant', title: 'Le Gros Move', icon: 'diamond', weight: 7, pick(list, c) {
-    const r = top(list, (p) => p.best, 40000);
+    const r = top(list, (p) => p.best, 24000);
     if (!r) return null;
     return { playerId: r.player.id, desc: `+${c.fmt(r.value)} auditeurs d'un seul coup. La manche parfaite.` };
   } },
@@ -94,14 +98,14 @@ export const AWARDS = [
   } },
   { id: 'feudepaille', title: 'Feu de Paille', icon: 'fire', weight: 7, pick(list, c) {
     if (c.total < 6) return null;
-    const cands = list.filter((p) => p.firstHalf > 15000 && p.secondHalf < p.firstHalf * 0.25);
+    const cands = list.filter((p) => p.firstHalf > 9000 && p.secondHalf < p.firstHalf * 0.25);
     if (!cands.length) return null;
     const p = rand(cands);
     return { playerId: p.id, desc: `Parti comme une fusée, fini à l'arrêt. Le classique.` };
   } },
   { id: 'diesel', title: 'Le Diesel', icon: 'snail', weight: 7, pick(list, c) {
     if (c.total < 6) return null;
-    const cands = list.filter((p) => p.secondHalf > 15000 && p.firstHalf < p.secondHalf * 0.25);
+    const cands = list.filter((p) => p.secondHalf > 9000 && p.firstHalf < p.secondHalf * 0.25);
     if (!cands.length) return null;
     const p = rand(cands);
     return { playerId: p.id, desc: `Démarrage poussif, finish canon. Il lui fallait juste chauffer.` };
@@ -125,7 +129,9 @@ export const AWARDS = [
     const p = rand(cands);
     return { playerId: p.id, desc: `Zéro pouvoir activé. Que du talent brut. Respect.` };
   } },
-  { id: 'muet', title: 'Le Muet', icon: 'ghost', weight: 6, pick(list) {
+  { id: 'muet', title: 'Le Muet', icon: 'ghost', weight: 6, pick(list, c) {
+    if (c.mj) return null; // en MJ on répond à la VOIX (player:answer sort avant le att++) → att = 0 pour TOUT
+    //                        le monde : « jamais tenté » n'y veut rien dire, le trophée tomberait au hasard.
     const cands = list.filter((p) => p.att === 0);
     if (!cands.length) return null;
     const p = rand(cands);
@@ -188,7 +194,7 @@ export const AWARDS = [
     const cands = list.filter((p) => p.datedFinds >= 4 && p.oldFinds === p.datedFinds);
     if (!cands.length) return null;
     const p = rand(cands);
-    return { playerId: p.id, desc: `Que des classiques d'avant 2010 — ${p.name} s'est arrêté à l'époque du CD. Le vrai goût.` };
+    return { playerId: p.id, desc: `Que des classiques d'avant 2010 · ${p.name} s'est arrêté à l'époque du CD. Le vrai goût.` };
   } },
   { id: 'releve', title: 'La Relève', icon: 'sprout', weight: 8, pick(list, c) {
     // le pendant moderne : n'a reconnu QUE du 2020+ — et il y avait bien du vieux à trouver aussi
@@ -196,7 +202,7 @@ export const AWARDS = [
     const cands = list.filter((p) => p.datedFinds >= 4 && p.newFinds === p.datedFinds);
     if (!cands.length) return null;
     const p = rand(cands);
-    return { playerId: p.id, desc: `Que du 2020 et après — ${p.name} est né dans l'auto-tune. Les anciens ? Connaît pas.` };
+    return { playerId: p.id, desc: `Que du 2020 et après · ${p.name} est né dans l'auto-tune. Les anciens ? Connaît pas.` };
   } },
 ];
 

@@ -49,7 +49,8 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
   select, **rim light vert `#a6ff00`**, fond anthracite baigné orange-rosé).
 
 ## Boucle de jeu (server/index.js)
-`lobby` → *(l'hôte configure via ConfigWizard)* → pour chaque manche :
+`lobby` → *(l'hôte configure via ConfigWizard)* → **préchargement** (`game:preload` → la TV rapatrie TOUS les
+extraits de la partie en **blob**, puis `host:preloaded` ; plafond 25 s serveur / 15 s TV) → pour chaque manche :
 - **`prep`** (fenêtre POUVOIRS, modes à pouvoirs) **ou** `countdown` 5 s (quiz / MJ) →
 - **`playing`** (le son tourne, on répond) → **`reveal`** (réponse + scores) → … → **`final`** (podium +
   certif + **trophées** + classement de série). Depuis `final` : **Relancer une partie** (→ assistant) ou
@@ -63,20 +64,41 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
 - **Buzzer** : le 1er qui buzze prend la main (8 s pour répondre, sinon lockout et le buzzer rouvre).
 - **Quiz** : QCM de culture rap FR (banque `server/quiz.js`, faite main). Pas d'audio, **pas de pouvoirs**.
 - **Orchestration** : `Automatique` **ou** `Maître du jeu` — un joueur anime : il voit la réponse,
-  distribue les points à la voix (**+5 000 / +10 000**), coupe le son / révèle, passe à la manche suivante.
+  distribue les points à la voix (**+3 000 / +6 000**), coupe le son / révèle, passe à la manche suivante.
   En mode MJ : pas d'auto-notation, pas de pouvoirs, ≥ 2 joueurs requis.
 - ⚠️ **Blind Test : le son joue TOUT l'extrait** — la manche NE se coupe PAS quand tout le monde a
   répondu (c'est voulu). Seul le **quiz** se révèle dès que tous ont répondu.
 
 ## Score = AUDITEURS (match.js + index.js)
-- **base** = 10 000 par volet (titre / artiste) **+ 5 000** si les deux (prime de précision).
+- ⚓ **ÉCHELLE ANCRÉE SUR LE RÉEL (2026-07-15)** — les certifs du jeu utilisent les **VRAIS paliers SNEP**
+  (album, équivalents ventes) : **Or 50 000 · Platine 100 000 · Double 200 000 · Triple 300 000 · Diamant 500 000**.
+  `certif(score, rounds)` (data.ts) compare le **TOTAL de la partie NORMALISÉ à 16 manches**
+  (`norm = score / rounds × 16`) → indépendant du format joué (8/16/24) **et** vrai vis-à-vis du réel.
+  *Pourquoi* : le score s'appelle « auditeurs » et les récompenses « Disque d'Or/Diamant » — les nombres doivent
+  dire la vérité (un rappeur du roster qui teste le jeu le remarquerait). Ça donne aussi une **cible objective**
+  de calibrage au lieu de seuils au doigt mouillé.
+- **base** = **6 000** par volet (titre / artiste) **+ 6 000** si les deux (prime de précision — vaut un **3e volet**,
+  donc trouver les DEUX = **18 000** = 3× le partiel). Historique : 5 000 → 10 000 (`63a4071`), puis **×0.6**
+  au passage à l'échelle SNEP (le 30 000 rendait le Diamant trivial à 500 000).
 - **× vitesse** (`speedMult` : ×1 dernière seconde → **×2.5** instantané, courbe **convexe** `frac^1.7` → le bonus
-  chute vite quand on tarde) **× difficulté** (facile 1.0 · connaisseur 1.3 · digger 1.6 · puriste 2.0).
+  chute vite quand on tarde) **× difficulté** — **3 crans** depuis le 2026-07-11 (`DIFFICULTY`, index.js) :
+  Mainstream **1.0** · Connaisseur **1.5** · Puriste **2.0**. (Les crans « connaisseur 1.3 / digger 1.6 » n'existent plus.)
+- ⚠️ **TOUTE valeur en auditeurs suit l'échelle.** Si tu en changes une, change les autres : sinon elle devient
+  1.67× plus forte en relatif (déséquilibre silencieux). Recensées : `powers.js` (46 montants), `index.js`
+  (clash `BATTLE_WIN 12 000`/`DRAW 3 600`/`BET_BONUS 2 400`, suspense **22 800**, seuil duel-au-sommet **27 000**,
+  comeback **1 200** ×2 miroirs, quiz **6 000**, buzzer **+3 000**, MJ), `awards.js` (4 seuils absolus),
+  `data.ts` (les ~36 textes de pouvoirs **doivent citer les montants de powers.js**), `sim-balance.mjs`.
+- ⚠️ **Le barème n'est PAS le même selon le mode** — or `certif` est mode-blind :
+  Blind Test `base × speed × mult` → max/manche **45 000** facile · 67 500 normal · 90 000 puriste ;
+  **Buzzer** `base × mult + 3 000` (**pas de speedMult** — voulu : le temps est déjà arbitré par la course au buzz) ;
+  **Quiz** `6 000 × speedMult`, mult=1 → max **15 000**.
+  → Le Diamant reste **hors d'atteinte en Quiz et en Buzzer**. Voir (SCORE-MODE) dans CORRECTIFS.md.
 - **Fautes** : `matchQuality` = 1.0 (exact / contient / tous les mots) vs 0.8 (faute ~20 % Levenshtein).
-- **Certification** de fin (`data.ts → certif`, sur auditeurs/manche, indépendant du nb de manches) :
-  Espoir → Disque d'Or → Platine → Double → Triple → **Diamant**.
+- **Certification** de fin (`data.ts → certif`) : **paliers SNEP réels** sur le **total normalisé 16 manches**
+  (indépendant du nb de manches — voir ⚓ plus haut) :
+  Espoir → Disque d'Or (50 000) → Platine (100 000) → Double (200 000) → Triple (300 000) → **Diamant (500 000)**.
 - **Suspense** (`suspenseActive`) : sur la/les dernière(s) manche(s), si l'écart 1er↔2e est rattrapable
-  (≤ manches restantes × 38 000), on MASQUE le classement (host = carte « scores masqués » ; joueur =
+  (≤ manches restantes × 22 800), on MASQUE le classement (host = carte « scores masqués » ; joueur =
   total/rang + score de la barre en `??? aud.`). Si le leader est intouchable, on l'affiche (le plus fort
   doit gagner — pas de frustration Mario Kart). Flag `suspense` (round) / `hideBoard` (reveal).
 - **Jauge de pouvoir** (`fillCharges`) : se remplit en fin de manche selon `rebalance`
@@ -86,6 +108,33 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
     traîne…) est **grisé** côté joueur. Serveur `canPowerAct(room,p,pw)` → event `power:eligible` par socket au `prep`.
   - **Anim vol/dîme** : la VICTIME reçoit `power:hit` (temps réel « −X volés par Y ») + `room.powerHits` → badge
     rejoué au reveal (champ `hitBy` du résultat).
+
+## ⚓ Le POOL = LA BASE MUSICALE CURÉE + SPOTIFY D'ABORD (2026-07-25) — `applyCuration()` / `livePool(sp)`
+- **SPOTIFY EST LA SOURCE PAR DÉFAUT.** Un morceau se joue sur Spotify avec **titre + artiste** : ne pas avoir
+  d'extrait Deezer résolu ne le rend PAS injouable, ça le rend `spOnly`. `livePool(sp)` :
+  **Spotify prêt → tout le catalogue curé (2557 · 352 artistes)** · **repli Deezer → 2176 · 313** (on ne
+  restreint QUE là). L'écran hôte **déclare sa source** (`host:source` + `spotify` dans `host:start`).
+  ⚠️ Ne JAMAIS refiltrer le pool sur l'audio Deezer « pour être sûr » : c'est l'inverse de la priorité voulue.
+- Filet anti-manche-muette : au préchargement, la TV vérifie sur Spotify (`spotifyResolves`) les titres sans
+  repli Deezer et renvoie les introuvables (`host:preloaded {missing}`) → le serveur les **remplace** avant le départ.
+- ⚠️ **La curation est le domaine d'Alexandre.** Ce qui doit sortir du jeu se marque **« hors pool » (✕) dans la
+  base musicale** → `difficulty-exclude.json`. **Ne pas ajouter d'artiste en dur dans `EXCLUDE_ARTISTS`.**
+  Un titre non étiqueté n'est PAS basculé en Puriste : il n'entre pas dans le jeu, point.
+
+- **Avant**, le pool venait UNIQUEMENT des catalogues Deezer (`SEED_ARTISTS`) et la curation ne servait qu'à
+  **étiqueter** ce qu'elle croisait. Mesuré : 1615 morceaux en jeu dont **1004 non curés** (donc `mid`/Puriste par
+  défaut) et **350 seulement des 3306 entrées** de `canon-active.json` jouables → le tri fait dans la base
+  musicale ne pilotait presque rien.
+- **Maintenant** : `POOL = (canon-active.json ∩ audio Deezer résolu `dz`) ∪ (pool Deezer DÉJÀ étiqueté)`, moins
+  `difficulty-exclude.json`. Rejoué **à chaque boot** (`applyCuration()` dans `loadPool`, les 2 branches) → le
+  `.pool-cache.json` reste **brut** et un rebuild ne peut plus effacer le canon. `trackBand` prend la bande de
+  `difficulty-labels.json`, sinon celle portée par `canon-active.json`, sinon `mid`.
+  → mesuré au boot : **2177 morceaux · 314 artistes · top 605 / high 1009 / mid 563**. Interrupteur `CURATED_ONLY`.
+- **Fraîcheur du cache pool : 30 jours** (était 3 j — un cache périmé relançait une reconstruction Deezer de ~5 min
+  pile au moment de lancer une soirée).
+- ⚠️ **Un artiste = UNE SEULE manche par partie** (`artistKey()` = artiste principal, avant `feat./&/x/,`).
+  Appliqué à `sampleBalancedByEra`, au chemin mono-décennie, au **son du clash** et à **Survivor**. `fillUp()`
+  relâche la règle uniquement si le pool manque (jamais atteint : ≥230 artistes distincts par bande).
 
 ## Difficulté du POOL = liste CURÉE (2026-07-09, remplace le rank/recoScore)
 - **Le rank Deezer était faux** pour « grand public » (deep cuts d'artistes connus classés faciles, vieux rap sous-coté).
@@ -122,7 +171,12 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
 
 ## Pouvoirs — source de vérité = `server/powers.js`
 - **Activés dans la fenêtre `prep` AVANT la musique** (sinon on activerait en connaissant déjà la
-  réponse → exploit). Bouton **Passer** ; la fenêtre se ferme dès que tout le monde est prêt (max 10 s).
+  réponse → exploit). Bouton **Passer** ; la fenêtre se ferme **dès que tout le monde a tranché** (max 10 s) —
+  `checkPrepDone` (était un no-op) + event `prep:done` qui raccourcit le compteur TV **et** téléphone. Grâce de
+  900 ms, puis le décompte de 3 s existant laisse le temps de lire qui a lancé quoi.
+- ⚠️ **La latence audio mangeait les pouvoirs à fenêtre** (Vald/NQNT : 4,5 s comptées depuis le début de manche
+  SERVEUR → un son en retard de 2 s ne valait plus que 2,5 s). D'où le **préchargement blob** de toute la
+  playlist avant la manche 1 (voir la boucle de jeu). Le son du **clash** est choisi dès l'intro (14,5 s d'avance).
 - `data.ts` porte le **nom + texte d'effet** affichés ; `powers.js` porte la **mécanique + valeurs**.
 - Mécaniques : `double{mult}`, `bonus{amount,refuel}`, `wager{mult,penalty}`, `steal{amount}`,
   `sabotage{targets,grab}`, `hint{self}`, `safety{floor,self}`, `momentum{base,per}`,
@@ -160,6 +214,12 @@ pouvoir reprendre le travail dans n'importe quelle conversation sans rien perdre
 - **Portrait** : `client/public/avatars/<id>.png` (LFS). Tous en ont un. Bishok = ex-fichier « Youcef ».
 - **Perso unique par salon** : quand un joueur prend un rappeur, il devient **grisé « PRIS »** en
   direct pour les autres (serveur `player:watch` + refus au `player:join` si déjà pris).
+- **5 DÉBLOCABLES** (`locked: true` : Freeze Corleone, Lino, Diam's, Disiz, Caballero & JeanJass) — cachés du
+  character-select, « ??? » dans le roster, une condition chacun (`UNLOCKS`, une par CONFIG : Blind Test / Quiz /
+  Buzzer / Puriste / Mainstream) testée en fin de partie côté TV **et** côté téléphone → arrivée épique
+  (`ChallengerReveal`) puis jouables. Persistés **par appareil** dans **`UNLOCK_KEY`** (`data.ts`).
+  ⚠️ La clé est **versionnée** (`pl_unlocked_v2` depuis le 2026-07-25) : **la bumper remet tout le monde à zéro**
+  (les 5 redeviennent verrouillés et se regagnent). C'est le seul « reset de saison » disponible.
 
 ## Écrans clés (client/src/screens/)
 - **Host.tsx** — la TV : lobby (code + QR **centré**, bloc aéré, PAS de dock musique), prep, playing

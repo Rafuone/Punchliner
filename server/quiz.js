@@ -60,7 +60,21 @@ export function pickQuiz(n, difficulty = 'normal', usedSet = null, opts = {}) {
   const cap = Math.max(2, Math.ceil(n * 0.30));
   const shuffled = shuffle(avail);
   const picks = [], catCount = {}, inPicks = new Set();
+  // QUOTA « COMPLÈTE LA PUNCHLINE » (2026-07-26) : c'est le format le plus attendu du quiz, et il n'était
+  // tiré qu'au hasard — 16 punchlines sur 241 questions en Mainstream, soit ~0,5 attendue sur 8 manches :
+  // une partie entière pouvait n'en voir AUCUNE (constaté en soirée). On en garantit donc ~1 sur 4.
+  // La banque n'a que 37 punchlines (16 facile · 15 normal · 6 difficile) : au bout de quelques quiz dans le
+  // même salon il n'en reste plus de « neuves ». On les recycle ALORS QUE le reste garde sa mémoire — mieux
+  // vaut revoir une punchline que n'en avoir aucune. (À étoffer en banque, cf. CORRECTIFS QUIZ-PUNCHLINE.)
+  let plPool = shuffled.filter((q) => q.cat === 'Punchline');
+  if (!plPool.length) plPool = shuffle(pool.filter((q) => q.cat === 'Punchline'));
+  const wantPl = Math.min(Math.max(1, Math.round(n * 0.25)), plPool.length);
+  for (const q of plPool) {
+    if (catCount.Punchline >= wantPl) break;
+    picks.push(q); inPicks.add(q.id); catCount.Punchline = (catCount.Punchline || 0) + 1;
+  }
   for (const q of shuffled) {
+    if (inPicks.has(q.id)) continue;
     if (picks.length >= n) break;
     const c = q.cat || '?';
     if ((catCount[c] || 0) >= cap) continue; // catégorie déjà bien servie → on passe

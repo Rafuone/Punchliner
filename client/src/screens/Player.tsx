@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { socket } from '../socket';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO, UNLOCKS, unlockObjective, EPITHETS, REACTIONS, END_REACTIONS, TRASH_TALK } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, fmtAud, certif, awardIcon, AWARDS_INFO, UNLOCKS, UNLOCK_KEY, unlockObjective, EPITHETS, REACTIONS, END_REACTIONS, TRASH_TALK } from '../data';
 import GrungeBg from '../GrungeBg';
 import { sfx } from '../sfx';
 
@@ -21,7 +21,7 @@ function Charges({ n, max = 3, charge }: { n: number; max?: number; charge?: num
 }
 
 const SKEY = 'pl_session';
-const loadSession = () => { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch { return null; } };
+const loadSession = () => { try { const s = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (s && s.__sr && !location.pathname.startsWith('/showroom')) { localStorage.removeItem(SKEY); return null; } return s; } catch { return null; } }; // purge la session BIDON du showroom hors /showroom (sinon le vrai jeu tenterait de rejoindre le salon fantôme « PUNCH »)
 const saveSession = (s: any) => localStorage.setItem(SKEY, JSON.stringify(s));
 const hideOnErr = (e: any) => { e.currentTarget.style.display = 'none'; };
 // médaillon rond du rappeur (photo si dispo, sinon initiales sur sa couleur)
@@ -40,31 +40,124 @@ const vfClass = (c: string) => (c === 'Vrai' ? ' vrai' : c === 'Faux' ? ' faux' 
 // Dock de réactions (téléphone) : un bouton « Réagir » ouvre un panneau catégorisé d'emojis (façon roue de
 // réactions des jeux en ligne) → plus de variété que 8 boutons fixes, sans encombrer l'écran en permanence.
 // On envoie l'INDEX GLOBAL dans le set (l'hôte mappe id→emoji via data.ts) : contrat serveur inchangé.
-function ReactionDock({ set, onSend }: { set: { e: string; t: string; cat: string }[]; onSend: (i: number) => void }) {
+// ROUE DE RÉACTIONS (refonte 2026-07-26) — modèle des jeux console en ligne (quick chat de Rocket League /
+// FIFA) : une roue de CATÉGORIES, et chaque catégorie s'ouvre en SOUS-ACTIONS sur la même couronne.
+// Pourquoi : l'ancien tiroir (bouton → onglet → grille) demandait 3 appuis précis sur de petites cibles, et
+// personne ne réagissait « par flemme » (retour de soirée). Ici, un SEUL GESTE CONTINU suffit : on appuie sur
+// le bouton, on glisse vers un quartier, on glisse vers la sous-action, on relâche — c'est envoyé. Les cibles
+// sont d'énormes quartiers visés à l'angle (pas au pixel), donc on peut viser vite et mal.
+// Le mode « appui simple » reste possible : taper le bouton ouvre la roue, on tape un quartier, puis une action.
+type PointerEvt = { clientX: number; clientY: number; pointerId: number; currentTarget: EventTarget & HTMLElement; preventDefault: () => void };
+function ReactionWheel({ set, onSend }: { set: { e: string; t: string; cat: string }[]; onSend: (i: number) => void }) {
   const [open, setOpen] = useState(false);
+  const [cat, setCat] = useState<string | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+  const centerRef = useRef({ x: 0, y: 0 });
+  const draggingRef = useRef(false);
+  const movedRef = useRef(false);
+
   const cats = set.reduce<string[]>((acc, r) => (acc.includes(r.cat) ? acc : [...acc, r.cat]), []);
-  const [cat, setCat] = useState(cats[0] || '');
-  const [sent, setSent] = useState<number | null>(null);
-  function fire(i: number) {
-    onSend(i); sfx('scratch'); setSent(i);
-    window.setTimeout(() => setSent((s) => (s === i ? null : s)), 600);
+  const items = cat ? set.map((r, i) => ({ ...r, i })).filter((r) => r.cat === cat) : [];
+  const ring: { label: string; emoji: string; idx: number }[] = cat
+    ? items.map((r) => ({ label: r.t, emoji: r.e, idx: r.i }))
+    : cats.map((c, k) => ({ label: c, emoji: set.find((r) => r.cat === c)?.e || '💬', idx: k }));
+
+  const DEAD = 46;   // rayon mort au centre : on y revient pour annuler / remonter d'un cran
+  const R_IN = 62, R_OUT = 148;
+
+  function sectorAt(cx: number, cy: number, n: number) {
+    const { x, y } = centerRef.current;
+    const dx = cx - x, dy = cy - y;
+    if (Math.hypot(dx, dy) < DEAD || !n) return null;
+    let a = (Math.atan2(dy, dx) * 180) / Math.PI + 90; // 0° = haut, sens horaire
+    if (a < 0) a += 360;
+    const step = 360 / n;
+    return Math.floor(((a + step / 2) % 360) / step);
   }
+  function fire(reactionIdx: number, label: string) {
+    onSend(reactionIdx); sfx('scratch');
+    setSent(label); window.setTimeout(() => setSent((s) => (s === label ? null : s)), 700);
+    setOpen(false); setCat(null); setHover(null);
+  }
+  function openAt(el: HTMLElement) {
+    const r = el.getBoundingClientRect();
+    centerRef.current = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    setOpen(true); setCat(null); setHover(null);
+  }
+  // Geste continu : on suit le doigt, on relâche sur la cible. `movedRef` distingue le vrai glissé
+  // d'un simple tap (qui, lui, laisse la roue ouverte pour un pilotage en 2 appuis).
+  function onDown(e: PointerEvt) {
+    e.preventDefault();
+    draggingRef.current = true; movedRef.current = false;
+    openAt(e.currentTarget as HTMLElement);
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  }
+  function onMove(e: PointerEvt) {
+    if (!draggingRef.current) return;
+    const s = sectorAt(e.clientX, e.clientY, ring.length);
+    if (s !== null) movedRef.current = true;
+    setHover(s);
+    // on entre dans un quartier de catégorie → il s'ouvre en sous-actions, sans lever le doigt
+    if (!cat && s !== null && Math.hypot(e.clientX - centerRef.current.x, e.clientY - centerRef.current.y) > R_IN + 26) {
+      setCat(cats[s] ?? null); setHover(null);
+    }
+  }
+  function onUp() {
+    draggingRef.current = false;
+    if (!movedRef.current) return;                 // simple tap → la roue reste ouverte (mode 2 appuis)
+    if (cat && hover !== null && ring[hover]) fire(ring[hover].idx, ring[hover].label);
+    else if (!cat && hover === null) { setOpen(false); setCat(null); } // relâché au centre → annulé
+  }
+
   return (
-    <div className="reactdock">
-      <button type="button" className={`react-fab ${open ? 'on' : ''}`} onClick={() => setOpen((o) => !o)}>
-        <span className="rf-e">{open ? '✕' : '💬'}</span>{open ? 'Fermer' : 'Réagir'}
+    <div className="rwheel-wrap">
+      {sent && <div className="rwheel-toast">{sent} envoyé</div>}
+      <button
+        type="button"
+        className={`rwheel-fab ${open ? 'on' : ''}`}
+        onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        aria-label="Réagir"
+      >
+        <span className="rf-e">{open ? '✕' : '💬'}</span>
+        <span className="rf-t">{open ? 'Fermer' : 'Réagir'}</span>
       </button>
+
       {open && (
-        <div className="react-sheet">
-          <div className="react-tabs">
-            {cats.map((c) => <button key={c} type="button" className={`react-tab ${c === cat ? 'on' : ''}`} onClick={() => setCat(c)}>{c}</button>)}
-          </div>
-          <div className="react-grid">
-            {set.map((r, i) => r.cat === cat ? (
-              <button key={i} type="button" className={`react-emoji ${sent === i ? 'sent' : ''}`} onClick={() => fire(i)}>
-                <span className="re">{r.e}</span><span className="rl">{r.t}</span>
-              </button>
-            ) : null)}
+        <div className="rwheel-overlay" onPointerDown={(e) => { if (e.target === e.currentTarget) { setOpen(false); setCat(null); } }}>
+          <div className="rwheel" style={{ left: centerRef.current.x, top: centerRef.current.y }}>
+            <svg viewBox={`-${R_OUT} -${R_OUT} ${R_OUT * 2} ${R_OUT * 2}`} width={R_OUT * 2} height={R_OUT * 2}>
+              {ring.map((it, k) => {
+                const n = ring.length, step = (Math.PI * 2) / n;
+                const a0 = -Math.PI / 2 + (k - 0.5) * step, a1 = a0 + step;
+                const P = (r: number, a: number) => `${(r * Math.cos(a)).toFixed(2)} ${(r * Math.sin(a)).toFixed(2)}`;
+                const big = step > Math.PI ? 1 : 0;
+                const d = `M ${P(R_IN, a0)} A ${R_IN} ${R_IN} 0 ${big} 1 ${P(R_IN, a1)} L ${P(R_OUT, a1)} A ${R_OUT} ${R_OUT} 0 ${big} 0 ${P(R_OUT, a0)} Z`;
+                const mid = (a0 + a1) / 2, rm = (R_IN + R_OUT) / 2;
+                return (
+                  <g key={k} className={`rw-sect ${hover === k ? 'on' : ''}`}>
+                    <path d={d} />
+                    <text x={rm * Math.cos(mid)} y={rm * Math.sin(mid) - 6} className="rw-emoji">{it.emoji}</text>
+                    <text x={rm * Math.cos(mid)} y={rm * Math.sin(mid) + 16} className="rw-label">{it.label}</text>
+                  </g>
+                );
+              })}
+              <circle r={DEAD} className="rw-hub" />
+              <text y={5} className="rw-hubtxt">{cat ? '←' : ''}</text>
+            </svg>
+            {/* cibles tactiles en mode 2 appuis (tap) : mêmes quartiers, en boutons transparents */}
+            <div className="rw-taps">
+              {ring.map((it, k) => {
+                const n = ring.length, step = 360 / n, mid = (-90 + k * step) * Math.PI / 180, rm = (R_IN + R_OUT) / 2;
+                return (
+                  <button key={k} type="button" className="rw-tap"
+                    style={{ left: rm * Math.cos(mid), top: rm * Math.sin(mid) }}
+                    onPointerUp={(e) => { e.stopPropagation(); if (cat) fire(it.idx, it.label); else { setCat(cats[k]); setHover(null); } }}
+                    aria-label={it.label} />
+                );
+              })}
+              <button type="button" className="rw-tap hub" onPointerUp={(e) => { e.stopPropagation(); if (cat) setCat(null); else { setOpen(false); } }} aria-label="Retour" />
+            </div>
           </div>
         </div>
       )}
@@ -75,8 +168,11 @@ function ReactionDock({ set, onSend }: { set: { e: string; t: string; cat: strin
 export default function Player() {
   const [step, setStep] = useState<'form' | 'char' | 'roster' | 'trophies'>('form'); // avant d'avoir rejoint (+ pages hub : roster / palmarès)
   const [unlockedTrophies, setUnlockedTrophies] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('pl_trophies') || '[]'); } catch { return []; } });
-  const [revealTrophies, setRevealTrophies] = useState(true); // aperçu : tout afficher (sinon non-débloqués grisés)
-  const [unlockedChars, setUnlockedChars] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('pl_unlocked') || '[]'); } catch { return []; } }); // challengers déjà débloqués (persistés par device dans pl_unlocked)
+  // GRISÉS PAR DÉFAUT (2026-07-26) : « il faudrait qu'ils soient grisés jusqu'à ce qu'on les débloque ».
+  // Le défaut était `true` = tout révélé d'emblée, donc l'inverse de la demande. Le bouton « Tout voir »
+  // reste, mais c'est un choix explicite, plus l'état de départ.
+  const [revealTrophies, setRevealTrophies] = useState(false);
+  const [unlockedChars, setUnlockedChars] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(UNLOCK_KEY) || '[]'); } catch { return []; } }); // challengers déjà débloqués (persistés par device dans pl_unlocked)
   const [newChars, setNewChars] = useState<string[]>([]); // débloqués À L'INSTANT (bannière de fin de partie)
   const [changing, setChanging] = useState(false); // change de rappeur entre deux parties (rouvre le character select)
   const [joined, setJoined] = useState(false);
@@ -91,7 +187,8 @@ export default function Player() {
   const [round, setRound] = useState<any>({ index: 0, total: 0, endsAt: 0, durationMs: 25000, mode: 'multi', difficulty: '' });
   const [guess, setGuess] = useState('');
   const [feedback, setFeedback] = useState<any>(null);
-  const [submitted, setSubmitted] = useState(false); // a validé cette manche → verrouille (1 seule tentative, résultat à la révélation)
+  const [submitted, setSubmitted] = useState(false); // a TROUVÉ cette manche → verrouille (résultat à la révélation)
+  const [sending, setSending] = useState(false);     // envoi en cours → anti double-clic, SANS démonter le formulaire
   const [reveal, setReveal] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [battle, setBattle] = useState<any>(null);        // manche CLASH (1v1 + paris) : {a,b,flavor,endsAt,reveal}
@@ -138,14 +235,32 @@ export default function Player() {
     // reconnexion en pleine manche CLASH : a/b ne viennent que d'ici (battle:bets/go ne portent que les IDs) → sans ça, crash au rendu
     else if (typeof state.phase === 'string' && state.phase.startsWith('battle') && state.battle) { setBattle(state.battle); setNow(Date.now()); setPhase(state.phase); }
     else setPhase('lobby');
+    applyShowroomHints(state);
+  }
+  // PONT SHOWROOM : ces ecrans dependent d'un etat LOCAL (character select, hub, pupitre MJ, changement
+  // de rappeur) et seraient sinon INATTEIGNABLES au banc d'essai. Les champs `__*` ne sont JAMAIS envoyes
+  // par le serveur : en partie reelle, ce bloc est inerte.
+  function applyShowroomHints(state: any) {
+    if (!state) return;
+    if (state.__step) { setStep(state.__step); setJoined(state.__step === 'form' ? false : joined); }
+    if (state.__joined !== undefined) setJoined(!!state.__joined);
+    if (state.__changing !== undefined) setChanging(!!state.__changing);
+    if (state.__waiting !== undefined) setWaiting(!!state.__waiting);
   }
   function applyBuzz(b: any) {
     if (!b) return setBuzz('idle');
     if (b.winnerId === meId.current) { setBuzz('mine'); setBuzzEndsAt(b.endsAt || 0); setNow(Date.now()); }
     else if (b.winnerId) { setBuzz('locked'); setBuzzMsg(`${b.winnerName} a buzzé`); }
-    else if ((b.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — au tour des autres'); }
+    else if ((b.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté · au tour des autres'); }
     else setBuzz('idle');
   }
+
+  // SHOWROOM : une scene sans session ne reclaim pas -> le state (et ses indices `__*`) n'arrive jamais par
+  // le socket. Le banc d'essai les depose sur window.__PL_SR ; on les applique au montage. Inerte en prod.
+  useEffect(() => {
+    const h = (window as any).__PL_SR;
+    if (h) applyShowroomHints(h);
+  }, []);
 
   useEffect(() => {
     if (new URLSearchParams(location.search).has('dev')) return; // en mode test, on ne restaure pas la session
@@ -163,8 +278,9 @@ export default function Player() {
     const params = new URLSearchParams(location.search);
     if (!params.has('dev')) return;
     fetch('/api/dev/room').then((r) => r.json()).then(({ code: c }) => {
-      if (!c) return setError("Aucun salon ouvert — lance l'hôte d'abord.");
-      const a = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+      if (!c) return setError("Aucun salon ouvert · lance l'hôte d'abord.");
+      const pool = AVATARS.filter((x) => !x.locked); // jamais un déblocable en test rapide (ils ne sont pas censés être choisissables)
+      const a = pool[Math.floor(Math.random() * pool.length)];
       const nm = params.get('name') || 'Test-' + Math.random().toString(36).slice(2, 5).toUpperCase();
       socket.emit('player:join', { code: c, name: nm, avatar: a.id }, (res: any) => {
         if (res?.error) return setError(res.error);
@@ -185,13 +301,19 @@ export default function Player() {
       });
     });
     socket.on('lobby', (d: any) => { setPlayers(d.players); if (d.phase === 'lobby') { setWaiting(false); setPhase('lobby'); setNewChars([]); } });
-    socket.on('round:prep', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setSubmitted(false); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setPowerElig({ ok: true, reason: '' }); setNow(Date.now() + clockOffset.current); setPhase('prep'); });
+    socket.on('round:prep', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setRound((r: any) => ({ ...r, index: d.index, total: d.total, mode: d.mode, difficulty: d.difficulty })); setPrepEndsAt(d.endsAt || 0); setPrepDone(false); setReveal(null); setFeedback(null); setSubmitted(false); setSending(false); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setPowerMsg(''); setPowerElig({ ok: true, reason: '' }); setNow(Date.now() + clockOffset.current); setPhase('prep'); });
+    // tout le monde a tranché (activé ou passé) → le serveur ferme la fenêtre tout de suite, le décompte s'arrête
+    socket.on('prep:done', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setPrepEndsAt(d.endsAt || Date.now()); setNow(Date.now() + clockOffset.current); });
     socket.on('power:eligible', (d: any) => setPowerElig({ ok: d.eligible !== false, reason: d.reason || '' })); // grise le bouton si le pouvoir n'a pas de cible
     socket.on('power:hit', (d: any) => setPowerMsg(`−${fmtAud(d.amount)} auditeurs ${d.type === 'sabotage' ? 'raflés' : d.type === 'tax' ? 'taxés' : 'volés'} par ${d.by} !`)); // anim vol/dîme côté victime
     socket.on('round:countdown', (d: any) => { setReveal(null); setFeedback(null); setHint(null); setGuess(''); setMjTrack(null); setQuizPick(null); setCountdown(d.seconds || 5); setPhase('countdown'); });
-    socket.on('round:go', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setRound(d); setGuess(''); setFeedback(null); setSubmitted(false); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); setBuzzEndsAt(0); } });
+    socket.on('round:go', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setRound(d); setGuess(''); setFeedback(null); setSubmitted(false); setSending(false); setReveal(null); setMjTrack(null); setQuizPick(null); setPhase('playing'); if (d.mode === 'buzzer') { setBuzz('idle'); setBuzzMsg(''); setBuzzEndsAt(0); } });
     // Mode Survivor : chaque nouveau morceau (trackNo change) → on remet l'input à zéro
-    socket.on('rush:state', (d: any) => { setRound((r: any) => ({ ...r, ...d })); if (rushTrackRef.current !== d.trackNo) { rushTrackRef.current = d.trackNo; setGuess(''); setFeedback(null); } setPhase('playing'); });
+    socket.on('rush:state', (d: any) => { setRound((r: any) => ({ ...r, ...d })); if (rushTrackRef.current !== d.trackNo) { rushTrackRef.current = d.trackNo; setGuess('');
+      // « on ne voit pas la bonne réponse » (2026-07-26) : à chaque enchaînement, on annonce ce que C'ÉTAIT.
+      const pv = d.event && d.event.prev;
+      setFeedback(pv && pv.title ? { rushPrev: `${pv.artist} · ${pv.title}`, rushGood: pv.outcome === 'hit' || pv.outcome === 'partial' } : null);
+    } setPhase('playing'); });
     socket.on('rush:end', (d: any) => { setRushEnd(d); setPhase('rushend'); });
     socket.on('mj:track', (d: any) => setMjTrack(d));
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); }); // son de reveal retiré (jugé désagréable) — à recâbler plus tard
@@ -211,22 +333,26 @@ export default function Player() {
           setNewChars(fresh); // bannière « nouveau challenger » (vide si rien)
           if (!fresh.length) return prev;
           const next = Array.from(new Set([...prev, ...fresh]));
-          try { localStorage.setItem('pl_unlocked', JSON.stringify(next)); } catch {}
+          try { localStorage.setItem(UNLOCK_KEY, JSON.stringify(next)); } catch {}
           return next;
         });
       } else setNewChars([]);
     });
     // Manche CLASH (1v1 + paris) — additif, contrat serveur fixe.
-    socket.on('battle:intro', (d: any) => { setBattle({ a: d.a, b: d.b, flavor: d.flavor }); setBetPick(null); setGuess(''); setFeedback(null); setPhase('battle-intro'); });
+    // betBonus/win : le serveur les envoie (index.js battle:intro) mais on ne les stockait PAS → les replis
+    // d'affichage plus bas étaient TOUJOURS actifs. C'était invisible tant que les replis valaient les vraies
+    // constantes ; le passage à l'échelle SNEP l'a révélé. On stocke → l'écran affiche ce que le serveur verse.
+    socket.on('battle:intro', (d: any) => { setBattle({ a: d.a, b: d.b, flavor: d.flavor, betBonus: d.betBonus, win: d.win }); setBetPick(null); setGuess(''); setFeedback(null); setPhase('battle-intro'); });
     socket.on('battle:bets', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, betMs: d.betMs })); setNow(Date.now()); setPhase('battle-bet'); });
-    socket.on('battle:go', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, durationMs: d.durationMs })); setNow(Date.now()); setGuess(''); setFeedback(null); setPhase('battle-play'); });
+    socket.on('battle:go', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, durationMs: d.durationMs, eased: false })); setNow(Date.now()); setGuess(''); setFeedback(null); setPhase('battle-play'); });
+    socket.on('battle:ease', () => setBattle((b: any) => ({ ...b, eased: true }))); // fin de clash : l'artiste seul suffit
     socket.on('battle:reveal', (d: any) => { setBattle((b: any) => ({ ...b, reveal: d })); if (d.scores) setPlayers(d.scores); setPhase('battle-reveal'); });
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
     socket.on('buzz:winner', (d: any) => { if (d.id === meId.current) { setBuzz('mine'); setBuzzEndsAt(d.endsAt || 0); setNow(Date.now()); } else { setBuzz('locked'); setBuzzMsg(`${d.name} a buzzé`); } });
-    socket.on('buzz:open', (d: any) => { setBuzzEndsAt(0); if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté — au tour des autres'); } else setBuzz('idle'); });
+    socket.on('buzz:open', (d: any) => { setBuzzEndsAt(0); if ((d.lockedOut || []).includes(meId.current)) { setBuzz('locked'); setBuzzMsg('Raté · au tour des autres'); } else setBuzz('idle'); });
     socket.on('room:closed', (d: any) => { setError(d.reason || 'Salon fermé.'); setJoined(false); localStorage.removeItem(SKEY); });
     socket.on('replay:tally', (d: any) => setReplayTally({ yes: d.yes || 0, voted: d.voted || 0, total: d.total || 0 })); // vote de rejeu : compteur live
-    return () => ['connect', 'lobby', 'round:prep', 'power:eligible', 'power:hit', 'round:countdown', 'round:go', 'rush:state', 'rush:end', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed', 'replay:tally', 'battle:intro', 'battle:bets', 'battle:go', 'battle:reveal'].forEach((e) => socket.off(e as any));
+    return () => ['connect', 'lobby', 'round:prep', 'prep:done', 'power:eligible', 'power:hit', 'round:countdown', 'round:go', 'rush:state', 'rush:end', 'mj:track', 'round:reveal', 'game:final', 'scores:update', 'buzz:winner', 'buzz:open', 'room:closed', 'replay:tally', 'battle:intro', 'battle:bets', 'battle:go', 'battle:ease', 'battle:reveal'].forEach((e) => socket.off(e as any));
   }, []);
 
   useEffect(() => { if (phase !== 'playing' && phase !== 'prep' && phase !== 'battle-bet' && phase !== 'battle-play') return; const id = setInterval(() => setNow(Date.now() + clockOffset.current), 100); return () => clearInterval(id); }, [phase]);
@@ -291,9 +417,19 @@ export default function Player() {
   }
   function submitAnswer(e?: any) {
     e?.preventDefault();
-    if (!guess.trim() || phase !== 'playing' || submitted) return;
-    setSubmitted(true); // VERROU IMMÉDIAT : le bouton se coupe dès le 1er clic (plus de double validation)
-    socket.emit('player:answer', { text: guess.trim() }, (res: any) => { if (res?.error) setSubmitted(false); }); // ré-ouvre seulement si refusé (ex. brouillé). Résultat à la révélation.
+    if (!guess.trim() || phase !== 'playing' || submitted || sending) return;
+    // `sending` = verrou d'ENVOI (anti double-clic pendant l'aller-retour). Il est DISTINCT de `submitted`,
+    // qui démonte le formulaire : passer par `submitted` faisait perdre le focus du clavier à chaque essai raté.
+    setSending(true);
+    socket.emit('player:answer', { text: guess.trim() }, (res: any) => {
+      setSending(false);
+      if (res?.error) { setFeedback({ msg: res.error }); return; } // refusé (brouillé, trop d'essais…) → on DIT pourquoi
+      // « On réécrit TANT QU'ON N'A PAS TROUVÉ ». On se fie à titleHit/artistHit et PAS à `points` : un joueur
+      // MUSELÉ (sabotage) marque 0 sur une réponse JUSTE — lui afficher « Pas ça… » serait un mensonge.
+      const found = res?.titleHit || res?.artistHit;
+      if (found) { setSubmitted(true); setFeedback(null); } // trouvé → verrou (pas de brute-force, pouvoir non gaspillé)
+      else { setGuess(''); setFeedback({ points: 0 }); }    // vraiment faux → on rouvre ({ points: 0 } → « Pas ça… »)
+    });
   }
   // Mode Survivor : on répond en boucle (PAS de verrou), la bonne réponse fait avancer + rallonge le chrono
   function submitRush(e?: any) {
@@ -332,6 +468,8 @@ export default function Player() {
     if (!guess.trim()) return;
     socket.emit('battle:answer', { text: guess.trim() }, (res: any) => {
       if (res?.correct) setFeedback({ battleWin: true });
+      // volet trouvé mais pas les deux : on DIT ce qu'il manque (le clash exige titre + artiste)
+      else if (res?.half) { setFeedback({ battleHalf: res.need === 'artist' ? "l'artiste" : 'le titre' }); setGuess(''); }
       else if (res && !res.error) { setFeedback({ battleWrong: true }); setGuess(''); }
     });
   }
@@ -340,23 +478,23 @@ export default function Player() {
       if (res?.error) return setPowerMsg(res.error);
       if (typeof res?.charges === 'number') setCharges(res.charges);
       if (typeof res?.charge === 'number') setCharge(res.charge);
-      if (res?.type === 'hint' && res.detail?.hint) { setHint(res.detail.hint); setPowerMsg('Indices révélés — titre & artiste'); }
+      if (res?.type === 'hint' && res.detail?.hint) { setHint(res.detail.hint); setPowerMsg('Indices révélés · titre & artiste'); }
       else if (res?.type === 'steal') setPowerMsg(res.detail ? `Volé ${fmtAud(res.detail.amount)} auditeurs à ${res.detail.stoleFrom}` : 'Personne à voler…');
       else if (res?.type === 'comeback') setPowerMsg(res.detail ? `Remontada ! +${fmtAud(res.detail.gain)} auditeurs` : 'Remontée…');
       else if (res?.type === 'sabotage') setPowerMsg(res.detail ? `${res.detail.mutedName} muselé cette manche !` : 'Sabotage lancé');
       else if (res?.type === 'tax') setPowerMsg(res.detail?.amount ? `Dîme prélevée : +${fmtAud(res.detail.amount)} auditeurs sur ${res.detail.count} joueur${res.detail.count > 1 ? 's' : ''}` : 'Personne à taxer…');
       else if (res?.type === 'allin') setPowerMsg(res.detail ? `Tapis ! ${res.detail.spent} charge${res.detail.spent > 1 ? 's' : ''} claquée${res.detail.spent > 1 ? 's' : ''} → +${fmtAud(res.detail.gain)} auditeurs` : 'Tapis !');
-      else if (res?.type === 'combo') setPowerMsg(res.detail?.streak ? `Enchaînement ×${res.detail.mult} armé (série de ${res.detail.streak}) !` : `Combo armé ×${res.detail?.mult || 1.3} — enchaîne pour +fort`);
+      else if (res?.type === 'combo') setPowerMsg(res.detail?.streak ? `Enchaînement ×${res.detail.mult} armé (série de ${res.detail.streak}) !` : `Combo armé ×${res.detail?.mult || 1.3} · enchaîne pour +fort`);
       else if (res?.type === 'sustain') setPowerMsg(res.detail ? `+${fmtAud(res.detail.amount)} auditeurs garantis pendant ${res.detail.rounds} manches` : 'Revenu armé');
-      else if (res?.type === 'draft') setPowerMsg('Aspiration — tu prends une part du meilleur score de la manche');
-      else if (res?.type === 'safety') setPowerMsg('Filet posé — plancher garanti cette manche');
-      else if (res?.type === 'freeze') setPowerMsg('Hors du temps — score au max même à la dernière seconde');
-      else if (res?.type === 'nofault') setPowerMsg('Zéro faute — écris peinard, l\'orthographe passe');
+      else if (res?.type === 'draft') setPowerMsg('Aspiration · tu prends une part du meilleur score de la manche');
+      else if (res?.type === 'safety') setPowerMsg('Filet posé · plancher garanti cette manche');
+      else if (res?.type === 'freeze') setPowerMsg('Hors du temps · score au max même à la dernière seconde');
+      else if (res?.type === 'nofault') setPowerMsg('Zéro faute · écris peinard, l\'orthographe passe');
       else if (res?.type === 'jam') setPowerMsg(res.detail ? `Brouillage ! Les autres attendent ${Math.round((res.detail.ms || 4000) / 1000)} s` : 'Brouillage lancé');
-      else if (res?.type === 'ace') setPowerMsg('Sans-faute + ×2 armé — trouve cette manche !');
-      else if (res?.type === 'refuel') setPowerMsg('Surrégime — la charge revient si tu trouves');
-      else if (res?.type === 'veteran') setPowerMsg('Increvable — 3 manches sans rien perdre');
-      else if (res?.type === 'firstblood') setPowerMsg('Prime au 1er qui trouve — fonce !');
+      else if (res?.type === 'ace') setPowerMsg('Sans-faute + ×2 armé · trouve cette manche !');
+      else if (res?.type === 'refuel') setPowerMsg('Surrégime · la charge revient si tu trouves');
+      else if (res?.type === 'veteran') setPowerMsg('Increvable · 3 manches sans rien perdre');
+      else if (res?.type === 'firstblood') setPowerMsg('Prime au 1er qui trouve · fonce !');
       else if (res?.type === 'momentum') setPowerMsg(`En feu ! +${fmtAud(res.detail?.amount || 0)} armé`);
       else if (res?.type === 'decay') setPowerMsg(`Armé : +${fmtAud(res.detail?.amount || 0)} auditeurs`);
       else setPowerMsg(`${res?.power || 'Pouvoir'} armé pour cette manche !`);
@@ -377,7 +515,7 @@ export default function Player() {
     socket.emit('player:replayVote', { replay: v }, (res: any) => { if (res?.error) setReplayVote(null); });
   }
 
-  function mjAward(pid: string, points = 10000) { socket.emit('mj:award', { playerId: pid, points }); }
+  function mjAward(pid: string, points = 6000) { socket.emit('mj:award', { playerId: pid, points }); }
   function mjReveal() { socket.emit('mj:reveal'); }
   function mjNext() { socket.emit('mj:next'); }
 
@@ -405,9 +543,12 @@ export default function Player() {
         {error && <p className="err">{error}</p>}
         <form className="glass pad" style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 14 }} onSubmit={(e) => { e.preventDefault(); if (code.trim() && name.trim()) setStep('char'); }}>
           <div><label className="eyebrow">Code du salon</label>
-            <input className="field" style={{ textAlign: 'center', letterSpacing: '.3em', textTransform: 'uppercase', fontFamily: 'var(--disp)', fontSize: 24, marginTop: 6 }} value={code} maxLength={4} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="K7XQ" autoCapitalize="characters" /></div>
+            <input className="field" style={{ textAlign: 'center', letterSpacing: '.3em', textTransform: 'uppercase', fontFamily: 'var(--disp)', fontSize: 24, marginTop: 6 }} value={code} maxLength={4} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="K7XQ" autoCapitalize="characters" autoCorrect="off" spellCheck={false} autoComplete="off" /></div>
           <div><label className="eyebrow">Ton blaze</label>
-            <input className="field" style={{ marginTop: 6 }} value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Sacha" /></div>
+            {/* Pas d'autoCapitalize ici : le blaze n'est jamais string-matché → la majuscule auto ne coûte aucun
+                point et rend mieux sur la TV. En revanche l'autocorrection doit sauter (se faire renommer par
+                son clavier en rejoignant = le même bug que sur les réponses, et le blaze s'affiche toute la soirée). */}
+            <input className="field" style={{ marginTop: 6 }} value={name} maxLength={16} onChange={(e) => setName(e.target.value)} placeholder="Sacha" autoCorrect="off" spellCheck={false} autoComplete="off" /></div>
           <button className="btn warm big" type="submit" disabled={!code.trim() || !name.trim()}>Entre dans le cercle →</button>
         </form>
       </div></div></>
@@ -442,7 +583,8 @@ export default function Player() {
                   )}
                 </span>
                 <div className="troph-title">{shown ? t.title : '???'}</div>
-                <div className="troph-desc">{shown ? t.blurb : 'À découvrir'}</div>
+                {/* la CONDITION reste lisible au toucher/survol, sans deflorer le nom du trophee */}
+                <div className="troph-desc" title={shown ? '' : t.blurb}>{shown ? t.blurb : <span className="troph-hint">{t.blurb}</span>}</div>
                 {has(t.id) && <span className="troph-badge">débloqué</span>}
               </div>
             );
@@ -506,7 +648,7 @@ export default function Player() {
             {!selLocked && sel.img && <img className="cs-tear" src={`/avatars/${sel.id}.png`} alt="" aria-hidden="true" style={sel.crop?.y != null ? { objectPosition: `50% ${sel.crop.y}%` } : undefined} onError={hideOnErr} />}
             <div className="cs-pvig" />
             <div className="cs-vhs" aria-hidden="true"><i className="lines" /><i className="tint" /><i className="noise" /><i className="band" /></div>
-            {!selLocked && !sel.img && <span className="cs-slot">Portrait — image à venir</span>}
+            {!selLocked && !sel.img && <span className="cs-slot">Portrait · image à venir</span>}
             <div className="cs-catchip"><span>{selLocked ? 'Verrouillé' : sel.cat}</span></div>
             {!selLocked && <div className="cs-stats-ov">
               {(() => { const L = sel.statLabels || ['Flow', 'Punch', 'Tech', 'Aura']; return [[L[0], sel.stats.flow], [L[1], sel.stats.punch], [L[2], sel.stats.tech], [L[3], sel.stats.aura]] as [string, number][]; })().map(([lab, v]) => (
@@ -532,7 +674,7 @@ export default function Player() {
             return (
               <div className="cs-catgroup" key={cat}>
                 <div className={`cs-catlabel${isLegend(cat) ? ' irid' : ''}`} style={{ ['--cc' as any]: CATEGORY_COLORS[cat] }}>{cat}</div>
-                <div className="cs-catrow">
+                <div className="cs-catwrap"><div className="cs-catrow">
                   {members.map((a) => {
                     const taken = takenIds.has(a.id);
                     return (
@@ -546,7 +688,7 @@ export default function Player() {
                       <span className="cs-cn">{a.name}</span>
                     </button>
                   ); })}
-                </div>
+                </div></div>
               </div>
             );
           })}
@@ -558,7 +700,7 @@ export default function Player() {
             return (
               <div className="cs-catgroup">
                 <div className="cs-catlabel" style={{ ['--cc' as any]: '#8a8f99' }}>{browse ? 'À débloquer' : 'Débloqués'}</div>
-                <div className="cs-catrow">
+                <div className="cs-catwrap"><div className="cs-catrow">
                   {shown.map((a) => {
                     const taken = takenIds.has(a.id);
                     const lockedNow = !!a.locked && !unlockedChars.includes(a.id); // browse : pas encore débloqué → ???
@@ -575,7 +717,7 @@ export default function Player() {
                       </button>
                     );
                   })}
-                </div>
+                </div></div>
               </div>
             );
           })()}
@@ -586,7 +728,7 @@ export default function Player() {
             ? <button className="btn big" onClick={() => setStep('form')}>← Retour au hub</button>
             : changeMode
               ? <button className="btn warm big" style={{ width: '100%', maxWidth: 460 }} onClick={changeChar} disabled={!avatarId || takenIds.has(avatarId)}>{takenIds.has(avatarId) ? 'Déjà pris' : 'Valider ce rappeur'}</button>
-              : <button className="btn warm big" onClick={join} disabled={!avatarId || joining || takenIds.has(avatarId)}>{joining ? 'Connexion…' : takenIds.has(avatarId) ? 'Déjà pris — choisis un autre' : `Entrer avec ${sel.name}`}</button>}
+              : <button className="btn warm big" onClick={join} disabled={!avatarId || joining || takenIds.has(avatarId)}>{joining ? 'Connexion…' : takenIds.has(avatarId) ? 'Déjà pris · choisis un autre' : `Entrer avec ${sel.name}`}</button>}
         </div>
       </div></>
     );
@@ -620,9 +762,11 @@ export default function Player() {
                   <div className="waitcard-epi">« {EPITHETS[av.id] || av.cat} »</div>
                 </div>
               </div>
+              {/* L'EFFET d'abord (2026-07-26) : il n'y avait QUE le nom du pouvoir - « c'est exactement
+                  l'inverse de ce que je t'ai demande ». Le nom passe en surtitre. */}
               <div className="waitcard-power">
-                <span className="wc-plabel">Pouvoir</span>
-                <span className="wc-pname">{av.power.name}</span>
+                <span className="wc-plabel">{av.power.name}</span>
+                <span className="wc-peff">{boldFx(av.power.effect)}</span>
               </div>
             </div>
           )}
@@ -649,7 +793,7 @@ export default function Player() {
         {error && <p className="err" style={{ textAlign: 'center' }}>{error}</p>}
 
         {phase === 'lobby' && (
-          <div className="center"><span className="dot" style={{ width: 12, height: 12 }} /><h2 className="title-xl">Tu animes la partie</h2><p className="muted">Lance-la depuis la télé. Ici, toi seul verras la réponse — et tu distribues les points à la voix.</p></div>
+          <div className="center"><span className="dot" style={{ width: 12, height: 12 }} /><h2 className="title-xl">Tu animes la partie</h2><p className="muted">Lance-la depuis la télé. Ici, toi seul verras la réponse · et tu distribues les points à la voix.</p></div>
         )}
         {phase === 'countdown' && (
           <div className="center"><span className="eyebrow">Prépare-toi…</span><div className="big-num" style={{ color: 'var(--fluo)' }}>{countdown}</div><span className="url">la musique arrive</span></div>
@@ -674,8 +818,8 @@ export default function Player() {
                     <div className="prow" key={p.id}>
                       <span className="who"><RMed id={p.avatar} size={26} />{p.name}<span className="muted" style={{ fontSize: 12 }}>· {fmtAud(p.score)}</span></span>
                       <span className="row" style={{ gap: 6 }}>
-                        <button className="btn" style={{ padding: '8px 12px', fontSize: 13 }} onClick={() => mjAward(p.id, 5000)}>+5 000</button>
-                        <button className="btn warm" style={{ padding: '8px 12px', fontSize: 13 }} onClick={() => mjAward(p.id, 10000)}>+10 000</button>
+                        <button className="btn" style={{ padding: '8px 12px', fontSize: 13 }} onClick={() => mjAward(p.id, 3000)}>+3 000</button>
+                        <button className="btn warm" style={{ padding: '8px 12px', fontSize: 13 }} onClick={() => mjAward(p.id, 6000)}>+6 000</button>
                       </span>
                     </div>
                   );
@@ -741,8 +885,10 @@ export default function Player() {
         </div>
       )}
 
+      {/* Contenu REMONTE (2026-07-26) : tout etait centre verticalement, ce qui gaspille l'ecran sur un
+          petit telephone et repousse les boutons hors de portee du pouce. */}
       {phase === 'prep' && (
-        <div className={`center pw-prep${pwSeq === 'charge' ? ' shake' : ''}`} style={{ gap: 14, ...(av ? { ['--cc' as any]: CATEGORY_COLORS[av.cat] } : {}) }}>
+        <div className={`center pw-prep${pwSeq === 'charge' ? ' shake' : ''}`} style={{ gap: 12, justifyContent: 'flex-start', paddingTop: 'clamp(10px,3vh,26px)', ...(av ? { ['--cc' as any]: CATEGORY_COLORS[av.cat] } : {}) }}>
           <span className="eyebrow">Manche {round.index + 1} / {round.total}</span>
           <h2 className="title-xl">Pouvoirs</h2>
           <span className="url">à activer avant la musique</span>
@@ -789,17 +935,22 @@ export default function Player() {
                   <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
                     <span className="muted" style={{ fontWeight: 700 }}>🎧 {round.rushPlayerName || runner?.name || 'Un joueur'} est au contre-la-montre</span>
                     <span className="muted" style={{ fontSize: 13 }}>Morceau {round.trackNo}{runner ? ` · ${fmtAud(runner.score)} aud. · ${runner.tracks} ✓` : ''}</span>
-                    <span className="muted" style={{ fontSize: 12, opacity: .7 }}>Le Survivor est solo — tu regardes.</span>
+                    <span className="muted" style={{ fontSize: 12, opacity: .7 }}>Le Survivor est solo · tu regardes.</span>
+                    {/* Les spectateurs restaient TOTALEMENT passifs pendant tout un run (2026-07-26) :
+                        on leur rend au moins la roue de réactions, qui s'affiche sur la TV. */}
+                    <ReactionWheel set={REACTIONS} onSend={(i) => sendReaction(i)} />
                   </div>
                 ) : (
                   <>
                     <span className="muted">Morceau {round.trackNo} · {mine ? `${fmtAud(mine.score)} aud. · ${mine.tracks} ✓` : '0 aud.'}</span>
                     <form onSubmit={submitRush} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre OU artiste — les 2 = + de temps" autoFocus />
+                      <input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre OU artiste · les 2 = + de temps" autoFocus autoCorrect="off" autoCapitalize="off" spellCheck={false} autoComplete="off" name="guess" enterKeyHint="send" />
                       <button className="btn warm big send" type="submit">Envoyer</button>
                       <button className="btn" type="button" onClick={rushPass}>Passer · −{Math.round((round.passMs || 8000) / 1000)} s</button>
                     </form>
-                    {feedback && (feedback.added ? <p className="feedback good">{feedback.full ? 'Titre + artiste ! ' : 'Bien ! '}+{fmtAud(feedback.points || 0)} · +{Math.round(feedback.added / 1000)} s{feedback.full ? '' : ' — les 2 pour +'}</p> : feedback.removed ? <p className="feedback bad">Passé · −{Math.round(feedback.removed / 1000)} s</p> : feedback.wrong ? <p className="feedback bad">Pas ça… réessaie</p> : null)}
+                    {feedback && (feedback.added ? <p className="feedback good">{feedback.full ? 'Titre + artiste ! ' : 'Bien ! '}+{fmtAud(feedback.points || 0)} · +{Math.round(feedback.added / 1000)} s{feedback.full ? '' : ' · les 2 pour +'}</p> : feedback.removed ? <p className="feedback bad">Passé · −{Math.round(feedback.removed / 1000)} s</p> : feedback.wrong ? <p className="feedback bad">Pas ça… réessaie</p>
+                      /* on ENCHAÎNE vite en Survivor : sans ça on ne sait jamais ce que c'était (2026-07-26) */
+                      : feedback.rushPrev ? <p className={`feedback ${feedback.rushGood ? 'good' : 'bad'}`}>C'était <b>{feedback.rushPrev}</b></p> : null)}
                   </>
                 )}
               </>
@@ -819,7 +970,7 @@ export default function Player() {
                       return <button key={i} className={cls} disabled={answered} onClick={() => submitQuiz(i)}>{vf ? c : <><b>{String.fromCharCode(65 + i)}</b>{c}</>}</button>;
                     })}
                   </div>
-                  {quizPick !== null && <p className="muted">Réponse enregistrée — résultat à la révélation.</p>}
+                  {quizPick !== null && <p className="muted">Réponse enregistrée · résultat à la révélation.</p>}
                 </>
               );
             })()
@@ -829,26 +980,26 @@ export default function Player() {
             buzz === 'mine' ? (<>
                 <h2 className="title-xl" style={{ margin: 0 }}>À toi ! Réponds vite</h2>
                 {buzzEndsAt > 0 && <div className="big-num" style={{ color: buzzLeft <= 3 ? 'var(--ember)' : 'var(--fluo)', lineHeight: 1 }}>{buzzLeft}</div>}
-                <form onSubmit={submitBuzzerAnswer} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}><input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre ET artiste — les deux !" autoFocus /><button className="btn warm big send" type="submit">Valider</button></form>
+                <form onSubmit={submitBuzzerAnswer} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}><input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre ET artiste · les deux !" autoFocus autoCorrect="off" autoCapitalize="off" spellCheck={false} autoComplete="off" name="guess" enterKeyHint="send" /><button className="btn warm big send" type="submit">Valider</button></form>
               </>)
               : buzz === 'locked' ? (<><svg width="46" height="46" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--muted)' }}><rect x="5" y="10.5" width="14" height="9.5" rx="2" stroke="currentColor" strokeWidth="1.7" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.7" /></svg><p className="muted">{buzzMsg}</p></>)
-                : jamMs > 0 ? (<><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti — tu pourras buzzer dans un instant.</p></>)
+                : jamMs > 0 ? (<><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti · tu pourras buzzer dans un instant.</p></>)
                 : (<><h2 className="title-xl" style={{ marginBottom: 4 }}>Reconnais le son</h2><p className="muted" style={{ marginTop: 0, marginBottom: 0 }}>Le plus rapide prend le mic</p><button className="buzzer" onClick={doBuzz} style={{ marginTop: 'clamp(40px, 20vh, 190px)' }}>BUZZ</button></>)
           ) : jamMs > 0 ? (
-            <><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti — tu peux répondre dans un instant.</p></>
+            <><h2 className="title-xl">Brouillé…</h2><div className="big-num" style={{ color: 'var(--fluo)' }}>{Math.ceil(jamMs / 1000)}</div><p className="muted">Quelqu'un t'a ralenti · tu peux répondre dans un instant.</p></>
           ) : submitted ? (
             <div className="sent">
               <span className="sent-check">
                 <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12.5l5 5L20 6.5" /></svg>
               </span>
               <h2 className="title-xl">Réponse envoyée</h2>
-              <p className="muted" style={{ maxWidth: 320 }}>Le résultat tombe à la révélation. Reste chaud — écoute bien la suite.</p>
+              <p className="muted" style={{ maxWidth: 320 }}>Le résultat tombe à la révélation. Reste chaud · écoute bien la suite.</p>
             </div>
           ) : (
-            <><h2 className="title-xl">À toi de jouer</h2><form onSubmit={submitAnswer} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}><input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre et/ou artiste…" autoFocus /><div className="bar"><i style={{ width: `${frac * 100}%` }} /></div><button className="btn warm big send" type="submit">Valider</button></form></>
+            <><h2 className="title-xl">À toi de jouer</h2><form onSubmit={submitAnswer} style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }}><input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre et/ou artiste…" autoFocus autoCorrect="off" autoCapitalize="off" spellCheck={false} autoComplete="off" name="guess" enterKeyHint="send" /><div className="bar"><i style={{ width: `${frac * 100}%` }} /></div><button className="btn warm big send" type="submit" disabled={sending || !guess.trim()}>Valider</button></form></>
           )}
-          {hint && <p className="feedback" style={{ color: 'var(--v1)' }}>Indice — Titre : <b>{hint.title}</b> · Artiste : <b>{hint.artist}</b></p>}
-          {feedback && round.mode !== 'rush' && <p className={`feedback ${feedback.points ? 'good' : 'bad'}`}>{feedback.points ? `Bien vu ! +${fmtAud(feedback.points)}` : 'Pas ça…'}</p>}
+          {hint && <p className="feedback" style={{ color: 'var(--v1)' }}>Indice · Titre : <b>{hint.title}</b> · Artiste : <b>{hint.artist}</b></p>}
+          {feedback && round.mode !== 'rush' && <p className={`feedback ${feedback.points ? 'good' : 'bad'}`}>{feedback.msg ? feedback.msg : feedback.points ? `Bien vu ! +${fmtAud(feedback.points)}` : 'Pas ça…'}</p>}
           {powerMsg && <p className="feedback" style={{ color: 'var(--ember)' }}>{powerMsg}</p>}
         </div>
       )}
@@ -878,7 +1029,7 @@ export default function Player() {
             <p className="feedback bad" style={{ margin: '2px 0 0' }}>{myResult.hitBy.map((h: any) => `−${fmtAud(h.amount)} ${h.type === 'sabotage' ? 'raflés' : h.type === 'tax' ? 'taxés' : 'volés'} par ${h.by}`).join(' · ')}</p>
           )}
           {/* réactions/taunts — s'affichent sur l'écran hôte ; le joueur reste actif entre les manches */}
-          <ReactionDock set={REACTIONS} onSend={(i) => sendReaction(i)} />
+          <ReactionWheel set={REACTIONS} onSend={(i) => sendReaction(i)} />
           </div>
       )}
 
@@ -886,16 +1037,20 @@ export default function Player() {
       {phase === 'battle-intro' && battle?.a && (() => {
         const amDuelist = meId.current === battle.a?.id || meId.current === battle.b?.id;
         return (
-          <div className="ph-center">
-            <span className="eyebrow" style={{ color: 'var(--fluo)' }}>⚔ Clash !</span>
-            <div className="row" style={{ gap: 16, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}><RMed id={battle.a.avatar} size={72} /><b style={{ color: 'var(--green)' }}>{battle.a.name}</b></div>
-              <span className="ph-pickname" style={{ color: 'var(--muted)' }}>VS</span>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}><RMed id={battle.b.avatar} size={72} /><b style={{ color: 'var(--fluo)' }}>{battle.b.name}</b></div>
+          /* INTRO refaite (2026-07-26) : elle etait « timide, minimum syndical », avec une icone d'emoji
+             et des portraits de 72 px serres l'un contre l'autre. On reprend le carton VS de la TV, en
+             format telephone : gros mot CLASH, portraits qui arrivent de chaque cote, VS au centre. */
+          <div className="ph-center ph-clashintro">
+            <div className="phc-word">CLASH</div>
+            <div className="phc-flavor">{battle.flavor === 'rattrapage' ? 'Duel pour la remontée' : 'Duel au sommet'}</div>
+            <div className="phc-vs">
+              <div className="phc-side a"><RMed id={battle.a.avatar} size={96} /><b className="phc-name">{battle.a.name}</b></div>
+              <span className="phc-vsword">VS</span>
+              <div className="phc-side b"><RMed id={battle.b.avatar} size={96} /><b className="phc-name">{battle.b.name}</b></div>
             </div>
             {amDuelist
-              ? <h2 className="ph-q" style={{ color: 'var(--bad)' }}>C'est TON clash !</h2>
-              : <p className="lead">Prépare ton pari…</p>}
+              ? <h2 className="phc-you">C'est ton clash</h2>
+              : <p className="phc-wait">Prépare ton pari…</p>}
           </div>
         );
       })()}
@@ -903,7 +1058,7 @@ export default function Player() {
       {phase === 'battle-bet' && battle?.a && (() => {
         const amDuelist = meId.current === battle.a?.id || meId.current === battle.b?.id;
         const secs = Math.max(0, Math.ceil(((battle.endsAt || 0) - now) / 1000));
-        const bonus = battle.betBonus ?? 4000;
+        const bonus = battle.betBonus ?? 2400;
         if (amDuelist) {
           const opp = meId.current === battle.a.id ? battle.b : battle.a;
           return (
@@ -918,7 +1073,7 @@ export default function Player() {
         const pickName = betPick === 'a' ? battle.a.name : battle.b.name;
         return (
           <div className="ph-center">
-            <span className="eyebrow" style={{ color: 'var(--fluo)' }}>⚔ Clash — parie sur le vainqueur</span>
+            <span className="eyebrow" style={{ color: 'var(--fluo)' }}>⚔ Clash · parie sur le vainqueur</span>
             {betPick ? (
               <>
                 <div className="ph-mid">Tu paries sur</div>
@@ -960,12 +1115,14 @@ export default function Player() {
           <div className="ph-center">
             <span className="eyebrow" style={{ color: 'var(--bad)' }}>⚔ C'est ton clash</span>
             <h2 className="ph-duelq">Trouve avant <span style={{ color: 'var(--fluo)' }}>{opp.name}</span> !</h2>
-            <div className="ph-reward"><b>+{fmtAud(battle.win ?? 20000)}</b><span>au 1ᵉʳ qui trouve</span></div>
+            <div className="ph-reward"><b>+{fmtAud(battle.win ?? 12000)}</b><span>{battle.eased ? <>plus que l'<b>artiste</b> !</> : <>au 1ᵉʳ qui a <b>titre + artiste</b></>}</span></div>
             <form style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12 }} onSubmit={submitBattleAnswer}>
-              <input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre et/ou artiste…" autoFocus />
+              <input className="field" value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Titre et/ou artiste…" autoFocus autoCorrect="off" autoCapitalize="off" spellCheck={false} autoComplete="off" name="guess" enterKeyHint="send" />
               <button className="btn warm big send" type="submit">Valider</button>
             </form>
-            {feedback?.battleWin ? <p className="feedback good">Trouvé ! On attend la révélation…</p> : feedback?.battleWrong ? <p className="feedback bad">Pas ça… réessaie</p> : null}
+            {feedback?.battleWin ? <p className="feedback good">Trouvé ! On attend la révélation…</p>
+              : feedback?.battleHalf ? <p className="feedback good">Bien vu ! Il te manque <b>{feedback.battleHalf}</b></p>
+              : feedback?.battleWrong ? <p className="feedback bad">Pas ça… réessaie</p> : null}
           </div>
         );
       })()}
@@ -982,8 +1139,9 @@ export default function Player() {
             <div className="ph-center">
               {won && <span className="sent-check" style={{ background: 'var(--green)' }}>{check}</span>}
               <h2 className="ph-q">{d.draw ? 'Égalité !' : won ? 'Clash remporté !' : 'Clash perdu'}</h2>
-              {track && <p className="lead">C'était <b style={{ color: 'var(--txt)' }}>{track.title}</b> — {track.artist}</p>}
-              <div className="big-num" style={{ color: won ? 'var(--green)' : 'var(--muted)' }}>{won ? `+${fmtAud(d.points || 0)}` : d.draw ? '±0' : '+0'}</div>
+              {track && <p className="lead">C'était <b style={{ color: 'var(--txt)' }}>{track.title}</b> · {track.artist}</p>}
+              {/* En cas de NUL les 2 duellistes touchent la consolation (BATTLE_DRAW) : afficher « ±0 » était faux. */}
+              <div className="big-num" style={{ color: won || d.draw ? 'var(--green)' : 'var(--muted)' }}>{won || d.draw ? `+${fmtAud(d.points || 0)}` : '+0'}</div>
             </div>
           );
         }
@@ -993,19 +1151,24 @@ export default function Player() {
           return (
             <div className="ph-center">
               <h2 className="ph-q">{d.draw ? 'Égalité !' : `${winnerName} gagne`}</h2>
-              {track && <p className="lead">C'était <b style={{ color: 'var(--txt)' }}>{track.title}</b> — {track.artist}</p>}
+              {track && <p className="lead">C'était <b style={{ color: 'var(--txt)' }}>{track.title}</b> · {track.artist}</p>}
               <p className="muted">Tu n'avais pas parié.</p>
             </div>
           );
         }
         const won = !!myBet.won;
-        const pickName = betPick === 'a' ? battle.a.name : betPick === 'b' ? battle.b.name : winnerName;
+        const cancelled = !!myBet.cancelled; // nul → pari ANNULÉ (rien de perdu), ce n'est pas un « Raté »
+        // `myBet.pick` vient du SERVEUR → survit à une reconnexion pendant battle-reveal (betPick local, lui,
+        // est remis à null par battle:intro). betPick reste le repli.
+        const pick = myBet.pick || betPick;
+        const pickName = pick === 'a' ? battle.a.name : pick === 'b' ? battle.b.name : winnerName;
         return (
           <div className="ph-center">
             <span className="sent-check" style={{ background: won ? 'var(--green)' : 'var(--surf3)' }}>{won ? check : cross}</span>
-            <h2 className="ph-q">{won ? 'Bien vu !' : d.draw ? 'Égalité…' : 'Raté'}</h2>
+            <h2 className="ph-q">{won ? 'Bien vu !' : cancelled ? 'Égalité…' : 'Raté'}</h2>
             <p className="lead">Tu avais parié sur <b style={{ color: won ? 'var(--green)' : 'var(--fluo)' }}>{pickName}</b></p>
-            {track && <p className="muted" style={{ fontSize: 13 }}>C'était <b style={{ color: 'var(--txt)' }}>{track.title}</b> — {track.artist}</p>}
+            {track && <p className="muted" style={{ fontSize: 13 }}>C'était <b style={{ color: 'var(--txt)' }}>{track.title}</b> · {track.artist}</p>}
+            {cancelled && <p className="muted" style={{ fontSize: 13 }}>Personne n'a trouvé · pari annulé, rien de perdu.</p>}
             <div className="big-num" style={{ color: won ? 'var(--green)' : 'var(--muted)' }}>{won ? `+${fmtAud(d.betBonus || 0)}` : '+0'}</div>
           </div>
         );
@@ -1017,7 +1180,7 @@ export default function Player() {
         const mine = res.find((r: any) => r.id === meId.current);
         return (
         <div className="center" style={{ gap: 12, justifyContent: 'flex-start', paddingTop: 'clamp(14px,5vh,40px)' }}>
-          <span className="eyebrow">Survivor — terminé</span>
+          <span className="eyebrow">Survivor · terminé</span>
           <div className="big-num" style={{ color: 'var(--fluo)' }}>{mine ? fmtAud(mine.score) : 0}</div>
           <h2 className="title-xl" style={{ margin: 0 }}>{mine ? `${mine.tracks} morceaux trouvés` : 'Fini'}</h2>
           {mine && <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 14, padding: '10px 16px' }}>Record #{mine.rank} au classement mondial</div>}
@@ -1041,40 +1204,28 @@ export default function Player() {
         const st = series?.standings || [];
         const mine = st.find((s: any) => s.id === meId.current);
         const seriesRank = st.findIndex((s: any) => s.id === meId.current) + 1;
+        // REPARTITION (2026-07-26) : tout etait centre verticalement -> sur un petit telephone le contenu
+        // flottait au milieu et les boutons tombaient hors de portee du pouce. On remonte le bloc et on
+        // laisse les actions descendre en bas (`.floatbar` plus loin).
         return (
-        <div className="center" style={{ gap: 14 }}>
-          <span className="eyebrow">{multi ? `Partie ${series.gamesPlayed} — terminée` : 'Terminé'}</span>
+        <div className="center" style={{ gap: 10, justifyContent: 'flex-start', paddingTop: 'clamp(8px,2.5vh,22px)' }}>
+          <span className="eyebrow">{multi ? `Partie ${series.gamesPlayed} · terminée` : 'Terminé'}</span>
           <div className="big-num" style={myRank === 1 ? { color: 'var(--fluo)' } : undefined}>{myRank === 1 ? <svg width="96" height="96" viewBox="0 0 24 24" fill="none"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" stroke="currentColor" strokeWidth="1.3" /><path d="M7 5H4v1.6A3.4 3.4 0 0 0 7.3 10M17 5h3v1.6A3.4 3.4 0 0 1 16.7 10" stroke="currentColor" strokeWidth="1.3" /><path d="M9.5 13v3.3h5V13M8 20.5h8M10.4 16.8h3.2v3.7h-3.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg> : myRank}</div>
           <h2 className="title-xl">{myRank === 1 ? 'Tu as gagné !' : `${myRank}ᵉ place`}</h2>
           <p className="muted">{fmtAud(me?.score ?? 0)} auditeurs</p>
           <div className="gpill" style={{ marginTop: 6, color: 'var(--fluo)', borderColor: 'var(--fluo)', fontSize: 14, padding: '10px 16px' }}>{certif(me?.score ?? 0, finalRounds || round.total).label}</div>
 
           {/* réagir sur la TV au moment du podium/trophées (jeu de réactions de fin, différent des taunts de manche) */}
-          <ReactionDock set={END_REACTIONS} onSend={(i) => sendReaction(i, true)} />
+          <ReactionWheel set={END_REACTIONS} onSend={(i) => sendReaction(i, true)} />
 
-          {myAwards.length > 0 && (
-            <div className="awards" style={{ marginTop: 4 }}>
-              {myAwards.map((a: any) => (
-                <div className="award" key={a.id}>
-                  <span className="aw-ic" style={{ position: 'relative' }}><img src={`/trophies/${a.id}.png`} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 1 }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /><span dangerouslySetInnerHTML={{ __html: awardIcon(a.icon) }} /></span>
-                  <div className="aw-title">{a.title}</div>
-                  <div className="aw-desc">{a.desc}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* ⚠️ PAS DE TROPHÉES SUR LE TÉLÉPHONE (2026-07-26). La remise des trophées est une SÉQUENCE sur la TV :
+              les afficher aussi sur les tél les SPOILE · tout le monde a déjà lu son trophée sur son écran avant
+              que la télé ne le révèle, et la séquence tombe à plat. Ils restent enregistrés (`pl_trophies`, plus
+              haut) pour la galerie « Le palmarès » ; c'est la TV qui les décerne. */}
 
-          {newChars.length > 0 && (
-            <div className="glass pad" style={{ marginTop: 4, maxWidth: 380, borderColor: 'var(--fluo)', boxShadow: '0 0 24px -8px var(--fluo)' }}>
-              <div className="eyebrow" style={{ color: 'var(--fluo)' }}>🔓 Nouveau{newChars.length > 1 ? 'x' : ''} challenger{newChars.length > 1 ? 's' : ''} débloqué{newChars.length > 1 ? 's' : ''} !</div>
-              {newChars.map((id) => (
-                <div key={id} className="row" style={{ gap: 8, marginTop: 6, justifyContent: 'center' }}>
-                  <RMed id={id} size={30} /><b style={{ color: 'var(--txt)' }}>{avatarById(id)?.name}</b>
-                </div>
-              ))}
-              <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>Dispo dès ton prochain choix de rappeur.</p>
-            </div>
-          )}
+          {/* ⚠️ L'ARRIVÉE DU CHALLENGER EST UNE SÉQUENCE TV (2026-07-26) : annoncer le nom ici le SPOILE avant que
+              la télé ne le révèle. Le déblocage reste enregistré (`UNLOCK_KEY`, plus haut) et le rappeur est
+              dispo au prochain choix ; c'est la TV qui fait l'annonce. */}
 
           {multi && mine && (
             <div className="series-wrap" style={{ maxWidth: 380 }}>
@@ -1094,7 +1245,7 @@ export default function Player() {
             ) : (
               <p className="feedback good" style={{ margin: 0 }}>{replayVote ? 'Tu veux rejouer' : 'Tu passes'} · <button className="exit-link" style={{ display: 'inline' }} onClick={() => castReplayVote(!replayVote)}>changer d'avis</button></p>
             )}
-            {replayTally.total > 0 && <p className="muted" style={{ fontSize: 13, margin: 0 }}><b style={{ color: 'var(--fluo)' }}>{replayTally.yes}</b>/{replayTally.total} pour rejouer{replayTally.yes === replayTally.total ? ' — ça relance !' : ''}</p>}
+            {replayTally.total > 0 && <p className="muted" style={{ fontSize: 13, margin: 0 }}><b style={{ color: 'var(--fluo)' }}>{replayTally.yes}</b>/{replayTally.total} pour rejouer{replayTally.yes === replayTally.total ? ' · ça relance !' : ''}</p>}
           </div>
         </div>
         );

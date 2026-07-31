@@ -167,6 +167,11 @@ button, input { font-family: inherit; }
   font-family: var(--disp); font-weight: 700; font-size: 14px; color: #fff; border: 1px solid rgba(255, 255, 255, .22); }
 .med img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 16%; display: block; }
 .pname { font-weight: 700; font-size: 14px; }
+/* ECHELLE TV : au lobby on lit les pseudos depuis le canape (2026-07-26). */
+.host-scope .pcard .pname, .app .players .pcard .pname { font-size: 26px; }
+.app .players .pcard { padding: 14px 18px; gap: 14px; }
+.app .players .pcard .muted { font-size: 17px !important; }
+@media (max-width: 900px) { .app .players .pcard .pname { font-size: 15px; } .app .players .pcard { padding: 10px 12px; gap: 10px; } .app .players .pcard .muted { font-size: 12px !important; } }
 
 /* disque + chrono (host) */
 .disc { width: clamp(120px, 22vw, 190px); height: clamp(120px, 22vw, 190px); border-radius: 50%; display: grid; place-items: center;
@@ -222,8 +227,10 @@ button, input { font-family: inherit; }
 .lead { font-family: var(--ui); font-weight: 600; font-size: clamp(15px, 2.1vw, 23px); line-height: 1.34; color: var(--txt);
   text-wrap: balance; max-width: 46ch; margin: 0; }
 .lead b, .lead strong { color: var(--fluo); font-weight: 800; }
-.answered { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
-.abadge { font-size: 12px; font-weight: 800; padding: 6px 11px; border-radius: 2px; background: rgba(166, 255, 0, .14); color: var(--green); border: 1px solid rgba(166, 255, 0, .4); text-transform: uppercase; }
+.answered { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+/* ÉCHELLE TV : /host se regarde de loin — 12 px ne se lisaient pas (retour soirée 2026-07-26). */
+.abadge { font-size: 26px; font-weight: 800; padding: 10px 20px; border-radius: 2px; background: rgba(166, 255, 0, .14); color: var(--green); border: 1px solid rgba(166, 255, 0, .4); text-transform: uppercase; letter-spacing: .01em; }
+@media (max-width: 900px) { .abadge { font-size: 15px; padding: 7px 13px; } }  /* téléphone : on garde compact */
 
 .feedback { font-weight: 800; font-size: 15px; }
 .feedback.good { color: var(--green); }
@@ -262,7 +269,9 @@ button, input { font-family: inherit; }
 @keyframes eqb { 0%, 100% { height: 22%; } 50% { height: 100%; } }
 .playmeta { font-family: var(--disp); font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); font-size: clamp(13px, 1.6vw, 18px); }
 /* punchline sous le vinyle (Blind Test) : descendue ~10% pour respirer par rapport à l'égaliseur animé au-dessus */
-.playquip { margin-top: clamp(6px, 1.4vh, 14px); color: var(--muted2); }
+.playquip { margin-top: clamp(10px, 2vh, 22px); color: var(--txt); opacity: .92;
+  font-family: var(--ui); font-weight: 700; text-transform: none; letter-spacing: 0;
+  font-size: clamp(22px, 2.3vw, 34px); }  /* Satoshi, plus grand, meilleur contraste (2026-07-26) */
 @media (prefers-reduced-motion: reduce) { .vinyl .grooves.spin, .eq7 i { animation: none; } }
 
 /* reveal board AGRANDI pour la TV (lisible de loin) */
@@ -582,7 +591,15 @@ button, input { font-family: inherit; }
 /* padding-top ET -bottom : sinon l'anneau de sélection (box-shadow 2px) est rogné en haut par le scroll */
 .cs-catrow { display: flex; gap: 10px; overflow-x: auto; padding: 6px 2px 8px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
 .cs-catrow::-webkit-scrollbar { height: 5px; }
-.cs-catrow::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .15); border-radius: 3px; }
+/* AFFORDANCE DE SCROLL (retour soirée 2026-07-26 : « beaucoup n'ont pas compris qu'on pouvait scroller »).
+   La 4e vignette qui dépasse ne suffisait pas. On rend la barre VISIBLE au repos (au lieu d'un gris à 15 %
+   qu'on ne voit pas sur fond anthracite) et on ajoute un dégradé de bord qui dit « ça continue à droite ». */
+.cs-catrow::-webkit-scrollbar-thumb { background: rgba(166, 255, 0, .45); border-radius: 3px; }
+.cs-catrow::-webkit-scrollbar-track { background: rgba(255, 255, 255, .06); border-radius: 3px; }
+.cs-catrow { scrollbar-width: thin; scrollbar-color: rgba(166,255,0,.45) rgba(255,255,255,.06); }
+.cs-catwrap { position: relative; }
+.cs-catwrap::after { content: ''; position: absolute; top: 0; right: 0; bottom: 12px; width: 46px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--bg, #0c0d0f) 88%); opacity: .95; }
 /* largeur responsive : ~3,3 vignettes visibles → une 4e "dépasse" toujours un peu (indice de scroll),
    quelle que soit la largeur/densité du tel. Reste dans une range contrôlée (min/max). */
 .cs-catrow .cs-cell { flex: 0 0 auto; width: calc((100% - 24px) / 3.3); min-width: 84px; max-width: 116px; scroll-snap-align: start; }
@@ -716,8 +733,12 @@ button, input { font-family: inherit; }
 .qz-opt:disabled { cursor: default; }
 .qz-opt.right { border-color: var(--green); background: rgba(166, 255, 0, .16); color: var(--txt); box-shadow: 0 0 0 1px var(--green); }
 .qz-opt.wrong { border-color: var(--bad); background: rgba(255, 84, 104, .12); }
-.qz-opt.host { cursor: default; font-family: var(--disp); text-transform: uppercase; font-size: 17px; }
-.qz-opt.host b { color: var(--fluo); font-family: var(--disp); margin-right: 6px; }
+.qz-opt.host { cursor: default; font-family: var(--ui); text-transform: none; font-weight: 700;
+  font-size: clamp(24px, 2.1vw, 34px); line-height: 1.25; padding: 20px 24px; }
+/* 2026-07-26 : etait en 17 px, en MAJUSCULES et en police a empattements -> « on ne lit pas super bien de
+   loin ». Les capitales se lisent moins vite, et les reponses peuvent etre longues : on passe en casse
+   normale, police d'interface, et la taille suit l'ecran. */
+.qz-opt.host b { color: var(--fluo); font-family: var(--disp); margin-right: 12px; flex: 0 0 auto; }
 /* Vrai/Faux : deux gros choix côte à côte, centrés, sans lettre A/B */
 .qz-grid.vf { grid-template-columns: 1fr 1fr; max-width: 420px; }
 .qz-grid.host.vf { grid-template-columns: 1fr 1fr; max-width: 560px; }
@@ -744,6 +765,8 @@ button, input { font-family: inherit; }
 
 /* ===== trophées de fin de partie (façon TowerFall Ascension) ===== */
 .awards { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; width: 100%; max-width: 860px; }
+.final .awards { max-width: 1500px; gap: 26px; }
+.final .award { max-width: 420px; min-width: 300px; gap: 12px; padding: 22px 20px; }
 .award { position: relative; flex: 1 1 180px; max-width: 244px; min-width: 158px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 7px;
   padding: 16px 14px 15px; background: var(--surf2); border: 1px solid var(--line2); border-top: 2px solid var(--fluo); border-radius: 4px; box-shadow: var(--etch);
   animation: awin .4s cubic-bezier(.2,.7,.3,1) both; }
@@ -801,7 +824,6 @@ button, input { font-family: inherit; }
 .radio-sub b { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--fluo); font-size: 18px; }
 .radio-sub span { font-size: 13.5px; color: var(--muted2); letter-spacing: .04em; }
 .radio-chip { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-family: var(--ui); font-weight: 700; font-size: 15px; padding: 11px 18px; border-radius: 5px; cursor: pointer; color: var(--txt); background: var(--surf2); border: 1px solid var(--line2); transition: background .14s, border-color .14s; }
-.chip-mine .rc-star { color: var(--fluo); font-size: 1.15em; line-height: 0; }
 .radio-chip:hover { background: var(--surf3); border-color: var(--line3); }
 .radio-chip.on { border-color: var(--fluo); color: var(--fluo); background: rgba(228,255,26,.08); }
 .radio-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(184px, 1fr)); gap: 18px; padding-bottom: 20px; }
@@ -1110,9 +1132,11 @@ button, input { font-family: inherit; }
 .tro-title { font-size: clamp(32px, 3.6vw, 54px); letter-spacing: -.01em; }
 .tro-sub { text-align: center; margin: 6px 0 30px; font-size: 17px; }
 .troph { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 14px 12px 13px;
-  background: var(--surf2); border: 1px solid var(--line2); border-top: 2px solid var(--fluo); border-radius: 4px; }
+  /* La bordure haute FLUO de 2 px faisait une « bande jaune » sur chaque carte, en grille c'etait un mur
+     de traits jaunes (retour 2026-07-26). On garde un liseré, mais discret et de la couleur de la carte. */
+  background: var(--surf2); border: 1px solid var(--line2); border-top: 1px solid color-mix(in srgb, var(--fluo) 35%, var(--line2)); border-radius: 4px; }
 .troph-grid.big .troph { gap: 0; padding: 0 0 20px; border: 1px solid var(--line2); border-radius: 12px; overflow: hidden; background: #090a0d; } /* carte IMAGE-FORWARD : illustration carrée en grand, fondue en bas dans ce fond, titre/desc dessous */
-.troph.salty { border-top-color: var(--ember); }
+.troph.salty { border-top-color: color-mix(in srgb, var(--ember) 35%, var(--line2)); }
 .troph.locked { opacity: .5; border-top-color: var(--line2); }
 .troph.got { box-shadow: 0 0 0 1px var(--fluo); }
 .troph-ic { position: relative; color: var(--fluo); display: grid; place-items: center; width: 100%; aspect-ratio: 1; min-height: 0; overflow: hidden; border-radius: 8px; background: rgba(0, 0, 0, .3); } /* case CARRÉE qui accueille l'illustration (repli SVG centré si pas d'image) */
@@ -1157,8 +1181,10 @@ button, input { font-family: inherit; }
 .waitcard-name { font-family: var(--disp); font-size: 20px; font-weight: 700; text-transform: uppercase; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .waitcard-epi { font-size: 12px; color: var(--muted); font-style: italic; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .waitcard-power { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.08); }
-.wc-plabel { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-.wc-pname { font-family: var(--disp); font-size: 15px; font-weight: 700; color: var(--ember); text-transform: uppercase; }
+/* Salle d'attente : le NOM du pouvoir devient le surtitre, l'EFFET est la ligne qu'on lit (2026-07-26). */
+.wc-plabel { font-family: var(--ui); font-size: 12px; letter-spacing: .02em; text-transform: none; color: var(--ember); font-weight: 800; }
+.wc-peff { font-family: var(--ui); font-size: 15px; font-weight: 600; color: var(--txt); line-height: 1.4; margin-top: 2px; }
+.wc-peff b { font-weight: 800; color: var(--fluo); }
 
 /* ---- déblocable pas encore débloqué : « ? » dans la vignette du roster (character-select / hub) ---- */
 .cs-mq { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--disp); font-weight: 700; font-size: 40px; color: var(--muted2); z-index: 2; }
@@ -1193,7 +1219,16 @@ button, input { font-family: inherit; }
 .qz-opt.pick { border-color: var(--fluo); box-shadow: 0 0 0 1px var(--fluo); background: rgba(228,255,26,.06); color: var(--txt); }
 
 /* ---- QUI A RÉPONDU QUOI (reveal TV) ---- */
-.verdicts { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 840px; }
+/* ZERO SCROLL A 8 JOUEURS (2026-07-26 : « je suis oblige de scroller pour voir au-dela de la 5e place »).
+   Plutot qu'un defilement automatique - qui oblige a ATTENDRE pour lire les derniers - on passe la liste
+   en 2 COLONNES des qu'il y a plus de 5 joueurs : tout le monde est visible d'un coup, sans rien bouger. */
+.verdicts { display: grid; grid-template-columns: 1fr; gap: 8px; width: 100%; max-width: 840px; align-content: start; }
+.verdicts:has(> :nth-child(5)) { grid-template-columns: 1fr 1fr; max-width: 1480px; gap: 8px 20px; }
+.verdicts:has(> :nth-child(5)) .verdict { padding: 7px 12px; gap: 10px; }
+.verdicts:has(> :nth-child(5)) .verdict .v-who { font-size: 26px; }
+.verdicts:has(> :nth-child(5)) .verdict .v-ans { font-size: 24px; }
+.verdicts:has(> :nth-child(5)) .verdict .med { width: 38px !important; height: 38px !important; }
+@media (max-width: 900px) { .verdicts:has(> :nth-child(5)) { grid-template-columns: 1fr; max-width: 840px; } }
 .verdict { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 6px;
   background: var(--surf); border: 1px solid var(--line2); border-left: 4px solid rgba(255,255,255,.1);
   animation: rowin .3s ease both; }
@@ -1223,10 +1258,10 @@ button, input { font-family: inherit; }
   background: var(--surf2); border: 1px solid var(--line2); animation: awin .32s cubic-bezier(.2,.7,.3,1) both; }
 .pwcard .med { flex: 0 0 auto; }
 .pwcard .pwtxt { min-width: 0; }
-.pwcard .pwhead { font-size: 14.5px; color: var(--txt); }
+.pwcard .pwhead { font-size: 15px; color: var(--muted); margin-top: 5px; }
 .pwcard .pwhead b { font-family: var(--disp); font-weight: 700; text-transform: uppercase; }
 .pwcard .pwname { font-family: var(--disp); font-weight: 700; text-transform: uppercase; color: var(--ember); }
-.pwcard .pweff { font-size: 13.5px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
+.pwcard .pweff { font-size: 22px; color: var(--txt); line-height: 1.3; font-weight: 600; } /* TV : c'est l'EFFET qu'on lit de loin, pas le nom du pouvoir */
 .pwfeed.compact { gap: 7px; }
 /* encart explicatif (1re manche uniquement) — comprendre les pouvoirs sans alourdir */
 .pw-explain { width: 100%; max-width: 760px; margin: 2px auto 0; padding: 16px 20px; border-radius: 8px;
@@ -1242,13 +1277,14 @@ button, input { font-family: inherit; }
   background: rgba(228,255,26,.08); border: 1px solid rgba(228,255,26,.35); font-size: 13px; color: var(--txt); }
 .pwchip .med { flex: 0 0 auto; }
 .pwchip b { font-family: var(--disp); font-weight: 700; text-transform: uppercase; color: var(--ember); }
+.pwchip span { font-size: 17px; }  /* TV : lisible de loin */
 
 /* ===== BANNIÈRES GÉANTES d'activation d'un pouvoir (TV, vues de loin) — EMPILÉES si plusieurs activations simultanées ===== */
 .powerblasts { position: fixed; left: 0; right: 0; top: clamp(52px, 14vh, 170px); z-index: 360; display: flex; flex-direction: column; align-items: center; gap: clamp(8px, 1.4vh, 16px); pointer-events: none; padding: 0 3vw; }
 .powerblast { width: 100%; display: flex; justify-content: center; animation: pb-life 3.4s cubic-bezier(.16,.9,.28,1) forwards;
   will-change: transform, opacity; } /* promu en calque GPU → l'ombre se rasterise UNE fois, l'anim ne re-peint plus (fin de la saccade) */
 .powerblast .pb-inner { position: relative; display: flex; align-items: center; gap: clamp(16px, 2.4vw, 34px);
-  max-width: min(1180px, 94vw); padding: clamp(16px, 2.2vw, 30px) clamp(24px, 3.4vw, 52px);
+  width: min(1180px, 92vw); padding: clamp(16px, 2.2vw, 30px) clamp(24px, 3.4vw, 52px);
   background: linear-gradient(100deg, rgba(10,11,14,.97), rgba(16,18,22,.94)); border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--pc, var(--fluo)) 60%, transparent);
   /* ombres allégées (blur réduit) + calque isolé : bien moins coûteux que l'ancien double blur 80px/60px repeint chaque frame */
@@ -1259,14 +1295,16 @@ button, input { font-family: inherit; }
   transform: translateX(-120%); animation: pb-shine 1.5s ease-out .18s 1; }
 .powerblast .pb-av { flex: 0 0 auto; } /* drop-shadow retiré (coûteux à composer) — l'anneau coloré du .med suffit */
 .powerblast .pb-av .med { border: 2px solid color-mix(in srgb, var(--pc, var(--fluo)) 70%, transparent); }
-.powerblast .pb-txt { min-width: 0; text-align: left; }
-.powerblast .pb-line { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
-  font-size: clamp(20px, 2.4vw, 34px); color: var(--muted2); line-height: 1; }
+.powerblast .pb-txt { min-width: 0; flex: 1 1 auto; text-align: left; }
+/* L'EFFET est la ligne principale : c'est la seule chose qui apprend quelque chose au joueur.
+   Le nom du pouvoir et l'auteur passent en surtitre discret (2026-07-26). Pas de MAJUSCULES sur
+   l'effet : une phrase entiere en capitales se lit mal, surtout de loin. */
+.powerblast .pb-line { font-family: var(--ui); font-weight: 700; text-transform: none; letter-spacing: 0;
+  font-size: clamp(16px, 1.5vw, 24px); color: var(--muted); line-height: 1.2; }
 .powerblast .pb-who { color: #fff; }
-.powerblast .pb-power { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; line-height: .96;
-  font-size: clamp(40px, 7vw, 96px); color: var(--pc, var(--fluo)); margin: 2px 0 0;
-  text-shadow: 0 2px 30px color-mix(in srgb, var(--pc, var(--fluo)) 40%, transparent); }
-.powerblast .pb-eff { font-family: var(--disp); font-weight: 700; font-size: clamp(17px, 2vw, 30px); color: var(--txt); margin-top: 8px; line-height: 1.12; text-wrap: balance; }
+.powerblast .pb-power { color: var(--pc, var(--fluo)); font-weight: 800; }
+.powerblast .pb-eff { font-family: var(--ui); font-weight: 700; font-size: clamp(26px, 3.2vw, 46px);
+  color: var(--txt); margin-top: 6px; line-height: 1.16; text-wrap: balance; }
 @keyframes pb-life {
   0%   { opacity: 0; transform: translateY(-26px) scale(.9); }
   7%   { opacity: 1; transform: translateY(0) scale(1.04); }
@@ -1280,10 +1318,12 @@ button, input { font-family: inherit; }
 
 /* ===== PAGE D'INTRO POUVOIRS (TV) — montrée 1x par type de partie à pouvoirs dans le salon ===== */
 .pintro { position: fixed; inset: 0; z-index: 380; display: grid; place-items: center; padding: 4vh 4vw;
-  background: radial-gradient(120% 90% at 50% 0%, rgba(12,14,18,.86), rgba(6,7,9,.97)); animation: pintro-in .4s ease both; }
+  /* FOND OPAQUE (2026-07-26) : on voyait le lobby par transparence derriere le prechargement et la page
+     d'intro pouvoirs - « assez degueulasse, cette page on y est plus ». Ces ecrans REMPLACENT la page. */
+  background: #0a0b0c; animation: pintro-in .4s ease both; }
 .pintro-card { position: relative; z-index: 1; width: min(920px, 94vw); display: flex; flex-direction: column; align-items: center; gap: clamp(14px, 2.4vh, 26px); text-align: center; }
 .pintro-eyebrow { font-family: var(--ui); font-weight: 800; letter-spacing: .18em; text-transform: uppercase; font-size: clamp(12px, 1.3vw, 16px); color: var(--fluo); }
-.pintro-title { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; line-height: .9; font-size: clamp(48px, 9vw, 120px); margin: 0; }
+.pintro-title { font-family: var(--disp); font-weight: 700; text-transform: none; letter-spacing: -.01em; line-height: .95; font-size: clamp(44px, 7.5vw, 96px); margin: 0; } /* plus de MAJUSCULES forcees (2026-07-26) */
 .pintro-title .d { color: var(--fluo); }
 .pintro-steps { display: flex; flex-direction: column; gap: clamp(10px, 1.8vh, 18px); width: 100%; max-width: 760px; }
 .pintro-step { display: flex; align-items: center; gap: clamp(14px, 2vw, 24px); text-align: left; padding: clamp(12px, 1.6vh, 18px) clamp(16px, 2vw, 24px); border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid var(--line2); }
@@ -1292,6 +1332,11 @@ button, input { font-family: inherit; }
 .pintro-step > div > span { display: block; color: var(--muted); font-size: clamp(14px, 1.5vw, 20px); margin-top: 3px; }
 .pintro-go { margin-top: clamp(6px, 1.4vh, 16px); min-width: min(360px, 80vw); }
 @keyframes pintro-in { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: scale(1); } }
+/* Préchargement des extraits (TV) — échelle télé : gros compteur, grosse barre, lisible du canapé */
+.preload-count { font-family: var(--disp); font-weight: 700; font-size: clamp(40px, 6vw, 88px); line-height: 1; color: var(--fluo); font-variant-numeric: tabular-nums; }
+.preload-bar { width: min(760px, 88vw); height: clamp(14px, 1.6vh, 22px); border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid var(--line2); overflow: hidden; }
+.preload-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--fluo), #7CFF3A); box-shadow: 0 0 24px rgba(166,255,0,.45); transition: width .18s linear; }
+.preload-sub { color: var(--muted); font-size: clamp(15px, 1.7vw, 24px); max-width: 760px; }
 
 /* ===== REVEAL — COUPS DE POUVOIR (TV) : pourquoi un score bouge sans (bonne) réponse ===== */
 .powerplays { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 8px; }
@@ -1315,18 +1360,23 @@ button, input { font-family: inherit; }
 .pw-emblem { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 16px 18px; border-radius: 16px;
   background: radial-gradient(120% 120% at 50% 0%, color-mix(in srgb, var(--cc) 16%, transparent), rgba(10,11,14,.7)); border: 1px solid color-mix(in srgb, var(--cc) 55%, transparent);
   box-shadow: inset 0 0 40px -18px var(--cc), 0 0 30px -16px var(--cc); }
-.pw-emblem-name { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; font-size: clamp(19px, 6vw, 26px); line-height: 1.02; color: var(--cc); text-shadow: 0 2px 14px color-mix(in srgb, var(--cc) 40%, transparent); }
-.pw-emblem-fx { font-size: 15.5px; color: color-mix(in srgb, var(--txt) 80%, transparent); line-height: 1.5; }
+.pw-emblem-name { font-family: var(--ui); font-weight: 800; text-transform: none; letter-spacing: .02em;
+  font-size: 14px; line-height: 1.2; color: var(--cc); opacity: .9; }
+/* L'EFFET domine, le NOM devient un surtitre : « ce qui compte, c'est quoi le pouvoir, je dois pouvoir le
+   comprendre facilement ». Avant : nom 26 px en capitales, effet 15,5 px en gris. */
+.pw-emblem-fx { font-size: 20px; color: var(--txt); line-height: 1.4; font-weight: 600; margin-top: 4px; }
 .pw-emblem-fx b { color: var(--txt); font-weight: 800; }
-.pw-slam { position: relative; overflow: hidden; width: 100%; height: 74px; border-radius: 14px; cursor: pointer; border: 2px solid var(--cc);
-  font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: clamp(22px, 6.4vw, 30px); color: var(--ink);
-  background: var(--cc); box-shadow: 0 10px 0 color-mix(in srgb, var(--cc) 45%, #000), inset 0 6px 14px rgba(255,255,255,.35);
-  transition: transform .09s ease, box-shadow .09s ease; -webkit-tap-highlight-color: transparent; }
+.pw-slam { position: relative; overflow: hidden; width: 100%; height: 68px; border-radius: 3px; cursor: pointer; border: 1px solid var(--cc);
+  font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: clamp(20px, 5.6vw, 26px); color: var(--ink);
+  /* Ombre 3D « bouton de jouet » RETIREE (2026-07-26) : hors DA street/anguleuse du projet. Angles nets,
+     halo discret a la place, comme les autres boutons de l'app. */
+  background: var(--cc); box-shadow: 0 0 22px -8px color-mix(in srgb, var(--cc) 70%, transparent);
+  transition: transform .09s ease, box-shadow .09s ease, filter .09s ease; -webkit-tap-highlight-color: transparent; }
 .pw-slam:disabled { filter: grayscale(.5) brightness(.7); cursor: default; box-shadow: none; }
-.pw-slam:not(:disabled):active { transform: translateY(10px); box-shadow: 0 0 0 color-mix(in srgb, var(--cc) 45%, #000); }
-/* pendant la charge le bouton passe disabled : on FIGE l'état "enfoncé" (translateY + ombre plate) pour éviter le saut de hauteur
-   visuel au clic — sinon il perd :active + l'ombre 3D (box-shadow:none) et "remonte" de 10px. Spécificité (0,2,1) > :disabled (0,1,1). */
-.pw-prep.shake .pw-slam { transform: translateY(10px); box-shadow: 0 0 0 color-mix(in srgb, var(--cc) 45%, #000); filter: none; }
+.pw-slam:not(:disabled):active { transform: scale(.985); filter: brightness(1.12); }
+/* pendant la charge le bouton passe disabled : on FIGE son état pressé pour éviter le saut visuel au clic
+   (il perdrait :active). Spécificité (0,2,1) > :disabled (0,1,1). Plus d'ombre 3D depuis le 2026-07-26. */
+.pw-prep.shake .pw-slam { transform: scale(.985); filter: brightness(1.12); }
 .pw-slam-lbl { position: relative; z-index: 1; }
 .pw-slam-charge { position: absolute; inset: 0; z-index: 0; background: rgba(255,255,255,.9); transform: scaleX(0); transform-origin: left; }
 .pw-slam:disabled .pw-slam-charge { display: none; }
@@ -1398,7 +1448,14 @@ button, input { font-family: inherit; }
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; animation: irid 7s linear infinite; }
 
 /* grille des certifs : chacun repart avec sa plaque, GROS pour la TV */
-.certgrid { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 740px; }
+/* Grille des certifs du podium : en colonne unique, les cartes passaient sous la ligne de flottaison des
+   6 joueurs et etaient avalees par l'`overflow: hidden` du conteneur. Elle se replie maintenant. */
+.certgrid { display: grid; grid-template-columns: 1fr; gap: 10px; width: 100%; max-width: 740px; }
+/* Les cartes sont groupees par PALIER de certif : au plus 6 (Espoir -> Diamant). On replie a 2 puis
+   3 colonnes pour que le pire cas tienne sous le podium sans passer sous la ligne de flottaison. */
+.certgrid:has(> :nth-child(3)) { grid-template-columns: 1fr 1fr; max-width: 1180px; gap: 10px 20px; }
+.certgrid:has(> :nth-child(5)) { grid-template-columns: 1fr 1fr 1fr; max-width: 1460px; gap: 10px 18px; }
+.certgrid:has(> :nth-child(5)) .certcard { padding: 10px 14px; }
 .certcard { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-radius: 8px;
   background: var(--surf); border: 1px solid var(--line2); }
 .certcard.lead { border-color: var(--fluo); background: rgba(228,255,26,.06); box-shadow: 0 0 0 1px var(--fluo); }
@@ -1414,17 +1471,21 @@ button, input { font-family: inherit; }
 .certcard .cc-score span { font-size: .48em; color: var(--muted2); font-family: var(--ui); }
 
 /* TROPHÉES — showcase : un seul trophée à la fois, GROS, lisible à 3 m (formes CARRÉES, notre DA) */
-.tro-stage { display: flex; flex-direction: column; align-items: center; gap: clamp(14px,2.4vh,26px); width: 100%; max-width: 660px; margin: 0 auto; }
-.tro-card { min-height: clamp(320px,52vh,470px); width: 100%; display: flex; align-items: center; justify-content: center; }
+.tro-stage { display: flex; flex-direction: column; align-items: center; gap: clamp(10px,1.6vh,20px);
+  width: 100%; max-width: 900px; margin: 0 auto;
+  /* ZERO SCROLL : la scene tient dans la hauteur dispo, quoi qu'il arrive (2026-07-26). */
+  max-height: calc(100vh - 150px); overflow: hidden; }
+.tro-card { min-height: 0; flex: 1 1 auto; width: 100%; display: flex; align-items: center; justify-content: center; }
 .tro-trophy { display: flex; flex-direction: column; align-items: center; gap: clamp(10px,1.6vh,18px); text-align: center; }
 .tro-trophy.pop { animation: tropop .5s cubic-bezier(.2,.9,.3,1.3) both; }
 @keyframes tropop { 0% { opacity: 0; transform: scale(.62) translateY(16px); } 60% { opacity: 1; transform: scale(1.05); } 100% { opacity: 1; transform: none; } }
-.tro-ill { width: clamp(190px,32vh,290px); height: clamp(190px,32vh,290px); border-radius: 3px; display: grid; place-items: center; flex: 0 0 auto; color: #ffd76b;
+.tro-ill { width: clamp(190px,32vh,360px); height: clamp(190px,32vh,360px); border-radius: 3px; display: grid; place-items: center; flex: 0 0 auto; color: #ffd76b;
   background: radial-gradient(120% 120% at 50% 18%, rgba(255,215,107,.18), rgba(0,0,0,.42));
   border: 1px solid rgba(255,215,107,.42); box-shadow: 0 22px 64px -20px #000, 0 0 72px -14px rgba(255,215,107,.6), inset 0 0 44px -20px rgba(255,215,107,.55); }
 .tro-ill svg { width: 60%; height: 60%; filter: drop-shadow(0 0 14px rgba(255,215,107,.55)); }
 .tro-name { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; line-height: 1; color: #fff; font-size: clamp(30px,5.4vw,58px); text-shadow: 0 2px 26px rgba(0,0,0,.6); }
-.tro-desc { font-family: var(--ui); font-weight: 600; color: var(--muted); font-size: clamp(16px,2.4vw,24px); line-height: 1.35; max-width: 520px; }
+.tro-desc { font-family: var(--ui); font-weight: 500; color: var(--muted); font-size: clamp(19px,2.2vw,28px);
+  line-height: 1.3; max-width: 820px; }  /* moins gras + gris : le TITRE doit dominer (2026-07-26) */
 .tro-winner { display: inline-flex; align-items: center; gap: 12px; margin-top: clamp(6px,1.2vh,12px); padding: 8px 18px 8px 9px; border-radius: 2px; background: rgba(255,255,255,.05); border: 1px solid var(--line2); }
 .tro-winner .med { border: 2px solid var(--fluo); box-shadow: 0 0 18px -4px var(--fluo); }
 .tro-wlabel { font-family: var(--ui); font-weight: 700; text-transform: uppercase; letter-spacing: .1em; font-size: 11px; color: var(--muted2); }
@@ -1432,7 +1493,7 @@ button, input { font-family: inherit; }
 .tro-dots { display: flex; gap: 8px; }
 .tro-dots i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.16); transition: all .2s; }
 .tro-dots i.on { background: var(--fluo); box-shadow: 0 0 10px -1px var(--fluo); }
-.tro-nav { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.tro-nav { display: flex; flex-direction: column; align-items: center; gap: 10px; flex: 0 0 auto; padding-top: 6px; }
 .tro-cd { display: flex; flex-direction: column; align-items: center; gap: 7px; font-family: var(--ui); font-weight: 700; font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted2); }
 .tro-cd b { color: var(--fluo); font-variant-numeric: tabular-nums; }
 .tro-cdbar { display: block; width: 190px; height: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
@@ -1440,9 +1501,24 @@ button, input { font-family: inherit; }
 
 /* PODIUM 3 marches (top 3) — un seul disque fusionné, prénom adaptatif, aud./manche */
 .podium { display: flex; justify-content: center; align-items: flex-end; gap: clamp(12px,2.4vw,34px); width: 100%; max-width: 900px; margin: 6px auto 4px; }
-.pod { display: flex; flex-direction: column; align-items: center; gap: 9px; flex: 0 0 auto; animation: podin .55s cubic-bezier(.2,.8,.3,1.15) both; }
-.pod.p2 { animation-delay: .1s; } .pod.p1 { animation-delay: .25s; } .pod.p3 { animation-delay: 0s; }
-@keyframes podin { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+.pod { display: flex; flex-direction: column; align-items: center; gap: 9px; flex: 0 0 auto; animation: podin .7s cubic-bezier(.16,.9,.28,1.2) both; }
+/* MISE EN SCENE DU PODIUM (2026-07-26 : « pas du tout ce cote epique, ils arrivent tous d'un coup »).
+   On monte les marches DANS L'ORDRE : 3e, puis 2e, puis le vainqueur, avec un vrai ecart entre chaque.
+   Le 1er arrive en dernier, plus haut et plus lentement, et sa marche pulse une fois. */
+.pod.p3 { animation-delay: .15s; } .pod.p2 { animation-delay: .95s; } .pod.p1 { animation-delay: 1.75s; animation-duration: .9s; }
+@keyframes podin { from { opacity: 0; transform: translateY(46px) scale(.94); } 70% { opacity: 1; } to { opacity: 1; transform: none; } }
+.pod.p1 .ped { animation: pedpulse .5s ease-out 2.5s both; }
+@keyframes pedpulse { 0% { box-shadow: 0 0 0 0 rgba(228,255,26,.55); } 100% { box-shadow: 0 0 0 26px rgba(228,255,26,0); } }
+/* le classement sous le podium arrive APRES la mise en scene, ligne par ligne */
+.final .board .prow { animation: prowin .4s ease both; }
+.final .board .prow:nth-child(1) { animation-delay: 2.6s; } .final .board .prow:nth-child(2) { animation-delay: 2.7s; }
+.final .board .prow:nth-child(3) { animation-delay: 2.8s; } .final .board .prow:nth-child(4) { animation-delay: 2.9s; }
+.final .board .prow:nth-child(5) { animation-delay: 3.0s; } .final .board .prow:nth-child(6) { animation-delay: 3.1s; }
+.final .board .prow:nth-child(7) { animation-delay: 3.2s; } .final .board .prow:nth-child(8) { animation-delay: 3.3s; }
+@keyframes prowin { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .pod, .final .board .prow { animation: none !important; } .pod.p1 .ped { animation: none !important; }
+}
 .pod .p-cert { margin-bottom: 2px; }
 .pod .p-name { font-family: var(--disp); font-weight: 700; text-transform: uppercase; line-height: 1; letter-spacing: -.01em; }
 .pod .p-aud { font-family: var(--disp); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
@@ -1543,10 +1619,10 @@ button, input { font-family: inherit; }
 /* trophées de fin AGRANDIS sur la TV (host final) — lisibles à 3 m */
 .final .awards { max-width: 1020px; gap: 16px; }
 .final .award { min-width: 200px; max-width: 300px; padding: 20px 18px 18px; }
-.final .award .aw-ic svg { width: 44px; height: 44px; }
-.final .award .aw-title { font-size: 19px; }
-.final .award .aw-who { font-size: 17px; }
-.final .award .aw-desc { font-size: 13.5px; }
+.final .award .aw-ic svg { width: 96px; height: 96px; }   /* TV : on a la place, l'image doit porter */
+.final .award .aw-title { font-size: 30px; line-height: 1.05; }
+.final .award .aw-who { font-size: 25px; }
+.final .award .aw-desc { font-size: 19px; line-height: 1.35; }
 
 /* ---- révélation SÉQUENTIELLE des trophées (suspense façon étoiles bonus Mario Party) ---- */
 .awards-stage { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
@@ -1568,7 +1644,8 @@ button, input { font-family: inherit; }
 /* ---- "Réponse envoyée" : badge check ANGULAIRE au-dessus, centré, aéré ---- */
 .sent { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: clamp(8px, 6vh, 56px); }
 .sent-check { width: 84px; height: 84px; border-radius: 8px; display: grid; place-items: center; color: var(--ink);
-  background: var(--fluo); box-shadow: 3px 3px 0 rgba(0,0,0,.5), 0 0 30px -6px var(--fluo); animation: sentpop .45s cubic-bezier(.2,.8,.3,1.4) both; }
+  /* OMBRE PORTEE RETIREE (demandee 2 fois : 2026-07-26 14:02 puis 15:54). On garde uniquement le halo. */
+  background: var(--fluo); box-shadow: 0 0 30px -6px var(--fluo); animation: sentpop .45s cubic-bezier(.2,.8,.3,1.4) both; }
 @keyframes sentpop { 0% { opacity: 0; transform: scale(.6) rotate(-8deg); } 60% { transform: scale(1.08) rotate(2deg); } 100% { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .sent-check { animation: none; } }
 
@@ -1621,3 +1698,209 @@ button, input { font-family: inherit; }
 .bzv-3 .buzzer::before{ animation:sonarwave 1.6s cubic-bezier(.15,.6,.25,1) infinite; }
 /* 4 — v4 + liseré fluo plus vif */
 .bzv-4 .buzzer::before{ border:3px solid rgba(166,255,0,.85); animation:sonarwave 1.6s cubic-bezier(.15,.6,.25,1) infinite; }
+
+/* D'où viennent les points quand le joueur n'a pas trouvé (révélation) — 2026-07-26 */
+.verdict .v-why { font-size: 17px; font-weight: 700; color: var(--ember); margin-top: 3px; }
+@media (max-width: 900px) { .verdict .v-why { font-size: 13px; } }
+
+/* ===== RÉCAP DE SÉRIE (toute la soirée) — échelle TV (2026-07-26) =====
+   Il était écrit à la même taille qu'un tableau desktop : illisible depuis le canapé. */
+.board.big { gap: 8px; }
+/* Au-dela de 5 joueurs les lignes sortaient de l'ecran et disparaissaient sans un mot (mesure : rang 8 a
+   y=1074 sur un ecran de 900). On replie en 2 colonnes et on resserre la ligne. */
+.board.big:has(> :nth-child(6)) { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; }
+.board.big:has(> :nth-child(6)) .prow { padding: 12px 20px; }
+.board.big:has(> :nth-child(6)) .prow .who { font-size: 27px; gap: 12px; }
+.board.big:has(> :nth-child(6)) .prow .pts { font-size: 30px; }
+.board.big:has(> :nth-child(6)) .prow .med { width: 44px !important; height: 44px !important; }
+.board.big .prow { padding: 18px 24px; }
+.board.big .prow .who { gap: 18px; font-size: 34px; }
+.board.big .prow .rk { width: 46px; height: 46px; font-size: 24px; }
+.board.big .prow .pts { font-size: 38px; }
+.board.big .prow .pcert { font-size: 20px; padding: 6px 14px; }
+.board.big .prow .swins { font-size: 20px; margin-left: 12px; }
+.eyebrow.big { font-size: 22px; letter-spacing: .18em; }
+.gpill.serlead { font-size: 26px; padding: 14px 24px; }
+@media (max-width: 900px) {
+  .board.big .prow { padding: 11px 14px; }
+  .board.big .prow .who { gap: 11px; font-size: 16px; }
+  .board.big .prow .rk { width: 26px; height: 26px; font-size: 13px; }
+  .board.big .prow .pts { font-size: 18px; }
+  .board.big .prow .pcert { font-size: 12px; padding: 3px 8px; }
+  .board.big .prow .swins { font-size: 12px; margin-left: 6px; }
+  .eyebrow.big { font-size: 13px; }
+  .gpill.serlead { font-size: 14px; padding: 8px 14px; }
+}
+
+/* ===== ROUE DE RÉACTIONS (refonte 2026-07-26) =====
+   Modèle « quick chat » des jeux console : quartiers énormes visés à l'ANGLE, pas au pixel → on réagit
+   vite et mal, ce qui est exactement le but (avant : 3 appuis précis, personne ne réagissait). */
+.rwheel-wrap { position: relative; display: flex; justify-content: center; }
+.rwheel-fab { display: inline-flex; align-items: center; gap: 9px; padding: 13px 22px; border-radius: 999px;
+  background: var(--surf2); border: 1px solid var(--line2); color: var(--txt); font-weight: 800; font-size: 16px;
+  touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; }
+.rwheel-fab.on { border-color: var(--fluo); color: var(--fluo); }
+.rwheel-fab .rf-e { font-size: 20px; line-height: 1; }
+.rwheel-toast { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+  white-space: nowrap; padding: 7px 14px; border-radius: 999px; background: var(--fluo); color: var(--ink);
+  font-weight: 800; font-size: 14px; animation: rwToast .7s ease-out both; pointer-events: none; z-index: 3; }
+@keyframes rwToast { 0% { opacity: 0; transform: translate(-50%, 8px); } 20% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -10px); } }
+
+.rwheel-overlay { position: fixed; inset: 0; z-index: 80; background: rgba(6, 7, 8, .72); backdrop-filter: blur(2px); touch-action: none; }
+.rwheel { position: fixed; transform: translate(-50%, -50%); touch-action: none; animation: rwPop .16s ease-out both; }
+@keyframes rwPop { from { transform: translate(-50%, -50%) scale(.82); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+.rwheel svg { display: block; overflow: visible; }
+.rw-sect path { fill: rgba(22, 24, 27, .96); stroke: var(--line2); stroke-width: 1.5; transition: fill .08s linear; }
+.rw-sect.on path { fill: rgba(228, 255, 26, .22); stroke: var(--fluo); stroke-width: 2.5; }
+.rw-emoji { font-size: 30px; text-anchor: middle; dominant-baseline: middle; }
+.rw-label { font-size: 13px; font-weight: 800; text-anchor: middle; dominant-baseline: middle; fill: var(--txt); }
+.rw-sect.on .rw-label { fill: var(--fluo); }
+.rw-hub { fill: rgba(10, 11, 12, .98); stroke: var(--line2); stroke-width: 1.5; }
+.rw-hubtxt { font-size: 22px; text-anchor: middle; fill: var(--muted); }
+/* cibles tap (mode 2 appuis) : centrées sur chaque quartier, invisibles mais larges */
+.rw-taps { position: absolute; inset: 0; }
+.rw-tap { position: absolute; width: 92px; height: 92px; margin: -46px 0 0 -46px; border: 0; padding: 0;
+  background: transparent; border-radius: 50%; cursor: pointer; }
+.rw-tap.hub { left: 0; top: 0; width: 92px; height: 92px; }
+@media (max-width: 380px) { .rw-emoji { font-size: 25px; } .rw-label { font-size: 11px; } }
+
+/* ===== FIN DE RUN SURVIVOR (2026-07-26) : 2 ecrans, ZERO scroll =====
+   Regle posee par Alexandre : « Je dois jamais avoir a scroller. Jamais. » La liste du run s'adapte donc
+   au nombre de morceaux (taille + 2 colonnes au-dela de 7) au lieu de deborder. */
+.rend { position: relative; z-index: 1; height: 100vh; max-width: 1500px; margin: 0 auto;
+  padding: clamp(48px,7vh,80px) clamp(24px,4vw,56px) clamp(20px,3vh,32px);
+  display: flex; flex-direction: column; gap: clamp(14px,2.2vh,26px); overflow: hidden; }
+.rend-head { text-align: center; flex: 0 0 auto; }
+.rend-title { font-family: var(--disp); font-weight: 700; font-size: clamp(40px,6vw,86px); line-height: 1; margin: 6px 0 0; }
+.rend-sub { color: var(--muted); font-size: clamp(17px,1.7vw,24px); margin: 8px 0 0; }
+.rend-log { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr; gap: 6px; align-content: start; overflow: hidden; }
+.rend-log.two { grid-template-columns: 1fr 1fr; gap: 6px 26px; }
+.rend-row { display: flex; align-items: baseline; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--line); min-width: 0; }
+.rend-row .rend-mark { font-family: var(--disp); font-weight: 700; min-width: 26px; text-align: center; }
+.rend-row.ok .rend-mark { color: var(--green); } .rend-row.half .rend-mark { color: var(--ember); } .rend-row.ko .rend-mark { color: var(--muted2); }
+.rend-row .rend-track { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.rend-row .rend-track b { color: var(--txt); font-weight: 800; }
+.rend-row .rend-said { color: var(--muted); font-style: normal; }
+.rend-row .rend-pts { color: var(--fluo); font-weight: 800; white-space: nowrap; }
+.rend-log.lg .rend-row { font-size: 26px; } .rend-log.lg .rend-said { font-size: 20px; }
+.rend-log.md .rend-row { font-size: 21px; padding: 7px 12px; } .rend-log.md .rend-said { font-size: 17px; }
+.rend-log.sm .rend-row { font-size: 17px; padding: 5px 10px; } .rend-log.sm .rend-said { font-size: 14px; }
+.rend-log.lg .rend-row .rend-mark { font-size: 30px; } .rend-log.md .rend-row .rend-mark { font-size: 24px; } .rend-log.sm .rend-row .rend-mark { font-size: 19px; }
+.rend-board { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.rend-board .board { max-width: 1100px; width: 100%; }
+/* Les boutons FLOTTENT en bas avec un degrade dessous : ils ne doivent jamais passer sous la ligne de flottaison. */
+.rend-cta { flex: 0 0 auto; display: flex; gap: 14px; justify-content: center; padding-top: 14px;
+  background: linear-gradient(to top, var(--bg, #0c0d0f) 40%, transparent); }
+@media (max-width: 900px) { .rend-log.two { grid-template-columns: 1fr; } .rend-title { font-size: 34px; } }
+
+/* Trophee pas encore decroche : silhouette grise, nom masque, CONDITION seulement au survol (2026-07-26) */
+.troph.locked { opacity: .5; }
+.troph.locked .troph-ic { color: var(--muted2); filter: none; }
+.troph.locked .troph-title { color: var(--muted2); letter-spacing: .12em; }
+.troph.locked .troph-hint { opacity: 0; transition: opacity .15s; display: block; }
+/* Sur TELEPHONE il n'y a pas de survol : la condition reste lisible en permanence, mais en gris tres
+   discret - on cache le NOM du trophee, pas la facon de l'obtenir (2026-07-26). */
+@media (hover: none) { .troph.locked .troph-hint { opacity: .75; } }
+.troph.locked:hover { opacity: .95; }
+.troph.locked:hover .troph-hint { opacity: 1; }
+
+/* Consigne de la fenetre pouvoirs : lisible depuis le canape (2026-07-26) */
+.prep-hint { font-family: var(--ui); font-weight: 600; color: var(--txt); opacity: .85;
+  font-size: clamp(22px, 2.2vw, 32px); line-height: 1.3; max-width: 24ch; margin: 0; }
+@media (max-width: 900px) { .prep-hint { font-size: 15px; } }
+
+/* Revelation : la liste des reponses prend la place restante et s'y tient (2026-07-26). */
+.reveal-scope .verdicts { flex: 0 1 auto; min-height: 0; }
+.reveal-scope .row { flex: 0 0 auto; }
+.reveal-scope .title-xl { font-size: clamp(28px, 3.4vw, 46px); margin-bottom: 8px !important; }
+
+/* ZERO SCROLL sur les ecrans TV pleine page (2026-07-26).
+   ⚠️ Piege : `.wrap` est en `flex: 1` dans `.app`, donc `flex-basis: 0%` — lui poser une `height` n'a
+   AUCUN effet sur l'axe principal. C'est `.app` qu'il faut borner ; `.wrap` et `.center` heritent alors
+   de la place restante, a condition de leur donner `min-height: 0` (sinon un enfant flex refuse de
+   retrecir sous sa taille de contenu et deborde quand meme). */
+.app:has(.center.reveal-scope), .app:has(.center.final) { height: 100vh; min-height: 0; overflow: hidden; }
+.app:has(.center.reveal-scope) .wrap, .app:has(.center.final) .wrap { min-height: 0; }
+/* ⚠️ NE JAMAIS mettre `overflow: hidden` sur `.wrap` : le header de jeu (.topbar.gamebar) en SORT
+   volontairement (marges negatives : pleine largeur + colle au bord haut). Le clipper le ROGNE - c'est ce
+   qui a « pete le header sur tous les ecrans de jeu » le 2026-07-26. Le clipping va sur `.center` seul. */
+.app:has(.center.reveal-scope) .center.reveal-scope, .app:has(.center.final) .center.final { overflow: hidden; }
+/* La `.floatbar` est fixed et haute de ~150 px : sans reserve, elle recouvrait la fin des listes. */
+.app:has(.center.reveal-scope) .center.reveal-scope,
+.app:has(.center.final) .center.final { padding-bottom: 172px; }
+.app:has(.center.reveal-scope) .topbar.gamebar, .app:has(.center.final) .topbar.gamebar { flex: 0 0 auto; }
+.app:has(.center.reveal-scope) .center.reveal-scope,
+.app:has(.center.final) .center.final { max-height: none; min-height: 0; }
+/* ⚠️ PAS de `overflow: hidden` sur .verdicts : ca MASQUAIT le 5e joueur (89 px coupes) au lieu de faire
+   tenir la liste. Le contenu doit RENTRER (2 colonnes des 5 joueurs), pas etre rogne. */
+
+/* ===== SURVIVOR sur la TV : ecran SOLO (2026-07-26) =====
+   « Le Survivor c'est un mode solo, ca sert a rien d'afficher les autres joueurs. Tu pourrais afficher le
+   score du joueur en plus grand, ce qui laisserait la place d'afficher ce qu'il a mis. » */
+.rush-tv { width: 100%; max-width: 1200px; display: flex; flex-direction: column; align-items: center; gap: clamp(12px,2.2vh,24px); }
+.rush-main { display: flex; align-items: center; justify-content: center; gap: clamp(28px,5vw,80px); flex-wrap: wrap; }
+.rush-who { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rush-who .med { border: 4px solid var(--fluo); box-shadow: 0 0 44px -12px var(--fluo); }
+.rush-name { font-family: var(--ui); font-weight: 800; font-size: clamp(24px,2.4vw,34px); color: var(--txt); margin-top: 8px; }
+.rush-score { font-family: var(--disp); font-weight: 700; font-variant-numeric: tabular-nums; line-height: .95;
+  font-size: clamp(56px,7.5vw,110px); color: var(--fluo); text-shadow: 0 0 40px rgba(228,255,26,.32); }
+.rush-sub { font-family: var(--ui); font-weight: 600; font-size: clamp(16px,1.6vw,22px); color: var(--muted); }
+/* Le morceau precedent + ce que le joueur avait tape : il ne le voyait NULLE PART pendant le run. */
+.rush-prev { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; justify-content: center;
+  padding: 12px 26px; border-radius: 3px; background: var(--surf); border: 1px solid var(--line2); max-width: 100%; }
+.rush-prev .rp-lab { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  font-size: clamp(15px,1.5vw,20px); padding: 4px 12px; border-radius: 2px; }
+.rush-prev.ok .rp-lab { color: var(--ink); background: var(--green); }
+.rush-prev.ko .rp-lab { color: #fff; background: rgba(255,84,104,.85); }
+.rush-prev .rp-track { font-family: var(--ui); font-weight: 700; font-size: clamp(20px,2.1vw,30px); color: var(--txt); }
+.rush-prev .rp-said { font-family: var(--ui); font-weight: 500; font-size: clamp(16px,1.6vw,22px); color: var(--muted); }
+@media (max-width: 900px) { .rush-score { font-size: 44px; } .rush-prev { padding: 8px 14px; gap: 8px; } }
+
+/* Logo du header de jeu : etait fige a 24 px (illisible sur une TV vue de loin). */
+.hdr-logo { font-size: clamp(24px, 2.6vw, 40px); line-height: 1; }
+/* Header de jeu a hauteur CONSTANTE d'un ecran a l'autre (il passait de 115 a 92 px selon les pastilles
+   presentes, d'ou le « desequilibre visuel » signale). */
+.topbar.gamebar { min-height: 118px; align-items: center; }
+@media (max-width: 900px) { .hdr-logo { font-size: 20px; } .topbar.gamebar { min-height: 0; } }
+
+/* ===== BUZZER : la BORDURE reagit a la musique (2026-07-26) =====
+   L'egaliseur pose entre le disque et le texte a ete retire (demande deux fois). A la place, des anneaux
+   concentriques pulsent autour du disque, comme les cartes de mode de l'assistant. `--beat` est pousse par
+   la FFT quand la source est Deezer ; sinon (Spotify = flux DRM, non analysable) le pouls reste rythmique. */
+.buzzstage .buzzdisc.beat { position: relative; overflow: visible; }
+.buzzdisc.beat::before, .buzzdisc.beat::after {
+  content: ''; position: absolute; inset: -14px; border-radius: 50%; pointer-events: none;
+  border: 3px solid color-mix(in srgb, var(--fluo) 55%, transparent);
+  transform: scale(calc(1 + var(--beat, 0) * .06)); animation: buzzWave 1.9s ease-out infinite; }
+.buzzdisc.beat::after { inset: -30px; border-width: 2px; animation-delay: .5s;
+  border-color: color-mix(in srgb, var(--fluo) 30%, transparent); }
+@keyframes buzzWave {
+  0%   { opacity: .85; transform: scale(1); }
+  70%  { opacity: .12; transform: scale(1.13); }
+  100% { opacity: 0;   transform: scale(1.18); }
+}
+@media (prefers-reduced-motion: reduce) { .buzzdisc.beat::before, .buzzdisc.beat::after { animation: none; opacity: .5; } }
+
+/* ===== PLAFOND D'INTERLETTRAGE (2026-07-26) =====
+   Mesure de l'audit : 22 declarations a >= .1em, jusqu'a .5em. A 3 m, les mots se desagregent en lettres.
+   On plafonne les labels a .06em. (Le mot du salon garde un espacement, c'est un CODE qu'on epelle.) */
+.eyebrow, .eyebrow.big, .gmeta-round .gl, .salontag .lbl, .tro-cd, .tro-wlabel,
+.playmeta, .bt-fightpseudo, .bt-teamlab, .pintro-eyebrow, .wc-plabel { letter-spacing: .06em !important; }
+/* Plancher de lisibilite TV : rien sous 22 px sur les labels de l'ecran hote. */
+.tro-cd { font-size: 22px !important; text-transform: none; }
+.tro-wlabel { font-size: 22px !important; }
+.gmeta-round .gl { font-size: 18px; }
+.v-rap { font-size: 22px !important; text-transform: none; }
+.v-hits { font-size: 20px !important; }
+.pod .p-aud small { font-size: 22px !important; }
+.pod.p2 .p-name, .pod.p3 .p-name { font-size: 26px !important; }
+.pod.p2 .p-aud, .pod.p3 .p-aud { font-size: 26px !important; }
+.p-permanche { font-size: 20px !important; }
+/* Bouton primaire : il valait 15, 17 ou 23 px selon l'ecran. Une seule valeur sur la TV. */
+.app .btn.warm.big { font-size: 28px; padding: 18px 34px; }
+.tro-nav .btn.warm { font-size: 26px; padding: 16px 30px; max-width: none; }
+@media (max-width: 900px) {
+  .tro-cd, .tro-wlabel, .v-rap, .pod .p-aud small { font-size: 12px !important; }
+  .v-hits { font-size: 11px !important; }
+  .app .btn.warm.big { font-size: 17px; padding: 13px 22px; }
+}

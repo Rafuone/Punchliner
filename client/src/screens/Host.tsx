@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { socket } from '../socket';
-import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon, REACTIONS, END_REACTIONS, CERTIF_TIER, UNLOCKS, AVATARS, CATEGORY_COLORS } from '../data';
+import { avatarById, initials, DIFFICULTIES, MODES, REBALANCE, MENU_TRACKS, fmtAud, certif, awardIcon, REACTIONS, END_REACTIONS, CERTIF_TIER, UNLOCKS, UNLOCK_KEY, AVATARS, CATEGORY_COLORS, pointSource } from '../data';
 import ConfigWizard from './ConfigWizard';
 import HubBrowse from './HubBrowse';
-import ChallengerReveal from './ChallengerReveal';
+import ChallengerReveal, { UNLOCK_SONGS } from './ChallengerReveal';
 import GrungeBg from '../GrungeBg';
 import { sfx, sfxLoopStop, sfxStop, playAirhorns } from '../sfx';
-import { handleSpotifyRedirect, hasSpotifySession, initSpotifyPlayer, resetSpotifyPlayer, spotifyPlay, spotifyPause, spotifyTogglePlay, spotifyLogin, spotifyLogout, listenSpotifyAuth } from '../spotify';
+import { handleSpotifyRedirect, hasSpotifySession, initSpotifyPlayer, resetSpotifyPlayer, spotifyPlay, spotifyPause, spotifyLogin, spotifyLogout, listenSpotifyAuth, spotifyResolves, spotifyResume, spotifyIsPlaying } from '../spotify';
 
 // Démo (?revealdemo) : sélectionner n'importe quel challenger déblocable et rejouer son arrivée épique (vérif visuelle).
 const REVEAL_DEMO = typeof location !== 'undefined' && new URLSearchParams(location.search).has('revealdemo');
+// Machine de dev (l'écran tourne en local) → affordances de test discrètes, jamais visibles depuis un téléphone du LAN.
+const IS_LOCAL = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 
 // Fond du lobby (écran du code) : instru d'Alpha Wann. Crossfade vers la playlist (Bishok) à l'entrée du ConfigWizard.
 const LOBBY_TRACK = '/music/alphawann-philly-flingo.mp3';
@@ -121,11 +123,12 @@ export default function Host() {
   const troTimer = useRef<any>(null);
   const troCdRef = useRef<any>(null);
   const [series, setSeries] = useState<any>(null);       // cumul de la série (multi-parties)
-  const unlockedRef = useRef<Set<string>>(new Set((() => { try { return JSON.parse(localStorage.getItem('pl_unlocked') || '[]'); } catch { return []; } })())); // challengers DÉJÀ débloqués (persistés) → on ne les redéclenche jamais
+  const unlockedRef = useRef<Set<string>>(new Set((() => { try { return JSON.parse(localStorage.getItem(UNLOCK_KEY) || '[]'); } catch { return []; } })())); // challengers DÉJÀ débloqués (persistés) → on ne les redéclenche jamais
   const [pendingUnlock, setPendingUnlock] = useState<string | null>(null); // rappeur débloqué cette partie (arrivée du Challenger)
   const [showReveal, setShowReveal] = useState(false);   // l'overlay d'arrivée est en cours
   const [finalRounds, setFinalRounds] = useState(0);     // nb de manches de la partie (pour la certif)
-  const [rushEnd, setRushEnd] = useState<any>(null);     // fin de run Survivor (résultats + top 10 mondial)
+  const [rushEnd, setRushEnd] = useState<any>(null);
+  const [rushStep, setRushStep] = useState<'run' | 'board'>('run'); // fin de Survivor : 2 ecrans successifs     // fin de run Survivor (résultats + top 10 mondial)
   const [waiting, setWaiting] = useState(0);             // joueurs en salle d'attente
   const [error, setError] = useState('');
   const [joinBase, setJoinBase] = useState(window.location.origin.replace(/\/$/, ''));
@@ -138,6 +141,13 @@ export default function Host() {
   const previewRef = useRef<any>({ url: '', clipMs: 30000, startAt: 0 });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const preloadRef = useRef<HTMLAudioElement | null>(null); // extrait PRÉCHARGÉ (élément audio détaché) pendant le décompte → lecture sans latence au 'playing'
+  // ── PRÉCHARGEMENT DE TOUTE LA PARTIE (2026-07-25) ──────────────────────────────────────────────
+  // Le serveur envoie 'game:preload' avec les URL de TOUS les extraits de la partie. On les rapatrie en
+  // blob AVANT le coup d'envoi : au 'playing', `a.src` pointe sur un blob déjà en RAM → démarrage immédiat,
+  // plus de latence réseau. C'est ce délai qui bouffait les pouvoirs à fenêtre (Vald/NQNT : 4,5 s de
+  // brouillage comptées côté serveur — si le son partait 2 s en retard, il n'en restait que 2,5).
+  const blobsRef = useRef<Map<string, string>>(new Map()); // url serveur → blob: URL
+  const [preloading, setPreloading] = useState<{ done: number; total: number } | null>(null);
   const clipTimer = useRef<any>(null);
   const audioRetryRef = useRef<any>(null);   // relances programmées quand le son échoue (auto-réparation)
   const wantAudioRef = useRef(false);         // true = un extrait DOIT être en train de jouer (manche en cours)
@@ -175,6 +185,57 @@ export default function Host() {
   }
   function stopAllMusic() { buzzActiveRef.current = false; stopAllMusicExcept(); }
 
+  // Rapatrie une liste d'extraits en blob (4 en parallèle). `gate` = on prévient le serveur quand c'est
+  // prêt (il retient la manche 1 tant qu'on n'a pas répondu, plafond 25 s de son côté).
+  async function prefetchTracks(urls: string[], gate: boolean, spChecks: { i: number; title: string; artist: string; must?: boolean }[] = []) {
+    const todo = Array.from(new Set(urls.filter(Boolean))).filter((u) => !blobsRef.current.has(u));
+    // Côté Spotify, précharger = RÉSOUDRE l'URI de TOUS les titres maintenant (le cache de spotify.ts les garde)
+    // → au coup d'envoi, jouer n'est plus qu'un PUT. Sans ça la recherche se refaisait à chaque manche et la
+    // latence revenait manche après manche, blobs ou pas (soirée du 2026-07-26 : jusqu'à 12 s d'attente).
+    // Hors Spotify on ne résout rien : le pool est déjà restreint aux titres qui ont un extrait Deezer.
+    const checks = spReadyRef.current && spotifyOnRef.current ? spChecks : spChecks.filter((c) => c.must);
+    const total = todo.length + checks.length;
+    if (gate) setPreloading({ done: 0, total });
+    let done = 0, closed = false;
+    const missing: number[] = [];
+    const finish = () => { if (closed) return; closed = true; if (gate) { setPreloading(null); socket.emit('host:preloaded', { missing }); } };
+    const cap = gate ? setTimeout(finish, 20000) : null; // filet : un extrait qui traîne ne doit jamais bloquer la soirée
+    const tick = () => { done++; if (gate && !closed) setPreloading({ done, total }); };
+    const one = async (u: string) => {
+      try {
+        const r = await fetch(u);
+        if (r.ok) blobsRef.current.set(u, URL.createObjectURL(await r.blob()));
+      } catch { /* extrait injouable → on jouera l'URL directe, le serveur sait la servir */ }
+      tick();
+    };
+    const q = [...todo];
+    const dl = Promise.all(Array.from({ length: Math.min(4, q.length) }, async () => { while (q.length) await one(q.shift() as string); }));
+    const cq = [...checks];
+    const ck = Promise.all(Array.from({ length: Math.min(3, cq.length) }, async () => {
+      while (cq.length) {
+        const c = cq.shift() as { i: number; title: string; artist: string; must?: boolean };
+        const ok = spReadyRef.current ? await spotifyResolves(c.title, c.artist).catch(() => false) : false;
+        if (!ok && c.must) missing.push(c.i); // pas résolu ET sans repli Deezer → à remplacer (sinon manche muette)
+        tick();
+      }
+    }));
+    await Promise.all([dl, ck]);
+    if (cap) clearTimeout(cap);
+    finish();
+  }
+  // ARRIVÉE D'UN CHALLENGER : son morceau était demandé AU MOMENT de l'arrivée (fetch → résolution Deezer →
+  // rapatriement à froid) → plusieurs arrivées muettes ou avec ~10 s de retard (soirée 2026-07-26). On le
+  // rapatrie dès `game:final`, pendant le podium et les trophées : l'extrait est prêt quand la séquence part.
+  async function prefetchUnlockSong(charId: string) {
+    const song = UNLOCK_SONGS[charId]; if (!song) return;
+    try {
+      if (song.local) { await fetch(song.local); return; } // mp3 local → juste réchauffer le cache HTTP
+      const r = await fetch(`/api/unlock-preview?title=${encodeURIComponent(song.title)}&artist=${encodeURIComponent(song.artist)}`);
+      const url = (await r.json())?.preview || '';
+      if (url) await fetch(url); // rapatrie l'extrait MAINTENANT (le serveur le met en cache disque au passage)
+    } catch { /* pas de son à l'arrivée : la séquence garde son impact visuel + sirène de synthèse */ }
+  }
+  function dropBlobs() { for (const b of blobsRef.current.values()) { try { URL.revokeObjectURL(b); } catch {} } blobsRef.current.clear(); }
   // Lecture d'une manche : Spotify si activé+prêt (extrait au milieu contrôlé), sinon Deezer.
   function playRound(d: any) {
     if (buzzActiveRef.current) return; // un buzz est en cours → on NE (re)démarre PAS le son (il doit rester coupé le temps de la réponse)
@@ -185,7 +246,14 @@ export default function Host() {
       const gen = musicGenRef.current;
       spotifyPlay(d.sp.title, d.sp.artist, (d.startAt || 0) > 0).then((ok) => {
         if (gen !== musicGenRef.current || buzzActiveRef.current) { try { spotifyPause(); } catch {} return; } // résolution PÉRIMÉE (fin de manche/partie, buzz, autre source) → on recoupe : plus de piste Spotify fantôme
-        if (!ok) { usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); } // introuvable sur Spotify → repli Deezer
+        if (ok) return;
+        // Échec Spotify. S'il existe un extrait Deezer, on bascule. Sinon (titre « Spotify seulement », vérifié
+        // au préchargement) l'échec est forcément transitoire → UNE relance, sinon la manche serait muette.
+        if (d.preview) { usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); return; }
+        setTimeout(() => {
+          if (gen !== musicGenRef.current || buzzActiveRef.current) return;
+          spotifyPlay(d.sp.title, d.sp.artist, (d.startAt || 0) > 0).catch(() => {});
+        }, 700);
       });
     } else { stopAllMusicExcept('deezer'); usingSpotifyRef.current = false; playPreview(d.preview, d.startAt); }
   }
@@ -200,6 +268,13 @@ export default function Host() {
     if (!nv && !(spotifyOnRef.current && spState === 'ready')) return; // ne pas éteindre Deezer si Spotify n'est pas prêt à prendre le relais
     setDeezerOn(nv); deezerOnRef.current = nv;
   }
+
+  // ── SOURCE AUDIO DÉCLARÉE AU SERVEUR ────────────────────────────────────────────────────────────
+  // Spotify est le modèle par DÉFAUT : quand son lecteur est prêt, le serveur pioche dans TOUT le catalogue
+  // curé (un morceau se joue avec titre + artiste). Quand on retombe sur Deezer, il restreint aux titres qui
+  // ont un extrait résolu — sinon la manche serait muette. Le serveur ne peut pas le deviner : on l'annonce.
+  const spActive = spotifyOn && spState === 'ready';
+  useEffect(() => { if (code) socket.emit('host:source', { spotify: spActive }); }, [spActive, code]);
 
   // Spotify : au montage, on absorbe un éventuel retour OAuth (?code=) puis on (re)connecte le lecteur si session.
   useEffect(() => {
@@ -247,12 +322,33 @@ export default function Host() {
       setBattle(state.battle); setNow(Date.now()); setPhase(state.phase);
       if (state.phase === 'battle-play' && state.battle.preview) playRound(state.battle);
     } else setPhase('lobby');
+    applyShowroomHints(state);
+  }
+  // ── PONT SHOWROOM ──────────────────────────────────────────────────────────────────────────────
+  // Beaucoup d'écrans ne dépendent pas du serveur mais d'un état LOCAL (assistant, hub, étape de fin,
+  // arrivée du challenger) : sans ça, ils sont INATTEIGNABLES au banc d'essai et on ne peut pas les
+  // relire. Les champs `__*` ne sont JAMAIS envoyés par le serveur — en partie réelle, ce bloc est inerte.
+  const srHintRef = useRef<any>(null);
+  function applyShowroomHints(state: any) {
+    if (!state) return;
+    srHintRef.current = state;
+    if (state.__configuring !== undefined) setConfiguring(!!state.__configuring);
+    if (state.__hubView !== undefined) setHubView(state.__hubView || null);
+    if (state.__finalStep) setFinalStep(state.__finalStep);
+    if (state.__troIdx !== undefined) setTroIdx(state.__troIdx);
+    if (state.__intro) setIntro({ payload: state.__intro });
+    if (state.__preloading) setPreloading(state.__preloading);
+    if (state.__unlock) { setPendingUnlock(state.__unlock); setShowReveal(true); }
   }
 
   useEffect(() => {
     const boot = () => {
       let saved: any = null;
       try { saved = JSON.parse(localStorage.getItem(HKEY) || 'null'); } catch {}
+      // Le showroom (/showroom) écrit une session BIDON {code:'PUNCH', hostToken:'showroom'} dans CETTE clé
+      // (il pilote les vrais composants). HORS showroom on la purge : sinon le vrai /host resterait collé au
+      // salon fantôme « PUNCH ». Le test pathname préserve le fonctionnement du mock DANS le showroom.
+      if (saved?.hostToken === 'showroom' && !location.pathname.startsWith('/showroom')) { try { localStorage.removeItem(HKEY); } catch {} saved = null; }
       if (saved?.code && saved?.hostToken) {
         socket.emit('host:reclaim', saved, (res: any) => {
           if (res?.ok) { setCode(res.code); setPoolSize(res.poolSize); applyState(res.state); }
@@ -268,7 +364,11 @@ export default function Host() {
     socket.on('lobby', (d: any) => { setError(''); setPlayers(d.players); setRound((r: any) => ({ ...r, total: d.totalRounds })); setWaiting(d.waiting || 0); if (typeof d.poolSize === 'number') setPoolSize(d.poolSize); if (d.phase === 'lobby') { setPhase('lobby'); sfxLoopStop(); } });
     socket.on('round:prep', (d: any) => { stopAllMusicExcept('lobby'); if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setPrepEndsAt(d.endsAt || 0); setPrepReady({ count: 0, total: 0 }); setNow(Date.now()); setPhase('prep'); });
     socket.on('prep:ready', (d: any) => setPrepReady({ count: d.count || 0, total: d.total || 0 }));
-    socket.on('round:countdown', (d: any) => { sfxStop('scratch'); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total })); setCountdown(d.seconds || 5); setPhase('countdown');
+    // tout le monde a tranché (pouvoir activé ou passé) → le serveur coupe la fenêtre : on raccourcit le compteur
+    socket.on('prep:done', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); setPrepEndsAt(d.endsAt || Date.now()); setNow(Date.now() + clockOffset.current); });
+    // extraits de TOUTE la partie (ou du clash) → rapatriés en blob avant le coup d'envoi (cf. prefetchTracks)
+    socket.on('game:preload', (d: any) => { if (d?.start) dropBlobs(); prefetchTracks(d?.urls || [], !!d?.start, d?.sp || []); });
+    socket.on('round:countdown', (d: any) => { sfxStop('scratch'); setError(''); setReveal(null); setAnswered([]); setBuzzWinner(null); setPowerFeed([]); setRound((r: any) => ({ ...r, index: d.index ?? r.index, total: d.total ?? r.total, mode: d.mode || r.mode })); setCountdown(d.seconds || 5); setPhase('countdown');
       // PRÉCHARGE l'extrait pendant le décompte via un élément audio DÉTACHÉ (jamais joué, muet) : le navigateur met
       // le mp3 en cache (/api/preview renvoie Cache-Control public) → au 'playing', le vrai lecteur démarre sans latence.
       // N'interfère avec aucune source en cours (Deezer/Spotify) puisqu'on ne touche pas à audioRef.
@@ -281,20 +381,23 @@ export default function Host() {
     // Mode Survivor (contre-la-montre) : le son s'enchaîne automatiquement à chaque nouveau morceau
     socket.on('rush:host', (d: any) => { setError(''); setRound(d); if (d.scores) setPlayers(d.scores); setPhase('playing'); playRound(d); });
     socket.on('rush:state', (d: any) => { setRound(d); if (d.scores) setPlayers(d.scores); });
-    socket.on('rush:end', (d: any) => { stopAllMusic(); setRushEnd(d); setPhase('rushend'); });
+    socket.on('rush:end', (d: any) => { stopAllMusic(); setRushEnd(d); setRushStep('run'); setPhase('rushend'); });
     socket.on('player:answered', (d: any) => setAnswered((a) => (a.includes(d.name) ? a : [...a, d.name])));
     // buzz : le son SE COUPE (sinon on buzze, on écoute tranquille, puis on répond = trop facile)
     socket.on('buzz:winner', (d: any) => { if (typeof d.serverNow === 'number') clockOffset.current = d.serverNow - Date.now(); buzzActiveRef.current = true; wantAudioRef.current = false; try { audioRef.current?.pause(); } catch {} spotifyPause(); clearTimeout(audioRetryRef.current); setBuzzWinner({ name: d.name, avatar: d.avatar, endsAt: d.endsAt || 0, answerMs: d.answerMs || 15000 }); setNow(Date.now()); }); // buzzActiveRef : verrou anti-relance du son PENDANT que le buzzeur répond (course avec playRound)
     // le buzzeur a raté → le buzzer rouvre et le son REPREND pour les autres (SEULEMENT la source active de la manche,
     // sinon on relancerait une piste Spotify périmée EN PLUS de Deezer = double son)
-    socket.on('buzz:open', () => { buzzActiveRef.current = false; wantAudioRef.current = true; if (usingSpotifyRef.current) spotifyTogglePlay(); else if (previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); setBuzzWinner(null); }); // le buzzeur a raté → le buzzer rouvre ; reprise Deezer via playPreview (gardé buzzActiveRef + re-check dans le .then) pour éviter le softlock si un 2e buzz arrive pendant le play() de reprise
+    socket.on('buzz:open', () => { buzzActiveRef.current = false; wantAudioRef.current = true; if (usingSpotifyRef.current) spotifyResume(); else if (previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); setBuzzWinner(null); }); // le buzzeur a raté → le buzzer rouvre ; reprise Deezer via playPreview (gardé buzzActiveRef + re-check dans le .then) pour éviter le softlock si un 2e buzz arrive pendant le play() de reprise
     socket.on('round:reveal', (d: any) => { setReveal(d); setPlayers(d.scores); setPhase('reveal'); buzzActiveRef.current = false;
       // BUZZER : le son avait été coupé au buzz → on le REMET pour la révélation (titre + artiste). En Blind Test wantAudioRef reste true → no-op.
-      if (!wantAudioRef.current && previewRef.current.url) { wantAudioRef.current = true; if (usingSpotifyRef.current) { try { spotifyTogglePlay(); } catch {} } else playPreview(previewRef.current.url, previewRef.current.startAt, 0); }
+      if (!wantAudioRef.current && previewRef.current.url) { wantAudioRef.current = true; if (usingSpotifyRef.current) { try { spotifyResume(); } catch {} } else playPreview(previewRef.current.url, previewRef.current.startAt, 0); }
     });
     socket.on('game:final', (d: any) => { stopAllMusic(); previewRef.current = { url: '', startAt: 0 }; setFinalScores(d.scores); setAwards(d.awards || []); setSeries(d.series || null); setFinalRounds(d.rounds || 0); setShowReveal(false);
       const unlock = computeUnlock(d, unlockedRef.current); // 1er challenger débloqué cette partie (par cet écran) → arrivée épique APRÈS les trophées
-      if (unlock) { unlockedRef.current.add(unlock); try { localStorage.setItem('pl_unlocked', JSON.stringify([...unlockedRef.current])); } catch {} setPendingUnlock(unlock); } else setPendingUnlock(null);
+      // ⚠️ On NE persiste PAS ici : sinon le challenger est enregistré « débloqué » avant même que l'arrivée
+      // soit vue (bouton non cliqué / test host+phone même navigateur = localStorage partagé) → l'animation
+      // ne se joue JAMAIS et il ne réapparaît plus. L'écriture se fait à la FERMETURE de ChallengerReveal.
+      if (unlock) { setPendingUnlock(unlock); prefetchUnlockSong(unlock); } else setPendingUnlock(null);
       setPhase('final'); }); // musique de podium retirée ; un challenger déjà débloqué ne réapparaît plus
     socket.on('power:used', (d: any) => { const key = powerKeyRef.current++; setPowerFeed((f) => [...f.slice(-4), { ...d, key }]); sfx('scratch'); setPowerBanners((b) => [...b, { ...d, key }]); setTimeout(() => setPowerBanners((b) => b.filter((x) => x.key !== key)), 3400); }); // bannières géantes EMPILÉES (render = 2 dernières visibles) : activations simultanées lisibles en pile, chacune 3,4 s ; le pwfeed liste TOUS les activateurs
     socket.on('scores:update', (d: any) => setPlayers(d.scores));
@@ -310,9 +413,11 @@ export default function Host() {
     socket.on('battle:intro', (d: any) => { stopAllMusic(); setBattle({ a: d.a, b: d.b, flavor: d.flavor, betBonus: d.betBonus, win: d.win, tallyA: [], tallyB: [] }); setPhase('battle-intro'); });
     socket.on('battle:bets', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, betMs: d.betMs })); setNow(Date.now()); setPhase('battle-bet'); });
     socket.on('battle:tally', (d: any) => setBattle((b: any) => ({ ...b, tallyA: d.a || [], tallyB: d.b || [] })));
-    socket.on('battle:go', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, durationMs: d.durationMs })); setNow(Date.now()); setPhase('battle-play'); playRound(d); });
+    socket.on('battle:go', (d: any) => { setBattle((b: any) => ({ ...b, endsAt: d.endsAt, durationMs: d.durationMs, easeMs: d.easeMs, eased: false })); setNow(Date.now()); setPhase('battle-play'); playRound(d); });
+    // palier : sur la fin du clash, l'ARTISTE SEUL suffit — on l'annonce à l'écran
+    socket.on('battle:ease', () => setBattle((b: any) => ({ ...b, eased: true })));
     socket.on('battle:reveal', (d: any) => { setBattle((b: any) => ({ ...b, reveal: d })); if (d.scores) setPlayers(d.scores); stopAllMusic(); setPhase('battle-reveal'); });
-    return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'round:countdown', 'round:host', 'rush:host', 'rush:state', 'rush:end', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'reaction', 'room:closed', 'battle:intro', 'battle:bets', 'battle:tally', 'battle:go', 'battle:reveal'].forEach((e) => socket.off(e as any));
+    return () => ['connect', 'lobby', 'round:prep', 'prep:ready', 'prep:done', 'game:preload', 'round:countdown', 'round:host', 'rush:host', 'rush:state', 'rush:end', 'player:answered', 'buzz:winner', 'buzz:open', 'round:reveal', 'game:final', 'power:used', 'scores:update', 'reaction', 'room:closed', 'battle:intro', 'battle:bets', 'battle:tally', 'battle:go', 'battle:ease', 'battle:reveal'].forEach((e) => socket.off(e as any));
   }, []);
 
   useEffect(() => { if (!['playing', 'prep', 'battle-bet', 'battle-play'].includes(phase)) return; const id = setInterval(() => setNow(Date.now() + clockOffset.current), 100); return () => clearInterval(id); }, [phase]);
@@ -324,6 +429,13 @@ export default function Host() {
   // On remet juste le compteur à zéro à chaque nouveau podium.
   // reset du showcase des trophées à chaque nouvelle fin de partie
   useEffect(() => { setFinalStep('podium'); setTroIdx(-1); setTroBusy(false); setTroSlot(null); clearTimeout(troTimer.current); clearInterval(troCdRef.current); }, [awards]);
+  // SHOWROOM : l'effet ci-dessus remet la fin de partie sur 'podium' dès que les trophées arrivent — ce qui
+  // écrasait l'étape demandée par la scène. On la ré-applique APRÈS (l'ordre de déclaration fait foi).
+  useEffect(() => {
+    const h = srHintRef.current; if (!h) return;
+    if (h.__finalStep) setFinalStep(h.__finalStep);
+    if (h.__troIdx !== undefined) setTroIdx(h.__troIdx);
+  }, [awards]);
   // Reveal en DEUX temps qui se REMPLACENT (jamais les deux à l'écran) : 1) qui a répondu quoi + points
   // gagnés, puis 2) le classement. L'hôte passe à l'étape 2 à la MAIN (bouton « Voir les scores ») ;
   // repli automatique à 30 s si personne ne clique — on a tout le temps de lire, même à 6 joueurs.
@@ -339,7 +451,8 @@ export default function Host() {
     if (phase !== 'reveal' || revealStep < 1 || !reveal || reveal.hideBoard) { setRankAnim(false); return; }
     setRankAnim(false);
     const big = (reveal.scores || []).some((p: any) => !p.isMJ && Math.abs(p.rankDelta || 0) >= 3);
-    const t = setTimeout(() => { setRankAnim(true); if (big) sfx('horn'); }, 950);
+    // `horn` RETIRE le 2026-07-26 : « c'est quoi ton bruit de sirene, il est catastrophique, enleve-le partout ».
+    const t = setTimeout(() => { setRankAnim(true); }, 950);
     return () => clearTimeout(t);
   }, [phase, revealStep, reveal]);
   // AUTO-RÉPARATION DU SON (priorité : la musique doit marcher à chaque fois). Pendant qu'un extrait
@@ -355,7 +468,19 @@ export default function Host() {
     window.addEventListener('keydown', onGesture);
     document.addEventListener('visibilitychange', onVis);
     const wd = setInterval(kick, 1500); // filet de sécurité ; l'essentiel se répare via onPause (instantané)
-    return () => { window.removeEventListener('pointerdown', onGesture); window.removeEventListener('keydown', onGesture); document.removeEventListener('visibilitychange', onVis); clearInterval(wd); };
+    // GARDE-FOU « UNE SEULE SOURCE À LA FOIS » (soirée 2026-07-26 : deux musiques simultanées en Buzzer).
+    // Deezer et Spotify sont deux lecteurs indépendants : une reprise qui part alors que l'autre tourne encore
+    // (buzz, révélation, manche suivante) donne deux sons superposés. On coupe le NON-propriétaire, point.
+    const solo = setInterval(async () => {
+      const a = audioRef.current;
+      const dz = !!(a && !a.paused && !a.ended);
+      if (!dz && !usingSpotifyRef.current) return;
+      const sp = await spotifyIsPlaying();
+      if (!dz || !sp) return;
+      if (usingSpotifyRef.current) { wantAudioRef.current = false; try { a?.pause(); } catch {} } // la manche joue sur Spotify → Deezer dégage
+      else { try { spotifyPause(); } catch {} }
+    }, 1000);
+    return () => { window.removeEventListener('pointerdown', onGesture); window.removeEventListener('keydown', onGesture); document.removeEventListener('visibilitychange', onVis); clearInterval(wd); clearInterval(solo); };
   }, [phase, round.mode]);
   useEffect(() => {
     fetch('/api/net').then((r) => r.json()).then(({ ip }) => {
@@ -492,6 +617,7 @@ export default function Host() {
   function playPreview(url: string, startAt = 0, attempt = 0) {
     if (buzzActiveRef.current) return; // buzz en cours → pas de démarrage d'extrait
     const a = audioRef.current; if (!a || !url) return;
+    url = blobsRef.current.get(url) || url; // extrait déjà en RAM (préchargement) → démarrage instantané, zéro latence réseau
     previewRef.current = { url, startAt };
     wantAudioRef.current = true;
     clearTimeout(audioRetryRef.current);
@@ -508,7 +634,7 @@ export default function Host() {
     const a = audioRef.current;
     if (a) { a.src = SILENT; a.play().then(() => a.pause()).catch(() => {}); audioReadyRef.current = true; } // ce clic « Lancer » débloque l'autoplay pour toute la partie
     sfx('launch');
-    socket.emit('host:start', { rounds: settings.rounds, difficulty: settings.difficulty, mode: settings.mode, mj: settings.mj, rebalance: settings.rebalance }, (res: any) => res?.error && setError(res.error));
+    socket.emit('host:start', { rounds: settings.rounds, difficulty: settings.difficulty, mode: settings.mode, mj: settings.mj, rebalance: settings.rebalance, spotify: spotifyOnRef.current && spReadyRef.current }, (res: any) => res?.error && setError(res.error));
   }
   function startWizard(s: { rounds: number; difficulty: string; mode: string; mj: boolean; rebalance: string; mjId?: string; era?: string | string[]; themes?: string[]; rushStartSec?: number; rushPace?: string; quizNoVf?: boolean }) {
     lastWizRef.current = s; // mémorise pour un éventuel « Rejouer » (Survivor notamment)
@@ -520,9 +646,14 @@ export default function Host() {
     doStart(s);
   }
   // démarre RÉELLEMENT la partie (émis directement, ou après la page d'intro pouvoirs)
-  function doStart(s: any) { sfx('launch'); socket.emit('host:start', s, (res: any) => res?.error && setError(res.error)); }
+  // `spotify` est renvoyé À CHAQUE lancement (filet si le host:source de l'effet s'était perdu) : c'est lui qui
+  // décide si le serveur pioche dans TOUT le catalogue curé ou seulement dans ce qui a un extrait Deezer.
+  function doStart(s: any) { sfx('launch'); socket.emit('host:start', { ...s, spotify: spotifyOnRef.current && spReadyRef.current }, (res: any) => res?.error && setError(res.error)); }
   // Relance depuis le podium : retour au salon (cumul de série conservé) ; toConfig → droit dans l'assistant.
-  function relance(toConfig: boolean) { socket.emit('host:restart', {}, () => { if (toConfig) setConfiguring(true); }); }
+  // « Relancer une partie » DOIT rouvrir l'assistant à la sélection des modes. On bascule AVANT d'émettre :
+  // passer par l'ack faisait courir la bascule contre l'event `lobby` qui arrive juste après → on retombait
+  // au salon, « avant la sélection des modes » (soirée 2026-07-26).
+  function relance(toConfig: boolean) { if (toConfig) setConfiguring(true); socket.emit('host:restart', {}); }
   // TROPHÉES — transition "slot" (défile puis se cale) : la MÊME partout, y compris le 1er
   function troRunSlot(target: number) {
     clearInterval(troCdRef.current); clearTimeout(troTimer.current);
@@ -584,19 +715,31 @@ export default function Host() {
         <div className="cheat-title"><span className="ct-big">CHEAT</span><span className="ct-sub">tous les rappeurs dans la place</span></div>
       </div>
     )}
-    {showReveal && pendingUnlock && <ChallengerReveal charId={pendingUnlock} onClose={() => { setShowReveal(false); setPendingUnlock(null); }} />}
+    {showReveal && pendingUnlock && <ChallengerReveal charId={pendingUnlock} onClose={() => { unlockedRef.current.add(pendingUnlock); try { localStorage.setItem(UNLOCK_KEY, JSON.stringify([...unlockedRef.current])); } catch {} setShowReveal(false); setPendingUnlock(null); }} />}
     {intro && (
       <div className="pintro" role="dialog" aria-label="Les pouvoirs">
         <GrungeBg />
         <div className="pintro-card">
           <div className="pintro-eyebrow">Nouveau dans ce salon</div>
-          <h2 className="pintro-title">LES <span className="d">POUVOIRS</span></h2>
+          <h2 className="pintro-title">Les <span className="d">pouvoirs</span></h2>
           <div className="pintro-steps">
             <div className="pintro-step"><span className="pintro-ic">🎤</span><div><b>Chaque rappeur a son pouvoir</b><span>Voler des auditeurs, doubler son score, se protéger…</span></div></div>
             <div className="pintro-step"><span className="pintro-ic">⚡</span><div><b>Activez-le sur le téléphone</b><span>Entre les manches, tant qu'il reste une charge.</span></div></div>
-            <div className="pintro-step"><span className="pintro-ic">📺</span><div><b>L'effet s'affiche en grand ici</b><span>Tout le monde voit qui a frappé, et combien ça rapporte.</span></div></div>
           </div>
           <button className="btn warm big pintro-go" onClick={() => { const p = intro.payload; introShownRef.current.add(p.mode); setIntro(null); doStart(p); }}>C'est parti →</button>
+        </div>
+      </div>
+    )}
+    {/* Préchargement de TOUS les extraits de la partie (cf. prefetchTracks) — la manche 1 n'ouvre qu'après. */}
+    {preloading && (
+      <div className="pintro" role="dialog" aria-label="Préparation">
+        <GrungeBg />
+        <div className="pintro-card">
+          <div className="pintro-eyebrow">Préparation</div>
+          <h2 className="pintro-title">On charge les <span className="d">sons</span></h2>
+          <div className="preload-count">{preloading.done} / {preloading.total}</div>
+          <div className="preload-bar"><i style={{ width: `${preloading.total ? Math.round((preloading.done / preloading.total) * 100) : 100}%` }} /></div>
+          <div className="preload-sub">Toute la playlist passe en mémoire · la musique démarrera au quart de tour.</div>
         </div>
       </div>
     )}
@@ -631,12 +774,15 @@ export default function Host() {
       <div className="powerblasts" aria-hidden="true">
         {powerBanners.slice(-2).map((pb) => (
           <div className="powerblast" key={pb.key} style={{ ['--pc' as any]: catColor(pb.avatar) }}>
+            {/* REFONTE 2026-07-26. Avant : le NOM du pouvoir en enorme (jusqu'a 96 px) et l'effet en petit
+                dessous, dans une banniere dont la largeur suivait le contenu (donc jamais la meme). Or le nom
+                ne dit rien a personne : ce qui compte, c'est CE QUE FAIT le pouvoir. On inverse la hierarchie
+                et on FIXE la largeur pour que toutes les activations se ressemblent. */}
             <div className="pb-inner">
               <span className="pb-shine" />
-              <div className="pb-av"><Med avatarId={pb.avatar} size={124} /></div>
+              <div className="pb-av"><Med avatarId={pb.avatar} size={92} /></div>
               <div className="pb-txt">
-                <div className="pb-line"><b className="pb-who">{pb.name}</b> ACTIVE</div>
-                <div className="pb-power">{pb.power}</div>
+                <div className="pb-line"><b className="pb-who">{pb.name}</b> lance <span className="pb-power">{pb.power}</span></div>
                 {pb.effect && <div className="pb-eff">{pb.effect}</div>}
               </div>
             </div>
@@ -645,14 +791,15 @@ export default function Host() {
       </div>
     )}
     {audioLocked && (
-      <button className="btn" onClick={() => { audioReadyRef.current = true; setAudioLocked(false); wantAudioRef.current = true; if (usingSpotifyRef.current) { try { spotifyTogglePlay(); } catch {} } else if (previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); }}
+      <button className="btn" onClick={() => { audioReadyRef.current = true; setAudioLocked(false); wantAudioRef.current = true; if (usingSpotifyRef.current) { try { spotifyResume(); } catch {} } else if (previewRef.current.url) playPreview(previewRef.current.url, previewRef.current.startAt, 0); }}
         style={{ position: 'fixed', zIndex: 400, left: '50%', bottom: 'clamp(24px,5vh,56px)', transform: 'translateX(-50%)', padding: '16px 34px', borderRadius: 999, border: '2px solid var(--fluo)', background: 'rgba(10,11,14,.94)', color: 'var(--fluo)', fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 'clamp(20px,2.4vw,30px)', letterSpacing: '.04em', cursor: 'pointer', boxShadow: '0 14px 48px rgba(0,0,0,.7)' }}>
         🔊 Cliquer pour lancer le son
       </button>
     )}
     <div className="wrap" style={{ position: 'relative', zIndex: 1 }}>
       <div className={`topbar${['prep', 'countdown', 'playing', 'reveal', 'final'].includes(phase) ? ' gamebar' : ''}`}>
-        <h1 className="wm" style={{ fontSize: 24 }}>PUNCHLIN<span className="d">R</span></h1>
+        {/* LOGO : 24 px fixes, « trop petit, et ca sur toutes les pages » (2026-07-26). Il suit l'ecran. */}
+        <h1 className="wm hdr-logo">PUNCHLIN<span className="d">R</span></h1>
         {phase === 'final' && finalStep === 'podium' && <span className="hdr-gameover">{series && series.gamesPlayed >= 2 ? `Partie ${series.gamesPlayed} terminée` : 'Partie terminée'}</span>}
         <span className="row" style={{ gap: 14, alignItems: 'center' }}>
           {phase === 'lobby' && <><span className="gpill">Salon {code}</span><span className="gpill"><span className="dot" />{players.length} joueur{players.length !== 1 ? 's' : ''}</span></>}
@@ -740,47 +887,60 @@ export default function Host() {
                 <div className="pwcard" key={p.key}>
                   <Med avatarId={p.avatar} size={44} />
                   <div className="pwtxt">
-                    <div className="pwhead"><b>{p.name}</b> lance <span className="pwname">{p.power}</span></div>
-                    {p.effect && <div className="pweff">{p.effect}</div>}
+                    {/* L'EFFET d'abord, en GROS : « Vald lance NQNT » ne dit à personne ce qui va se passer.
+                        Le nom du pouvoir passe en sous-titre (2026-07-26). */}
+                    <div className="pweff">{p.effect || p.power}</div>
+                    <div className="pwhead"><b>{p.name}</b> · <span className="pwname">{p.power}</span></div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="muted">Chaque joueur active son pouvoir — ou passe — avant que la musique démarre.</p>
+            /* ECHELLE TV : cette phrase etait en `.muted` (petit + gris), illisible depuis le canape. */
+            <p className="prep-hint">Chacun active son pouvoir, ou passe, avant que la musique démarre.</p>
           )}
         </div>
       )}
 
       {phase === 'playing' && (
         <div className={round.mode === 'quiz' ? 'center qz-tv' : 'center'}>
-          {round.mode === 'rush' ? (
-            <div style={{ width: '100%', maxWidth: 960, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-              <span className="playmeta">Survivor — contre-la-montre · {round.difficulty}</span>
-              <div className="ring big">
-                <svg viewBox="0 0 120 120">
-                  <circle cx="60" cy="60" r="54" stroke="rgba(255,255,255,.10)" strokeWidth="9" fill="none" />
-                  <circle cx="60" cy="60" r="54" stroke={seconds <= 8 ? '#ff5a1f' : '#a6ff00'} strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - rushFrac)} />
-                </svg>
-                <span className="n" style={{ color: seconds <= 8 ? '#ff5a1f' : undefined }}>{seconds}</span>
+          {round.mode === 'rush' ? (() => {
+            /* SURVIVOR = SOLO (refonte 2026-07-26). Avant : un classement de TOUS les joueurs, alors qu'un
+               seul joue - « ca sert a rien ». On montre donc LE joueur : son score en grand, ce qu'il a
+               trouve, et le morceau precedent avec ce qu'il avait tape (il ne le voyait nulle part). */
+            const solo = (round.scores || []).find((p: any) => p.id === round.rushPlayerId) || (round.scores || [])[0];
+            const prev = round.event?.prev;
+            return (
+            <div className="rush-tv">
+              <span className="eyebrow big">Survivor · {round.difficulty}</span>
+              <div className="rush-main">
+                <div className="ring big">
+                  <svg viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="54" stroke="rgba(255,255,255,.10)" strokeWidth="9" fill="none" />
+                    <circle cx="60" cy="60" r="54" stroke={seconds <= 8 ? '#ff5a1f' : '#a6ff00'} strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - rushFrac)} />
+                  </svg>
+                  <span className="n" style={{ color: seconds <= 8 ? '#ff5a1f' : undefined }}>{seconds}</span>
+                </div>
+                {solo && (
+                  <div className="rush-who">
+                    <Med avatarId={solo.avatar} size={96} />
+                    <div className="rush-name">{solo.name}</div>
+                    <div className="rush-score">{fmtAud(solo.score)}</div>
+                    <div className="rush-sub">auditeurs · {solo.tracks} trouvé{solo.tracks > 1 ? 's' : ''} · morceau {round.trackNo}</div>
+                  </div>
+                )}
               </div>
-              <span className="playmeta">Morceau {round.trackNo}{round.event?.reason === 'hit' && round.event?.name ? ` · ${round.event.name} +${Math.round((round.event.addedMs || 0) / 1000)} s` : round.event?.reason === 'pass' ? ` · passé −${Math.round((round.event.removedMs || 0) / 1000)} s` : ''}</span>
               <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
-              {Array.isArray(round.scores) && round.scores.length > 0 && (
-                <div className="board" style={{ width: '100%', maxWidth: 560, marginTop: 4 }}>
-                  {round.scores.map((p: any, i: number) => (
-                    <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={p.id}>
-                      <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={30} />{p.name}</span>
-                      <span className="row" style={{ gap: 12, alignItems: 'baseline' }}>
-                        <span className="gain zero">{p.tracks} ✓</span>
-                        <span className="pts">{fmtAud(p.score)}</span>
-                      </span>
-                    </div>
-                  ))}
+              {prev?.title && (
+                <div className={`rush-prev ${prev.outcome === 'hit' || prev.outcome === 'partial' ? 'ok' : 'ko'}`}>
+                  <span className="rp-lab">{prev.outcome === 'hit' ? 'Trouvé' : prev.outcome === 'partial' ? 'À moitié' : prev.outcome === 'pass' ? 'Passé' : 'Raté'}</span>
+                  <span className="rp-track"><b>{prev.artist}</b> · {prev.title}</span>
+                  {prev.answer && <span className="rp-said">tapé « {prev.answer} »</span>}
                 </div>
               )}
             </div>
-          ) : round.mode === 'quiz' ? (() => {
+            );
+          })() : round.mode === 'quiz' ? (() => {
             const vf = (round.quiz?.choices?.length || 0) === 2;
             return (
             <>
@@ -822,9 +982,11 @@ export default function Host() {
               </div>
             ) : (
               /* BUZZER OUVERT — invitation géante */
+              /* L'EGALISEUR entre le disque et le texte est RETIRE (demande 2 fois : 2026-07-26 13:46
+                 puis 15:44). A la place, la BORDURE du disque reagit a la musique, comme les cartes de
+                 mode de l'assistant : le pouls vient de `bassRef`, pousse en variable CSS `--beat`. */
               <div className="buzzstage">
-                <div className="buzzdisc"><span>BUZZ</span></div>
-                <div className="eq7" aria-hidden="true">{Array.from({ length: 11 }).map((_, i) => <i key={i} />)}</div>
+                <div className="buzzdisc beat"><span>BUZZ</span></div>
                 <p className="lead">Le premier qui reconnaît le son prend la main.</p>
               </div>
             )
@@ -852,7 +1014,7 @@ export default function Host() {
           {powerFeed.length > 0 && (
             <div className="pwfeed compact">
               {powerFeed.slice(-3).map((p) => (
-                <div className="pwchip" key={p.key}><Med avatarId={p.avatar} size={26} /><span><b>{p.power}</b>{p.effect ? ` — ${p.effect}` : ''}</span></div>
+                <div className="pwchip" key={p.key}><Med avatarId={p.avatar} size={30} /><span>{p.effect || p.power}</span></div>
               ))}
             </div>
           )}
@@ -860,7 +1022,10 @@ export default function Host() {
       )}
 
       {phase === 'reveal' && reveal && (
-        <div className="center" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(12px,2.5vh,32px)', paddingBottom: 'clamp(88px,14vh,132px)', gap: 'clamp(12px,2.2vh,20px)' }}>
+        // ZERO SCROLL a la revelation (2026-07-26) : le bloc « c'etait... » + la liste des reponses
+        // depassaient l'ecran des 5 joueurs. La zone est bornee a la hauteur dispo ; la pochette et la
+        // liste se resserrent (cf. `.reveal-scope` en CSS) au lieu de pousser le contenu dehors.
+        <div className="center reveal-scope" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(10px,2vh,24px)', paddingBottom: 'clamp(76px,11vh,104px)', gap: 'clamp(8px,1.6vh,16px)', maxHeight: '100vh', overflow: 'hidden' }}>
           <span className="eyebrow">{reveal.quiz ? 'La réponse' : "C'était…"}</span>
           {reveal.quiz ? (
             <>
@@ -869,7 +1034,7 @@ export default function Host() {
             </>
           ) : (
             <div className="row" style={{ gap: 26, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {reveal.track.cover && <img className="cover" src={reveal.track.cover} alt="" style={{ width: 'clamp(140px,20vw,200px)', height: 'clamp(140px,20vw,200px)' }} />}
+              {reveal.track.cover && <img className="cover" src={reveal.track.cover} alt="" style={{ width: 'clamp(110px,14vw,168px)', height: 'clamp(110px,14vw,168px)' }} />}
               <div style={{ textAlign: 'left', maxWidth: 460 }}>
                 <div className="eyebrow" style={{ color: 'var(--muted2)', marginBottom: 2 }}>Titre</div>
                 <h2 className="title-xl" style={{ marginBottom: 12 }}>{reveal.track.title}</h2>
@@ -891,13 +1056,20 @@ export default function Host() {
                     <div className="v-main">
                       <div className="v-who">{r.name}<span className="v-rap">{avatarById(r.avatar)?.name}</span></div>
                       <div className="v-ans">{r.answer ? <>« {r.answer} »</> : <i className="v-none">pas de réponse</i>}</div>
-                      {r.power && <div className="v-pow"><span className="v-bolt">⚡</span> <b>{r.power.name}</b> — {r.power.note}</div>}
+                      {r.power && <div className="v-pow"><span className="v-bolt">⚡</span> {r.power.note || r.power.name}</div>}
+                      {/* pourquoi il marque alors qu'il n'a pas trouvé (plancher, revenu régulier, draft…) */}
+                      {r.why && r.why.map((w: any, k: number) => (
+                        <div className="v-why" key={k}>{w.amount >= 0 ? '+' : '−'}{fmtAud(Math.abs(w.amount))} · {pointSource(w.t)}</div>
+                      ))}
                     </div>
                     <div className="v-res">
-                      {good && (r.titleHit || r.artistHit) && <span className="v-hits">{r.titleHit ? 'Titre' : ''}{r.titleHit && r.artistHit ? ' + ' : ''}{r.artistHit ? 'Artiste' : ''}</span>}
+                      {/* SUSPENSE : quand le classement est masque, on ne dit PAS non plus ce que chacun a
+                          trouve (titre / artiste) - sinon on reconstitue les scores et le suspense ne sert a
+                          rien (retour showroom 2026-07-26). On garde juste « a trouve » / « n'a pas trouve ». */}
+                      {!reveal.hideBoard && good && (r.titleHit || r.artistHit) && <span className="v-hits">{r.titleHit ? 'Titre' : ''}{r.titleHit && r.artistHit ? ' + ' : ''}{r.artistHit ? 'Artiste' : ''}</span>}
                       {reveal.hideBoard
                         ? <span className={`v-mark ${good ? 'ok' : ''}`}>{good ? '✓' : '·'}</span>
-                        : <span className={`v-pts ${r.points > 0 ? '' : r.points < 0 ? 'loss' : 'zero'}`}>{r.points > 0 ? `+${fmtAud(r.points)}` : r.points < 0 ? `−${fmtAud(-r.points)}` : '—'}</span>}
+                        : <span className={`v-pts ${r.points > 0 ? '' : r.points < 0 ? 'loss' : 'zero'}`}>{r.points > 0 ? `+${fmtAud(r.points)}` : r.points < 0 ? `−${fmtAud(-r.points)}` : ' · '}</span>}
                     </div>
                   </div>
                 );
@@ -913,7 +1085,7 @@ export default function Host() {
             ) : (
               <div className="suspense-card">
                 <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
-                <div><b>Scores masqués</b><span>Ça se joue sur la fin — le classement reste secret jusqu'au podium. Personne ne sait qui mène.</span></div>
+                <div><b>Scores masqués</b><span>Ça se joue sur la fin · le classement reste secret jusqu'au podium. Personne ne sait qui mène.</span></div>
               </div>
             )
           ) : (
@@ -949,7 +1121,12 @@ export default function Host() {
           })()}
           <div className="floatbar">{revealStep < 1
             ? <button className="btn warm" onClick={() => setRevealStep(1)}>Voir les scores →</button>
-            : <button className="btn warm" onClick={() => socket.emit('host:next')}>{round.index + 1 >= round.total ? 'Voir le podium' : 'Manche suivante'}</button>}</div>
+            : <button className="btn warm" onClick={() => socket.emit('host:next')}>{round.index + 1 >= round.total ? 'Voir le podium' : 'Manche suivante'}</button>}
+            {/* Déclencheur DEV du clash (ticket CLASH-DEV : `host:forceBattle` n'était émis par personne).
+                Visible seulement en dev, à la révélation, et avec les ≥3 joueurs que le clash exige. */}
+            {IS_LOCAL && revealStep >= 1 && players.filter((p: any) => !p.isMJ).length >= 3 && (
+              <button className="btn ghost" style={{ opacity: .55, fontSize: 12 }} onClick={() => socket.emit('host:forceBattle', {})}>+ clash test</button>
+            )}</div>
         </div>
       )}
 
@@ -989,7 +1166,7 @@ export default function Host() {
                   <span className="n">{btSec}</span>
                 </div>
                 <div className="bt-betcta">Misez sur le vainqueur</div>
-                <div className="bt-betreward">+{fmtAud(battle.betBonus ?? 4000)} si vous visez juste</div>
+                <div className="bt-betreward">+{fmtAud(battle.betBonus ?? 2400)} si vous visez juste</div>
               </div>
               <div className="bt-camp b">
                 <div className="bt-camphead"><Med avatarId={battle.b.avatar} size={112} /><div className="bt-campnames"><div className="bt-fightname sm">{rapName(battle.b.avatar)}</div><div className="bt-fightpseudo">{battle.b.name}</div></div></div>
@@ -1003,7 +1180,9 @@ export default function Host() {
       {phase === 'battle-play' && battle?.a && (
         <div className="center" style={{ justifyContent: 'center' }}>
           <div className="bt bt-duel">
-            <div className="bt-head"><div className="bt-clashword sm">CLASH</div><div className="bt-clashsub">En duel</div></div>
+            {/* La consigne est ANNONCÉE : le clash exige titre + artiste (sinon un seul mot bat celui qui a tout). */}
+            <div className="bt-head"><div className="bt-clashword sm">CLASH</div>
+              <div className={`bt-clashsub${battle.eased ? ' eased' : ''}`}>{battle.eased ? <>Plus que l'<b>artiste</b> suffit !</> : <>Il faut le <b>titre</b> ET l'<b>artiste</b></>}</div></div>
             <div className="bt-duelstage">
               <div className="bt-duelside" style={{ ['--cc' as any]: catColor(battle.a.avatar) }}><Med avatarId={battle.a.avatar} size={116} /><div className="bt-duelpseudo">{battle.a.name}</div><div className="bt-duelrap">{rapName(battle.a.avatar)}</div></div>
               <div className="bt-duelcore">
@@ -1036,9 +1215,11 @@ export default function Host() {
               <div className="bt-crown">{win ? '👑' : ''}</div>
               <Med avatarId={fighter.avatar} size={148} />
               <div className="bt-fightname">{fighter.name}</div>
-              <div className={`bt-revtag ${win ? 'win' : 'lose'}`}>{d.draw ? 'Personne n’a trouvé' : win ? `A trouvé · +${fmtAud(d.points || 0)}` : 'N’a pas trouvé'}</div>
+              {/* En NUL le tag annonce un GAIN (la consolation) → classe `draw` (neutre-doré), pas `lose` (rouge). */}
+              <div className={`bt-revtag ${d.draw ? 'draw' : win ? 'win' : 'lose'}`}>{d.draw ? `Personne n’a trouvé · +${fmtAud(d.points || 0)}` : win ? `A trouvé · +${fmtAud(d.points || 0)}` : 'N’a pas trouvé'}</div>
             </div>
-            <div className="bt-teamlab">{win ? 'Ont bien parié' : 'Se sont loupés'}</div>
+            {/* En NUL les paris sont annulés et bettors est vide → « Se sont loupés » n'aurait aucun sens. */}
+            <div className="bt-teamlab">{d.draw ? 'Paris annulés' : win ? 'Ont bien parié' : 'Se sont loupés'}</div>
             <div className="bt-revbettors">
               {bettors.map((b: any) => { const who = pl(b.id); return (
                 <div className={`bt-bettor ${win ? 'win' : 'lose'}`} key={b.id}>
@@ -1054,7 +1235,7 @@ export default function Host() {
             <div className="bt bt-rev">
               <div className="bt-revealtrack big">
                 {d.track?.cover ? <div className="bt-cover" style={{ backgroundImage: `url(${d.track.cover})`, backgroundSize: 'cover', backgroundPosition: 'center' }} /> : <div className="bt-cover">♪</div>}
-                <div className="bt-covermeta"><div className="eyebrow">La réponse</div><div className="ttl">{d.track ? `${d.track.title} — ${d.track.artist}` : '—'}</div></div>
+                <div className="bt-covermeta"><div className="eyebrow">La réponse</div><div className="ttl">{d.track ? `${d.track.title} · ${d.track.artist}` : ' · '}</div></div>
               </div>
               <div className="bt-revgrid">
                 {camp(battle.a, winA, bettorsA)}
@@ -1066,45 +1247,83 @@ export default function Host() {
         );
       })()}
 
+      {/* FIN DE RUN SURVIVOR - refonte 2026-07-26. Avant, tout etait empile sur UN ecran : le podium du
+          joueur, un tableau de run qui scrollait, puis un second tableau (classement mondial) qui scrollait
+          aussi. Juge « la plus mauvaise page du projet », et a raison : deux classements qui n'ont rien a
+          voir dans le meme cadre, avec du scroll partout. On fait DEUX ecrans successifs :
+          1) LE RUN : ce que le joueur a repondu, morceau par morceau, et la verite.
+          2) LE CLASSEMENT MONDIAL : son record compare aux autres.
+          Aucun des deux ne scrolle : la liste du run s'adapte (taille + colonnes) au nombre de morceaux. */}
       {phase === 'rushend' && rushEnd && (() => {
         const res = rushEnd.results || [];
         const top = rushEnd.top || [];
+        const log = rushEnd.log || [];
+        const me = res[0];
+        const twoCols = log.length > 6;
+        // Paliers RECALIBRES (2026-07-26) : `lg` etait garde jusqu'a 7 lignes alors qu'une ligne `lg` fait
+        // ~123 px (la ligne « tu as tape » passe a la ligne) -> a 5 morceaux, 93 px etaient coupes.
+        const sz = log.length > 9 ? 'sm' : log.length > 4 ? 'md' : 'lg';
         return (
         <div className="hub-overlay">
           <GrungeBg />
-          <button className="tvros-back" onClick={() => socket.emit('host:restart')}>
+          <button className="tvros-back" onClick={() => (rushStep === 'run' ? socket.emit('host:restart') : setRushStep('run'))}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            RETOUR
+            Retour
           </button>
-          <div style={{ position: 'relative', zIndex: 1, height: '100vh', maxWidth: 720, margin: '0 auto', padding: 'clamp(44px,6vh,68px) clamp(24px,4vw,56px) 26px', display: 'flex', flexDirection: 'column' }}>
-            <h1 style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 'clamp(22px,2.8vw,34px)', letterSpacing: '.02em', margin: 0, textAlign: 'center', textTransform: 'uppercase' }}>Classement <span className="d">Survivor</span></h1>
-            <p className="muted" style={{ textAlign: 'center', margin: '5px 0 16px', fontSize: 15 }}>Contre-la-montre terminé — ton record mondial.</p>
-            {res[0] && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                <Med avatarId={res[0].avatar} size={86} />
-                <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 'clamp(20px,2.4vw,28px)', textAlign: 'center' }}>{res[0].name} <span className="d">{fmtAud(res[0].score)} aud.</span></div>
-                <div className="muted" style={{ fontSize: 14, textAlign: 'center' }}>{res[0].tracks} morceau{res[0].tracks > 1 ? 'x' : ''} trouvé{res[0].tracks > 1 ? 's' : ''} · record #{res[0].rank} au monde</div>
+
+          {rushStep === 'run' ? (
+            <div className="rend">
+              <div className="rend-head">
+                <span className="eyebrow big">Survivor {'\u00b7'} c'est terminé</span>
+                {me && <h1 className="rend-title"><span className="d">{fmtAud(me.score)}</span> auditeurs</h1>}
+                {me && <p className="rend-sub">{me.tracks} morceau{me.tracks > 1 ? 'x' : ''} trouvé{me.tracks > 1 ? 's' : ''} sur {log.length} joué{log.length > 1 ? 's' : ''}</p>}
               </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'center', margin: '15px 0 16px' }}>
-              <button className="btn warm big" onClick={() => relance(true)}>Rejouer → <span style={{ opacity: .7, fontWeight: 600, fontSize: 13 }}>(re-choisir le joueur)</span></button>
-            </div>
-            <div className="muted" style={{ textAlign: 'center', fontSize: 12, letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8 }}>Classement mondial · Top 10</div>
-            <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', width: '100%', maxWidth: 540, margin: '0 auto' }}>
-              {top.length === 0 && <p className="muted" style={{ textAlign: 'center' }}>Premier score enregistré — le classement démarre !</p>}
-              <div className="board">
-                {top.map((t: any, i: number) => (
-                  <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={i}>
-                    <span className="who"><span className="rk">{i + 1}</span><Med avatarId={t.avatar} size={30} />{t.name}</span>
-                    <span className="row" style={{ gap: 12, alignItems: 'baseline' }}>
-                      <span className="gain zero">{t.tracks} ✓</span>
-                      <span className="pts">{fmtAud(t.score)}</span>
-                    </span>
-                  </div>
-                ))}
+              <div className={`rend-log ${sz} ${twoCols ? 'two' : ''}`}>
+                {log.map((e: any) => {
+                  const good = e.outcome === 'hit', half = e.outcome === 'partial';
+                  return (
+                    <div className={`rend-row ${good ? 'ok' : half ? 'half' : 'ko'}`} key={e.no}>
+                      <span className="rend-mark">{good ? '\u2713' : half ? '~' : '\u2715'}</span>
+                      <span className="rend-track">
+                        <b>{e.artist}</b> {'\u00b7'} {e.title}
+                        <i className="rend-said">{e.answer ? `tu as tapé \u00ab\u00a0${e.answer}\u00a0\u00bb` : e.outcome === 'pass' ? 'passé' : 'pas de réponse'}</i>
+                      </span>
+                      {e.points > 0 && <span className="rend-pts">{fmtAud(e.points)}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="rend-cta">
+                <button className="btn warm big" onClick={() => setRushStep('board')}>Voir le classement mondial {'\u2192'}</button>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="rend">
+              <div className="rend-head">
+                <span className="eyebrow big">Classement mondial</span>
+                {me && <h1 className="rend-title">Record n{'\u00b0'}<span className="d">{me.rank}</span></h1>}
+                <p className="rend-sub">sur {me?.configTotal || top.length} run{(me?.configTotal || top.length) > 1 ? 's' : ''} au créneau {rushEnd.config?.startSec || 60} s</p>
+              </div>
+              <div className="rend-board">
+                {top.length === 0 && <p className="muted" style={{ textAlign: 'center' }}>Premier score enregistré {'\u00b7'} le classement démarre !</p>}
+                <div className="board big">
+                  {top.slice(0, 8).map((t: any, i: number) => (
+                    <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={i}>
+                      <span className="who"><span className="rk">{i + 1}</span><Med avatarId={t.avatar} size={48} />{t.name}</span>
+                      <span className="prow-right">
+                        <span className="muted swins">{t.tracks} trouvé{t.tracks > 1 ? 's' : ''}</span>
+                        <span className="pts">{fmtAud(t.score)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rend-cta">
+                <button className="btn warm big" onClick={() => relance(true)}>Rejouer {'\u2192'}</button>
+                <button className="btn" onClick={() => socket.emit('host:restart')}>Retour au salon</button>
+              </div>
+            </div>
+          )}
         </div>
         );
       })()}
@@ -1116,8 +1335,11 @@ export default function Host() {
         const standings = series?.standings || [];
         const seriesLeader = standings[0];
         const gameRounds = finalRounds || round.total || 1;
+        // ZERO SCROLL en fin de partie (2026-07-26) : le gros padding bas poussait le contenu sous la ligne
+        // de flottaison et le bouton « Suivant » de la remise des trophees devenait invisible. La zone est
+        // desormais bornee a la hauteur d'ecran ; c'est a chaque etape de tenir dedans.
         return (
-        <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(14px,3vh,44px)', paddingBottom: 'clamp(96px,17vh,150px)', gap: 20 }}>
+        <div className="center final" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(12px,2.4vh,32px)', paddingBottom: finalStep === 'trophies' ? 'clamp(12px,2vh,24px)' : 'clamp(96px,17vh,150px)', gap: 16, maxHeight: '100vh', overflow: finalStep === 'trophies' ? 'hidden' : undefined }}>
           {finalStep === 'podium' ? (<>
 
           {/* PODIUM top 3 (2 · 1 · 3) — un seul disque de certif fusionné, prénom adaptatif, aud./manche */}
@@ -1171,13 +1393,15 @@ export default function Host() {
           </>) : finalStep === 'series' ? (
           /* ÉTAPE SÉRIE — classement général de la série, page à PART (≥2 parties) ; le relance vit ICI */
           <>
-            <span className="eyebrow">Classement général · {series.gamesPlayed} parties</span>
-            {seriesLeader && <div className="gpill" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)' }}>{seriesLeader.name} mène la série · {certif(seriesLeader.total, seriesLeader.totalRounds).short}</div>}
-            <div className="board" style={{ maxWidth: 560, width: '100%' }}>
+            <span className="eyebrow big">Classement général · {series.gamesPlayed} parties</span>
+            {seriesLeader && <div className="gpill serlead" style={{ color: 'var(--fluo)', borderColor: 'var(--fluo)' }}>{seriesLeader.name} mène la série · {certif(seriesLeader.total, seriesLeader.totalRounds).short}</div>}
+            {/* ÉCHELLE TV : le récap de toute la soirée était écrit trop petit (retour 2026-07-26) —
+                classe `.board.big` : lignes plus hautes, avatars 26 → 56, chiffres nettement plus gros. */}
+            <div className="board big" style={{ maxWidth: 1000, width: '100%' }}>
               {standings.map((p: any, i: number) => (
                 <div className={`prow ${i === 0 ? 'lead' : i === 1 ? 'p2' : i === 2 ? 'p3' : ''}`} key={p.id}>
-                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={26} />{p.name}
-                    {p.gameWins > 0 && <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>{p.gameWins} gagnée{p.gameWins > 1 ? 's' : ''}</span>}</span>
+                  <span className="who"><span className="rk">{i + 1}</span><Med avatarId={p.avatar} size={56} />{p.name}
+                    {p.gameWins > 0 && <span className="muted swins">{p.gameWins} gagnée{p.gameWins > 1 ? 's' : ''}</span>}</span>
                   <span className="prow-right">
                     <span className={`pcert tier-${CERTIF_TIER[certif(p.total, p.totalRounds).short] ?? 0}`}>{certif(p.total, p.totalRounds).short}</span>
                     <span className="pts">{fmtAud(p.total)}</span>
@@ -1218,7 +1442,7 @@ export default function Host() {
               </div>
             ) : (!troBusy && (
               pendingUnlock ? (
-                <button className="btn warm" style={{ maxWidth: 460, background: 'linear-gradient(90deg,#c0182b,#ff5a1f)', color: '#fff', boxShadow: '0 0 26px -6px #ff5a1f' }} onClick={() => setShowReveal(true)}>🔓 Un nouveau challenger débloqué — Découvrir →</button>
+                <button className="btn warm" style={{ maxWidth: 460, background: 'linear-gradient(90deg,#c0182b,#ff5a1f)', color: '#fff', boxShadow: '0 0 26px -6px #ff5a1f' }} onClick={() => setShowReveal(true)}>🔓 Un nouveau challenger débloqué · Découvrir →</button>
               ) : multi ? (
                 <button className="btn warm" style={{ maxWidth: 320 }} onClick={() => setFinalStep('series')}>Classement général →</button>
               ) : (

@@ -12,7 +12,7 @@ import { avatarById, initials, bioOf, EPITHETS, CATEGORY_COLORS, unlockObjective
 // `startAt` = où démarrer le drop (le hook, pas l'intro). Fraction de la durée si < 1, secondes si >= 1.
 // Les extraits Deezer (30 s) sont déjà calés sur le refrain → 0. Les mp3 LOCAUX (morceau entier) partent de
 // l'intro → on saute au milieu. Ajuste par morceau si un démarre mal.
-const UNLOCK_SONGS: Record<string, { title: string; artist: string; local?: string; startAt?: number }> = {
+export const UNLOCK_SONGS: Record<string, { title: string; artist: string; local?: string; startAt?: number }> = {
   disiz: { title: 'Toussa Toussa', artist: 'Disiz', local: '/music/disiz-toussa-toussa.mp3' },
   caballerojeanjass: { title: 'Zushileaks', artist: 'Caballero & JeanJass', local: '/music/zushileaks-cjj.mp3', startAt: 0.35 },
   freezecorleone: { title: 'Shavkat', artist: 'Freeze Corleone', startAt: 12.5 }, // exception : l'extrait Deezer de Shavkat démarre sur l'intro atmosphérique (~12 s molles) → on saute au drop (le beat plein rentre à ~12,5 s)
@@ -126,7 +126,7 @@ export default function ChallengerReveal({ charId, onClose }: { charId: string; 
 
       <div className="stage-uk">
         <div className="challbanner">Nouveau Challenger</div>
-        <div className="chall-why">Débloqué — {unlockObjective(charId)}</div>
+        <div className="chall-why">Débloqué · {unlockObjective(charId)}</div>
         <div className="tvros-hero">
           <div className="tvros-fig" ref={figRef}>
             <div className="tvros-figglow" />

@@ -59,7 +59,11 @@ export function isMatch(answer, target) {
 export function extractFeats(track) {
   const raw = `${track?.title || ''} ${track?.artist || ''}`;
   const feats = [];
-  const re = /(?:feat\.?|ft\.?|featuring|avec)\s+([^()\[\]]+)/gi;
+  // ⚠️ Les featurings sont le PLUS SOUVENT dans le TITRE, pas dans le champ artiste (mesuré le 2026-07-26 :
+  // 145 titres du pool en portent un, contre 0 dans le champ artiste côté Deezer). On y ajoute les marqueurs
+  // anglais/alternatifs qu'on croisait sans les capter (« with », « w/ », « invité ») — sinon l'artiste
+  // invité n'existe nulle part pour le matching et le joueur qui le trouve n'est pas crédité.
+  const re = /(?:feat\.?|ft\.?|featuring|avec|with|w\/|invit[ée]s?|duo avec)\s+([^()\[\]]+)/gi;
   let m;
   while ((m = re.exec(raw))) {
     m[1].split(/,|&|\bet\b|\bx\b/i).forEach((n) => { const s = n.trim(); if (s.length >= 2) feats.push(s); });
@@ -75,6 +79,7 @@ const ALIAS_GROUPS = [
   ['maitre gims', 'gims'],
   ["sexion d assaut", 'sexion'],
   ['psy 4 de la rime', 'psy 4'],
+  ['ministere a m e r', 'amer'],
 ];
 const ALIAS_INDEX = new Map();
 for (const g of ALIAS_GROUPS) { const set = g.map(normalize); for (const k of set) ALIAS_INDEX.set(k, set); }
@@ -85,22 +90,42 @@ export function aliasForms(target) {
   return set ? set.filter((x) => x !== t) : [];
 }
 
-// Note brute d'une réponse : 100 pts titre + 100 pts artiste. Le feat compte comme artiste.
+// Tous les artistes CRÉDITÉS sur un morceau, séparément. `extractFeats` ne voit que ce qui est marqué
+// « feat./ft./avec » ; or beaucoup de crédits sont juste séparés par une virgule, « & », « x », « vs »
+// (« Bigflo & Oli », « SCH, Jul, Naps »). Mesuré le 2026-07-26 : **30 % de ces noms n'étaient PAS acceptés**
+// alors que le joueur avait bel et bien trouvé — d'où « on a trouvé le feat et ça n'a pas compté ».
+const ARTIST_SPLIT = /\s*(?:feat\.?|ft\.?|featuring|avec|,|&|\/|\+|\bx\b|\bvs\.?\b|\bet\b)\s+/i;
+export function artistForms(track) {
+  const feats = [...extractFeats(track), ...(track.feats || [])];
+  const whole = [track?.artist || '', ...feats].filter(Boolean);
+  const parts = [];
+  for (const w of whole) for (const p of String(w).replace(/\(.*?\)|\[.*?\]/g, ' ').split(ARTIST_SPLIT)) {
+    const s = p.trim();
+    if (s.length >= 3) parts.push(s); // ≥3 : évite d'accepter du bruit (« x », « et », initiales)
+  }
+  const all = [...whole, ...parts];
+  return [...new Set([...all, ...all.flatMap(aliasForms)])].filter(Boolean);
+}
+
+// Note brute d'une réponse : 6 000 auditeurs titre + 6 000 artiste. Le feat compte comme artiste.
 export function gradeAnswer(answer, track, lenient = false) {
   const titleQ = matchQuality(answer, track.title, lenient);
   let artistQ = matchQuality(answer, track.artist, lenient);
   if (artistQ < 1) {
-    // feats du titre/artiste + liste pré-calculée (track.feats = feats du titre COMPLET Deezer)
-    const feats = [...extractFeats(track), ...(track.feats || [])];
-    for (const f of feats) { const q = matchQuality(answer, f, lenient); if (q > artistQ) artistQ = q; }
-    // alias de sigle (NTM ↔ Suprême NTM, Gims ↔ Maître Gims…) sur l'artiste ET les feats
-    for (const c of [track.artist, ...feats]) for (const alt of aliasForms(c)) { const q = matchQuality(answer, alt, lenient); if (q > artistQ) artistQ = q; }
+    // artiste principal, feats, CO-CRÉDITÉS (virgule/&/x/vs) et alias de sigle (NTM ↔ Suprême NTM…)
+    for (const c of artistForms(track)) { const q = matchQuality(answer, c, lenient); if (q > artistQ) artistQ = q; }
   }
   const titleHit = titleQ > 0;
   const artistHit = artistQ > 0;
-  // Auditeurs : 10 000 par volet (titre / artiste). Moins de fautes (qualité 1 vs 0,8) = plus d'auditeurs.
-  let base = Math.round(titleQ * 10000 + artistQ * 10000);
-  if (titleHit && artistHit) base += 10000; // prime de précision : titre ET artiste (vaut un 3e volet)
+  // Auditeurs : 6 000 par volet (titre / artiste). Moins de fautes (qualité 1 vs 0,8) = plus d'auditeurs.
+  // Ancrage SNEP : la certif est calée sur les VRAIS paliers français (Or 50 000 · Platine 100 000 ·
+  // Double 200 000 · Triple 300 000 · Diamant 500 000) et se calcule sur le TOTAL de la partie
+  // NORMALISÉ à 16 manches. Base double-hit = 18 000 (6 000 × 3) → le Diamant reste dur mais faisable.
+  // Repère : en MAINSTREAM (mult 1.0) il faut titre+artiste en ~10 s à TOUTES les manches (0 ratée) ;
+  // c'est plus accessible en Connaisseur (×1.5) et en Puriste (×2.0), où le mult compense la rareté.
+  // ⚠️ Toute l'échelle en auditeurs suit ce facteur — voir CLAUDE.md § Score = AUDITEURS avant d'y toucher.
+  let base = Math.round(titleQ * 6000 + artistQ * 6000);
+  if (titleHit && artistHit) base += 6000; // prime de précision : titre ET artiste (vaut un 3e volet)
   return { titleHit, artistHit, base };
 }
 

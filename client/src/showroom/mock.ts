@@ -53,7 +53,10 @@ function handleEmit(ev: string, args: any[], ack: ((r?: any) => void) | null) {
   switch (ev) {
     case 'host:create': ack && ack({ ok: true, code: CODE, hostToken: 'showroom', poolSize: st.poolSize || 264 }); return;
     case 'host:reclaim': ack && ack({ ok: true, code: CODE, poolSize: st.poolSize || 264, state: st }); return;
-    case 'player:join': ack && ack({ ok: true, playerId: 'me', waiting: !!st.__waiting, state: st }); return;
+    // On renvoie le playerId DEMANDE (la scene le fournit via sa session) au lieu d'un 'me' fixe : sans ca,
+    // les ecrans qui comparent l'identite - « je suis duelliste du clash », « j'avais parie », pupitre MJ -
+    // rendaient toujours la vue SPECTATEUR au banc d'essai (2026-07-26).
+    case 'player:join': ack && ack({ ok: true, playerId: (args[0] && args[0].playerId) || 'me', waiting: !!st.__waiting, state: st }); return;
     case 'player:watch': ack && ack({ players: st.players || [] }); return;
     case 'player:buzz': ack && ack({ ok: true, winner: true, endsAt: Date.now() + 15000, answerMs: 15000 }); return;
     case 'player:answer': ack && ack({ ok: true }); return;

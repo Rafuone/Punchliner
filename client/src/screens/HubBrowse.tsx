@@ -3,10 +3,10 @@
 // tout le roster en grille (aligné à gauche, zéro scroll). Slots verrouillés cliquables → objectif à
 // accomplir. Pas de P1/P2, pas de silhouette SVG fantôme.
 import { useState, useRef, useEffect } from 'react';
-import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, EPITHETS, AWARDS_INFO, awardIcon, unlockObjective, bioOf, fmtAud } from '../data';
+import { AVATARS, avatarById, initials, CATEGORY_ORDER, CATEGORY_COLORS, isLegend, EPITHETS, AWARDS_INFO, awardIcon, unlockObjective, UNLOCK_KEY, bioOf, fmtAud } from '../data';
 import { socket } from '../socket';
 import GrungeBg from '../GrungeBg';
-import { hasSpotifySession, spotifyLogin, searchPlaylists, getMyPlaylists, getPlaylistTracks, spotifyPlayContext, spotifyPlayUri, spotifyPause, spotifyTogglePlay, spotifyNext, spotifyPrev, spotifySeek, spotifyRepeat, spotifyShuffle, onPlayerState, spotifyLastError } from '../spotify';
+import { hasSpotifySession, spotifyLogin, searchPlaylists, getMyPlaylists, getPlaylistTracks, spotifyPlayContext, spotifyPlayUri, spotifyPause, spotifyTogglePlay, spotifyNext, spotifyPrev, spotifySeek, spotifyRepeat, spotifyShuffle, onPlayerState, spotifyLastError, spotifyLoopbackUrl } from '../spotify';
 
 // mode démo (?radiodemo) : peuple la radio avec de fausses données pour VÉRIFIER le visuel sans Spotify réel.
 const RADIO_DEMO = typeof location !== 'undefined' && new URLSearchParams(location.search).has('radiodemo');
@@ -68,7 +68,8 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
   const [selId, setSelId] = useState(AVATARS[0].id);
   const figRef = useRef<HTMLDivElement>(null);
   const sel = avatarById(selId) || AVATARS[0];
-  const unlocked: string[] = (() => { try { return JSON.parse(localStorage.getItem('pl_unlocked') || '[]'); } catch { return []; } })();
+  const unlocked: string[] = (() => { try { return JSON.parse(localStorage.getItem(UNLOCK_KEY) || '[]'); } catch { return []; } })();
+  const gotTro: string[] = (() => { try { return JSON.parse(localStorage.getItem('pl_trophies') || '[]'); } catch { return []; } })(); // trophées déjà décrochés sur cet écran
   const lockedSel = (!!sel.locked && !unlocked.includes(sel.id)) ? sel : null; // déblocable pas encore débloqué (par device) → ??? + objectif
   const bio = bioOf(selId);
   const [board, setBoard] = useState<any[]>([]); // classement mondial Survivor (un ladder = un créneau de départ)
@@ -160,7 +161,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
   }
   async function playWhole(p: any) { const ok = await spotifyPlayContext(p.uri); if (!radioAlive) { spotifyPause(); return; } if (ok) { setRadioActiveUri(p.uri); onRadioPlay?.(); } } // radio fermée pendant le PUT → on RE-coupe (sinon la playlist part en fond, incoupable)
   async function playTrack(t: any) { const ok = await spotifyPlayUri(t.uri); if (!radioAlive) { spotifyPause(); return; } if (ok) onRadioPlay?.(); }
-  const radioMsg = (i: string) => (({ 'no-token': 'Spotify déconnecté — reconnecte-toi.', 'http-400': 'Session Spotify invalide — reconnecte-toi.', 'http-401': 'Session Spotify expirée — reconnecte-toi.', 'http-403': 'Accès refusé par Spotify (403) — reconnecte-toi.', 'all-null': 'Spotify n’a renvoyé que des playlists non lisibles (bug connu). Essaie une autre station.', 'empty': 'Aucune playlist ici. Choisis une station ou cherche.', 'network': 'Spotify injoignable (réseau).' } as any)[i] || (i.startsWith('http-') ? `Erreur Spotify (${i.slice(5)}) — reconnecte-toi.` : 'Rien à afficher.'));
+  const radioMsg = (i: string) => (({ 'no-token': 'Spotify déconnecté · reconnecte-toi.', 'http-400': 'Session Spotify invalide · reconnecte-toi.', 'http-401': 'Session Spotify expirée · reconnecte-toi.', 'http-403': 'Accès refusé par Spotify (403) · reconnecte-toi.', 'all-null': 'Spotify n’a renvoyé que des playlists non lisibles (bug connu). Essaie une autre station.', 'empty': 'Aucune playlist ici. Choisis une station ou cherche.', 'network': 'Spotify injoignable (réseau).' } as any)[i] || (i.startsWith('http-') ? `Erreur Spotify (${i.slice(5)}) · reconnecte-toi.` : 'Rien à afficher.'));
   const fmtDur = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
   const fmtTotal = (ms: number) => { const m = Math.round(ms / 60000); return m >= 60 ? (Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0')) : (m + ' min'); };
   // avatar rond réutilisable (même markup/classe .med que l'écran de jeu) — GROS car affiché sur TV
@@ -226,19 +227,26 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
           <div className="tro-head">
             <h1 className="wm tro-title">LES <span className="d">TROPHÉES</span></h1>
           </div>
-          <p className="muted tro-sub">Décernés en fin de partie selon tes exploits (et tes plantages). <b style={{ color: 'var(--txt)' }}>{AWARDS_INFO.length}</b> à décrocher.</p>
+          <p className="muted tro-sub">Décernés en fin de partie selon tes exploits (et tes plantages).
+            <b style={{ color: 'var(--txt)' }}> {gotTro.length}/{AWARDS_INFO.length}</b> débloqués.</p>
+          {/* GRISÉS TANT QU'ON NE LES A PAS (2026-07-26) : afficher d'emblée les 27 trophées avec leur
+              description enlève tout l'intérêt de les découvrir. On garde la silhouette + le nom masqué ;
+              la CONDITION apparaît au survol, et rien d'autre. */}
           <div className="troph-grid big">
-            {AWARDS_INFO.map((t) => (
-              <div className={`troph ${t.salty ? 'salty' : ''}`} key={t.id}>
-                {/* image du trophée si présente (client/public/trophies/<id>.png), sinon repli sur l'icône SVG */}
-                <span className="troph-ic">
-                  <img className="troph-img" src={`/trophies/${t.id}.png`} alt="" onError={hideOnErr} />
-                  <span className="troph-svg" dangerouslySetInnerHTML={{ __html: awardIcon(t.icon) }} />
-                </span>
-                <div className="troph-title">{t.title}</div>
-                <div className="troph-desc">{t.blurb}</div>
-              </div>
-            ))}
+            {AWARDS_INFO.map((t) => {
+              const got = gotTro.includes(t.id);
+              return (
+                <div className={`troph ${t.salty ? 'salty' : ''} ${got ? '' : 'locked'}`} key={t.id} title={got ? '' : t.blurb}>
+                  {/* image du trophée si présente (client/public/trophies/<id>.png), sinon repli sur l'icône SVG */}
+                  <span className="troph-ic">
+                    {got && <img className="troph-img" src={`/trophies/${t.id}.png`} alt="" onError={hideOnErr} />}
+                    <span className="troph-svg" dangerouslySetInnerHTML={{ __html: awardIcon(got ? t.icon : 'lock') }} />
+                  </span>
+                  <div className="troph-title">{got ? t.title : '???'}</div>
+                  <div className="troph-desc">{got ? t.blurb : <span className="troph-hint">{t.blurb}</span>}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -258,7 +266,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
         </button>
         <div className="wrap" style={{ position: 'relative', zIndex: 1, maxWidth: 'none', padding: '62px clamp(24px,4vw,64px) 40px' }}>
           <div className="tro-head"><h1 className="wm tro-title">CLASSEMENT <span className="d">SURVIVOR</span></h1></div>
-          <p className="muted" style={{ textAlign: 'center', margin: '2px auto 20px', maxWidth: 820, fontSize: 'clamp(17px,1.9vw,25px)', lineHeight: 1.4 }}>Un tableau <b style={{ color: 'var(--txt)' }}>par créneau de départ</b> — la difficulté monte toute seule, seul le temps de départ sépare les classements.</p>
+          <p className="muted" style={{ textAlign: 'center', margin: '2px auto 20px', maxWidth: 820, fontSize: 'clamp(17px,1.9vw,25px)', lineHeight: 1.4 }}>Un tableau <b style={{ color: 'var(--txt)' }}>par créneau de départ</b> · la difficulté monte toute seule, seul le temps de départ sépare les classements.</p>
           {lbConfigs.length > 1 && (
             <div className="row" style={{ justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 26 }}>
               {lbConfigs.map((c) => {
@@ -318,14 +326,27 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
             <div className="radio-empty tall">
               <div className="radio-empty-ico">{NOTE}</div>
               <p className="muted" style={{ fontSize: 16 }}>La radio a besoin de <b style={{ color: 'var(--txt)' }}>Spotify (Premium)</b> connecté.</p>
-              <button className="btn warm" onClick={() => { try { localStorage.setItem('pl_radio_return', '1'); } catch {} spotifyLogin(); }}>Connecter Spotify</button>
+              {/* Page ouverte sur « localhost » (ou une IP du LAN) → Spotify REFUSE cette redirect URI et le bouton
+                  « Connecter » ne peut rien ouvrir. On le remplace par le clic qui débloque au lieu d'un bouton mort. */}
+              {spotifyLoopbackUrl() ? (
+                <>
+                  <p className="muted" style={{ fontSize: 15, maxWidth: 620, lineHeight: 1.5 }}>
+                    Spotify refuse « localhost » et les IP du réseau local : il faut ouvrir l’écran hôte sur{' '}
+                    <b style={{ color: 'var(--fluo)' }}>127.0.0.1</b>. Le code du salon et les téléphones ne changent pas.
+                  </p>
+                  <button className="btn warm" onClick={() => { try { localStorage.setItem('pl_radio_return', '1'); } catch {} window.location.href = spotifyLoopbackUrl(); }}>Ouvrir sur 127.0.0.1 →</button>
+                </>
+              ) : (
+                <button className="btn warm" onClick={() => { try { localStorage.setItem('pl_radio_return', '1'); } catch {} spotifyLogin(); }}>Connecter Spotify</button>
+              )}
             </div>
           ) : (
             <div className="radio-body">
               <div className="radio-main">
                 <div className="radio-head">
                   <div className="radio-stations">
-                    <button className={`radio-chip chip-mine ${radioSource === 'mine' ? 'on' : ''}`} onClick={loadMine}><span className="rc-star">★</span>Mes playlists</button>
+                    {/* etoile retiree (2026-07-26, demande deja formulee) : elle n'apportait rien a cote du libelle */}
+                    <button className={`radio-chip chip-mine ${radioSource === 'mine' ? 'on' : ''}`} onClick={loadMine}>Mes playlists</button>
                     {RADIO_STATIONS.map((st) => (
                       <button key={st.q} className={`radio-chip ${radioSource === st.label ? 'on' : ''}`} onClick={() => runStation(st)}>{st.label}</button>
                     ))}
@@ -375,7 +396,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                     </div>
                   </div>
                   {playlistPlaying
-                    ? <button className="btn rpl-play playing" onClick={() => spotifyTogglePlay()}><span className="rpl-eq"><i /><i /><i /></span> {nowPlaying && nowPlaying.paused ? 'En pause — reprendre' : 'En cours de lecture'}</button>
+                    ? <button className="btn rpl-play playing" onClick={() => spotifyTogglePlay()}><span className="rpl-eq"><i /><i /><i /></span> {nowPlaying && nowPlaying.paused ? 'En pause · reprendre' : 'En cours de lecture'}</button>
                     : <button className="btn warm rpl-play" onClick={() => playWhole(selPl)}><span className="rpl-play-ic">{PLAY(15)}</span> Lancer la playlist</button>}
                   <div className="rpl-tracks">
                     {trkInfo.loading ? (
@@ -386,7 +407,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                       <div style={{ padding: '20px 16px', textAlign: 'center' }}>
                         {trkInfo.info === 'not-owned' ? (
                           <><div style={{ fontSize: 30, marginBottom: 8 }}>🔒</div>
-                          <p className="muted" style={{ fontSize: 14, lineHeight: 1.55, margin: 0 }}>Spotify (mode dév) ne montre les titres que de <b style={{ color: 'var(--txt)' }}>tes</b> playlists. Celle-ci n’est pas à toi — mais tu peux quand même <b style={{ color: 'var(--fluo)' }}>la lancer</b> ▶.</p></>
+                          <p className="muted" style={{ fontSize: 14, lineHeight: 1.55, margin: 0 }}>Spotify (mode dév) ne montre les titres que de <b style={{ color: 'var(--txt)' }}>tes</b> playlists. Celle-ci n’est pas à toi · mais tu peux quand même <b style={{ color: 'var(--fluo)' }}>la lancer</b> ▶.</p></>
                         ) : (
                           <p className="muted" style={{ fontSize: 14, lineHeight: 1.55, margin: 0 }}>{trkInfo.info && trkInfo.info !== 'empty' ? radioMsg(trkInfo.info) : 'Playlist vide.'}</p>
                         )}
@@ -395,7 +416,7 @@ export default function HubBrowse({ mode, onClose, onRadioPlay, onRadioStop }: {
                     ) : tracks.map((t: any, i: number) => {
                       const rowPlaying = !!npName && rn(t.title) === npName; // ce titre est celui qui joue
                       return (
-                      <button className={`rtrack ${rowPlaying ? 'playing' : ''}`} key={t.uri + i} onClick={() => playTrack(t)} title={`${t.title} — ${t.artist}`}>
+                      <button className={`rtrack ${rowPlaying ? 'playing' : ''}`} key={t.uri + i} onClick={() => playTrack(t)} title={`${t.title} · ${t.artist}`}>
                         <span className="rt-idx">{i + 1}</span>
                         <div className="rt-cov">{t.cover ? <img src={t.cover} alt="" onError={hideOnErr} /> : <span>{NOTE}</span>}{rowPlaying ? <span className="rt-eq"><i /><i /><i /></span> : <span className="rt-play">{PLAY(13)}</span>}</div>
                         <div className="rt-main"><div className="rt-t">{t.title}</div><div className="rt-a">{t.artist}</div></div>
